@@ -163,3 +163,16 @@ body {
     display: none;
     background-color: var(--tg-theme-bg-color);
 }
+
+#show_more_container {
+    margin: 8px 0;
+}
+
+#show_more_button {
+    background-color: var(--tg-theme-hint-color);
+    color: var(--tg-theme-bg-color);
+}
+
+#show_more_button:active {
+    opacity: 0.8;
+}

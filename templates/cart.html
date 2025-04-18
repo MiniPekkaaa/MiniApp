@@ -12,6 +12,9 @@
         <div id="cart_items">
             <!-- Здесь будут отображаться товары -->
         </div>
+        <div id="show_more_container" style="display: none;">
+            <button onclick="toggleShowAll()" class="button" id="show_more_button">Показать все</button>
+        </div>
         <div id="cart_total">
             <h3>Итого: <span id="total_amount">0</span>₽</h3>
         </div>
@@ -24,13 +27,30 @@
         tg.expand();
         
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        let showAll = false;
         
         function displayCart() {
             const cartItems = document.getElementById('cart_items');
+            const showMoreContainer = document.getElementById('show_more_container');
+            const showMoreButton = document.getElementById('show_more_button');
             cartItems.innerHTML = '';
             let total = 0;
             
+            // Определяем, сколько позиций показывать
+            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
+            
+            // Показываем или скрываем кнопку "Показать все/Свернуть"
+            if (cart.length > 5) {
+                showMoreContainer.style.display = 'block';
+                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
+            } else {
+                showMoreContainer.style.display = 'none';
+            }
+            
+            // Отображаем товары
             cart.forEach((item, index) => {
+                if (index >= itemsToShow) return;
+                
                 const itemTotal = item.price * item.quantity;
                 total += itemTotal;
                 
@@ -54,6 +74,11 @@
             });
             
             document.getElementById('total_amount').textContent = total;
+        }
+        
+        function toggleShowAll() {
+            showAll = !showAll;
+            displayCart();
         }
         
         function editQuantity(index) {
