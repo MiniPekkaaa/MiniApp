@@ -7,10 +7,7 @@ import json
 from datetime import datetime
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -48,15 +45,9 @@ def index():
         if not check_user_registration(user_id):
             return render_template('not_registered.html')
 
-        logger.debug("Attempting to connect to MongoDB...")
-        
         # Получаем все документы из коллекции catalog в базе Pivo
         products = list(mongo.cx.Pivo.catalog.find())
-        logger.debug(f"Found {len(products)} products")
         
-        if len(products) > 0:
-            logger.debug(f"Sample product: {products[0]}")
-
         # Форматируем данные для шаблона
         formatted_products = []
         for product in products:
@@ -70,23 +61,19 @@ def index():
                 'legalEntity': int(product.get('legalEntity', 1))
             }
             formatted_products.append(formatted_product)
-            logger.debug(f"Formatted product: {formatted_product}")
 
-        logger.debug(f"Total formatted products: {len(formatted_products)}")
         return render_template('index.html', products=formatted_products)
     
     except Exception as e:
-        logger.error(f"Error in index route: {str(e)}", exc_info=True)
+        logger.error(f"Error in index route: {str(e)}")
         return f"Error: {str(e)}", 500
 
 @app.route('/cart')
 def cart():
-    # Получаем user_id из параметров запроса
     user_id = request.args.get('user_id')
     if not user_id:
         return "User ID is required", 400
 
-    # Проверяем регистрацию пользователя
     if not check_user_registration(user_id):
         return render_template('not_registered.html')
 
@@ -101,7 +88,6 @@ def create_order():
         if not user_id:
             return jsonify({"error": "User ID is required"}), 400
 
-        # Проверяем регистрацию пользователя
         if not check_user_registration(user_id):
             return jsonify({"error": "User is not registered"}), 403
 
@@ -115,9 +101,7 @@ def create_order():
             "userId": user_id,
             "username": user_info.get('organization', 'Unknown'),
             "process": "промежуточный процесс добавления пива",
-            "Positions": {
-                "Position_1": None  # Будет заполнено позициями из запроса
-            }
+            "Positions": {}
         }
 
         # Добавляем позиции из корзины
@@ -144,30 +128,8 @@ def create_order():
         })
 
     except Exception as e:
-        logger.error(f"Error creating order: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/products')
-def get_products():
-    try:
-        products = list(mongo.cx.Pivo.catalog.find())
-        formatted_products = []
-        for product in products:
-            formatted_product = {
-                'id': product.get('id', ''),
-                '_id': str(product.get('_id', '')),
-                'name': product.get('name', ''),
-                'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
-            }
-            formatted_products.append(formatted_product)
-        
-        return jsonify(formatted_products)
-    except Exception as e:
-        logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
+        logger.error(f"Error creating order: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
