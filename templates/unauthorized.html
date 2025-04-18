@@ -6,18 +6,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #5288c1;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <div style="
-            text-align: center;
-            padding: 20px;
-            margin-top: 50px;
-        ">
-            <h2 style="
-                color: var(--tg-theme-text-color);
-                margin-bottom: 20px;
-            ">
+        <!-- Экран загрузки -->
+        <div id="loading" style="text-align: center; padding: 20px; margin-top: 50px;">
+            <div class="loader"></div>
+        </div>
+
+        <!-- Сообщение о нерегистрации -->
+        <div id="unauthorized" class="hidden" style="text-align: center; padding: 20px; margin-top: 50px;">
+            <h2 style="color: var(--tg-theme-text-color); margin-bottom: 20px;">
                 Вы не зарегистрированы в системе
             </h2>
             <button onclick="redirectToBot()" style="
@@ -41,14 +60,26 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
-        // Если user_id не в URL и он есть в WebApp, добавляем его и перезагружаем страницу
-        if (!window.location.search.includes('user_id') && userId) {
-            window.location.href = `${window.location.pathname}?user_id=${userId}`;
+        function showUnauthorized() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('unauthorized').classList.remove('hidden');
+        }
+
+        function checkAuthAndRedirect() {
+            if (!window.location.search.includes('user_id') && userId) {
+                window.location.href = `${window.location.pathname}?user_id=${userId}`;
+            } else {
+                // Если user_id нет или уже есть в URL, показываем сообщение через 1 секунду
+                setTimeout(showUnauthorized, 1000);
+            }
         }
 
         function redirectToBot() {
             tg.close();
         }
+
+        // Запускаем проверку
+        checkAuthAndRedirect();
     </script>
 </body>
 </html> 

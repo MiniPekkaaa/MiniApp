@@ -6,45 +6,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #5288c1;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-    <div id="main_menu" class="container">
-        <button onclick="showProductSelection()" class="button">
-            Добавить товар
-        </button>
-        <button onclick="window.location.href='/cart'" class="button">
-            Корзина <span id="cart_count">0</span>
-        </button>
-        <button onclick="cancelOrder()" class="button">
-            Отменить заказ
-        </button>
-        <button onclick="closeApp()" class="button">
-            Главное меню
-        </button>
+    <!-- Экран загрузки -->
+    <div id="loading" class="container" style="text-align: center; padding: 20px;">
+        <div class="loader"></div>
     </div>
 
-    <div id="product_selection" class="container" style="display: none;">
-        <select id="product_select" class="select">
-            <option value="">Выберите товар</option>
-            {% for product in products %}
-            <option value="{{ product.id }}" 
-                    data-name="{{ product.name }}"
-                    data-fullname="{{ product.fullName }}"
-                    data-volume="{{ product.volume }}"
-                    data-price="{{ product.price }}"
-                    data-legal-entity="{{ product.legalEntity }}">
-                {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
-            </option>
-            {% endfor %}
-        </select>
-        <div class="quantity-controls">
-            <button onclick="decrementQuantity()" class="button">-</button>
-            <input type="number" id="quantity" value="1" min="1" class="quantity-input">
-            <button onclick="incrementQuantity()" class="button">+</button>
+    <!-- Основной контент -->
+    <div id="content" class="hidden">
+        <div id="main_menu" class="container">
+            <button onclick="showProductSelection()" class="button">
+                Добавить товар
+            </button>
+            <button onclick="window.location.href='/cart'" class="button">
+                Корзина <span id="cart_count">0</span>
+            </button>
+            <button onclick="cancelOrder()" class="button">
+                Отменить заказ
+            </button>
+            <button onclick="closeApp()" class="button">
+                Главное меню
+            </button>
         </div>
-        <button onclick="addToCart()" class="button">Добавить в корзину</button>
-        <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
-        <button onclick="showMainMenu()" class="button">Назад</button>
+
+        <div id="product_selection" class="container" style="display: none;">
+            <select id="product_select" class="select">
+                <option value="">Выберите товар</option>
+                {% for product in products %}
+                <option value="{{ product.id }}" 
+                        data-name="{{ product.name }}"
+                        data-fullname="{{ product.fullName }}"
+                        data-volume="{{ product.volume }}"
+                        data-price="{{ product.price }}"
+                        data-legal-entity="{{ product.legalEntity }}">
+                    {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
+                </option>
+                {% endfor %}
+            </select>
+            <div class="quantity-controls">
+                <button onclick="decrementQuantity()" class="button">-</button>
+                <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+                <button onclick="incrementQuantity()" class="button">+</button>
+            </div>
+            <button onclick="addToCart()" class="button">Добавить в корзину</button>
+            <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
+            <button onclick="showMainMenu()" class="button">Назад</button>
+        </div>
     </div>
 
     <script>
@@ -53,10 +81,22 @@
         
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
+        console.log('Telegram WebApp user:', tg.initDataUnsafe?.user);
+        console.log('User ID:', userId);
         
-        // Если user_id не в URL и он есть в WebApp, добавляем его и перезагружаем страницу
-        if (!window.location.search.includes('user_id') && userId) {
-            window.location.href = `${window.location.pathname}?user_id=${userId}`;
+        function showContent() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').classList.remove('hidden');
+        }
+
+        function checkAuthAndRedirect() {
+            if (!window.location.search.includes('user_id') && userId) {
+                console.log('Adding user_id to URL:', userId);
+                window.location.href = `${window.location.pathname}?user_id=${userId}`;
+            } else {
+                // Показываем контент через небольшую задержку
+                setTimeout(showContent, 300);
+            }
         }
         
         let products = {{ products|tojson|safe }};
@@ -107,17 +147,14 @@
                     quantity: quantity
                 };
                 
-                // Ищем такой же товар в корзине
                 const existingItemIndex = cart.findIndex(item => 
                     item.id === product.id && 
                     item.price === product.price
                 );
                 
                 if (existingItemIndex !== -1) {
-                    // Если товар найден, увеличиваем количество
                     cart[existingItemIndex].quantity += quantity;
                 } else {
-                    // Если товар не найден, добавляем новый
                     cart.push(product);
                 }
                 
@@ -149,6 +186,9 @@
                 tg.showAlert("Заказ отменен");
             }
         }
+
+        // Запускаем проверку авторизации
+        checkAuthAndRedirect();
     </script>
 </body>
 </html>
