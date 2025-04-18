@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Не авторизован</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div style="
+            text-align: center;
+            padding: 20px;
+            margin-top: 50px;
+        ">
+            <h2 style="
+                color: var(--tg-theme-text-color);
+                margin-bottom: 20px;
+            ">
+                Вы не зарегистрированы в системе
+            </h2>
+            <button onclick="redirectToBot()" style="
+                background-color: #5288c1;
+                color: white;
+                border: none;
+                padding: 15px 30px;
+                border-radius: 8px;
+                font-size: 16px;
+                cursor: pointer;
+            ">
+                Пройти регистрацию в боте
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        function redirectToBot() {
+            tg.close();
+        }
+    </script>
+</body>
+</html> 
