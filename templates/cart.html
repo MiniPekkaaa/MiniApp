@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Корзина</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Ваша корзина</h2>
+        <div id="cart_items">
+            <!-- Здесь будут отображаться товары -->
+        </div>
+        <div id="cart_total">
+            <h3>Итого: <span id="total_amount">0</span>₽</h3>
+        </div>
+        <button onclick="placeOrder()" class="button">Оформить заказ</button>
+        <button onclick="goBack()" class="button">Назад</button>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        
+        function displayCart() {
+            const cartItems = document.getElementById('cart_items');
+            cartItems.innerHTML = '';
+            let total = 0;
+            
+            cart.forEach((item, index) => {
+                const itemTotal = item.price * item.quantity;
+                total += itemTotal;
+                
+                const itemElement = document.createElement('div');
+                itemElement.className = 'cart-item';
+                itemElement.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${item.name}</h3>
+                        <p>Количество: ${item.quantity}</p>
+                        <p>Цена: ${item.price}₽</p>
+                        <p>Сумма: ${itemTotal}₽</p>
+                    </div>
+                    <button onclick="removeItem(${index})" class="button">Удалить</button>
+                `;
+                cartItems.appendChild(itemElement);
+            });
+            
+            document.getElementById('total_amount').textContent = total;
+        }
+        
+        function removeItem(index) {
+            cart.splice(index, 1);
+            sessionStorage.setItem('cart', JSON.stringify(cart));
+            displayCart();
+        }
+        
+        function placeOrder() {
+            if (cart.length === 0) {
+                tg.showAlert("Корзина пуста");
+                return;
+            }
+            
+            const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            
+            tg.MainButton.text = "Оформить заказ";
+            tg.MainButton.show();
+            tg.MainButton.onClick(() => {
+                tg.sendData(JSON.stringify({
+                    action: "order",
+                    items: cart,
+                    total: total
+                }));
+            });
+        }
+        
+        function goBack() {
+            window.location.href = '/';
+        }
+        
+        // Отображаем корзину при загрузке страницы
+        displayCart();
+    </script>
+</body>
+</html> 

@@ -52,6 +52,10 @@ def index():
         logger.error(f"Error in index route: {str(e)}", exc_info=True)
         return f"Error: {str(e)}", 500
 
+@app.route('/cart')
+def cart():
+    return render_template('cart.html')
+
 @app.route('/api/products')
 def get_products():
     try:

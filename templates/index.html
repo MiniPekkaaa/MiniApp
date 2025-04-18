@@ -12,7 +12,7 @@
         <button onclick="showProductSelection()" class="button">
             Добавить товар
         </button>
-        <button onclick="showCart()" class="button">
+        <button onclick="window.location.href='/cart'" class="button">
             Корзина <span id="cart_count">0</span>
         </button>
         <button onclick="cancelOrder()" class="button">
@@ -53,7 +53,8 @@
         let products = {{ products|tojson|safe }};
         console.log("Loaded products:", products);
         
-        let cart = [];
+        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        updateCartCount();
         
         function closeApp() {
             tg.close();
@@ -98,8 +99,10 @@
                 };
                 
                 cart.push(product);
+                sessionStorage.setItem('cart', JSON.stringify(cart));
                 updateCartCount();
-                showMainMenu();
+                
+                tg.showAlert("Позиция добавлена успешно");
                 
                 select.value = "";
                 document.getElementById('quantity').value = "1";
@@ -110,38 +113,6 @@
             document.getElementById('cart_count').textContent = cart.length;
         }
         
-        function showCart() {
-            if (cart.length === 0) {
-                tg.showAlert("Корзина пуста");
-                return;
-            }
-            
-            let message = "Ваш заказ:\n\n";
-            let total = 0;
-            
-            cart.forEach((item, index) => {
-                message += `${index + 1}. ${item.name}\n`;
-                message += `   Количество: ${item.quantity}\n`;
-                message += `   Цена: ${item.price}₽\n`;
-                message += `   Сумма: ${item.price * item.quantity}₽\n\n`;
-                total += item.price * item.quantity;
-            });
-            
-            message += `Общая сумма: ${total}₽`;
-            
-            tg.MainButton.text = "Оформить заказ";
-            tg.MainButton.show();
-            tg.MainButton.onClick(() => {
-                tg.sendData(JSON.stringify({
-                    action: "order",
-                    items: cart,
-                    total: total
-                }));
-            });
-            
-            tg.showAlert(message);
-        }
-        
         function cancelOrder() {
             if (cart.length === 0) {
                 tg.showAlert("Нечего отменять - корзина пуста");
@@ -150,6 +121,7 @@
             
             if (confirm("Вы уверены, что хотите отменить заказ?")) {
                 cart = [];
+                sessionStorage.setItem('cart', JSON.stringify(cart));
                 updateCartCount();
                 tg.MainButton.hide();
                 tg.showAlert("Заказ отменен");
