@@ -21,4 +21,14 @@ export const checkUserRegistration = async (userChatId: string) => {
   const client = await connectToRedis();
   const userData = await client.hGetAll(`beer:user:${userChatId}`);
   return Object.keys(userData).length > 0;
+};
+
+export const getUserData = async (userChatId: string) => {
+  const client = await connectToRedis();
+  const userData = await client.hGetAll(`beer:user:${userChatId}`);
+  return {
+    organization: userData.organization || '',
+    phone: userData.phone || '',
+    name: userData.name || ''
+  };
 }; 
