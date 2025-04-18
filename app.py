@@ -23,18 +23,85 @@ redis_client = redis.Redis(
     host='46.101.121.75',
     port=6379,
     password='otlehjoq',
+    db=0,
+    socket_timeout=5,
     decode_responses=True
 )
 
 def check_user_registration(user_id):
     try:
         # Проверяем существование пользователя в Redis
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        key = f'beer:user:{user_id}'
+        logger.debug(f"Checking Redis key: {key}")
+        user_data = redis_client.hgetall(key)
         logger.debug(f"Redis data for user {user_id}: {user_data}")
-        return bool(user_data)  # Возвращаем True если данные существуют
+        return bool(user_data)
     except Exception as e:
         logger.error(f"Error checking Redis: {str(e)}")
         return False
+
+@app.route('/test-redis')
+def test_redis():
+    try:
+        # Проверяем подключение к Redis
+        redis_client.ping()
+        
+        # Пробуем получить тестового пользователя
+        test_user_id = "7944903241"
+        key = f'beer:user:{test_user_id}'
+        user_data = redis_client.hgetall(key)
+        
+        return jsonify({
+            "redis_connection": "OK",
+            "test_user_data": user_data,
+            "test_key": key
+        })
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "type": str(type(e))
+        }), 500
+
+@app.route('/')
+def index():
+    try:
+        user_id = request.args.get('user_id')
+        logger.debug(f"Index route - Checking authorization for user: {user_id}")
+        
+        if not user_id:
+            logger.debug("No user_id provided")
+            return render_template('unauthorized.html')
+
+        # Проверяем регистрацию пользователя
+        is_registered = check_user_registration(user_id)
+        logger.debug(f"User {user_id} registration status: {is_registered}")
+        
+        if not is_registered:
+            logger.debug(f"User {user_id} not registered")
+            return render_template('unauthorized.html')
+
+        logger.debug(f"User {user_id} authorized, loading products")
+        products = list(mongo.cx.Pivo.catalog.find())
+        logger.debug(f"Found {len(products)} products")
+        
+        formatted_products = []
+        for product in products:
+            formatted_product = {
+                'id': product.get('id', ''),
+                '_id': str(product.get('_id', '')),
+                'name': product.get('name', ''),
+                'fullName': product.get('fullName', ''),
+                'volume': float(product.get('volume', 0)),
+                'price': int(product.get('price', 0)),
+                'legalEntity': int(product.get('legalEntity', 1))
+            }
+            formatted_products.append(formatted_product)
+
+        return render_template('index.html', products=formatted_products)
+    
+    except Exception as e:
+        logger.error(f"Error in index route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
 
 @app.route('/check-auth')
 def check_auth():
@@ -48,48 +115,6 @@ def check_auth():
     except Exception as e:
         logger.error(f"Error in check-auth: {str(e)}")
         return jsonify({"authorized": False, "error": str(e)})
-
-@app.route('/')
-def index():
-    try:
-        user_id = request.args.get('user_id')
-        logger.debug(f"Checking authorization for user: {user_id}")
-        
-        if not user_id:
-            return render_template('unauthorized.html')
-
-        # Проверяем регистрацию пользователя
-        if not check_user_registration(user_id):
-            return render_template('unauthorized.html')
-
-        logger.debug("Attempting to connect to MongoDB...")
-        products = list(mongo.cx.Pivo.catalog.find())
-        logger.debug(f"Found {len(products)} products")
-        
-        if len(products) > 0:
-            logger.debug(f"Sample product: {products[0]}")
-
-        # Форматируем данные для шаблона
-        formatted_products = []
-        for product in products:
-            formatted_product = {
-                'id': product.get('id', ''),
-                '_id': str(product.get('_id', '')),
-                'name': product.get('name', ''),
-                'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
-            }
-            formatted_products.append(formatted_product)
-            logger.debug(f"Formatted product: {formatted_product}")
-
-        logger.debug(f"Total formatted products: {len(formatted_products)}")
-        return render_template('index.html', products=formatted_products)
-    
-    except Exception as e:
-        logger.error(f"Error in index route: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
 
 @app.route('/cart')
 def cart():
