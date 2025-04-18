@@ -44,12 +44,31 @@
                         <p>Цена: ${item.price}₽</p>
                         <p>Сумма: ${itemTotal}₽</p>
                     </div>
-                    <button onclick="removeItem(${index})" class="button">Удалить</button>
+                    <div class="cart-item-controls">
+                        <button onclick="editQuantity(${index})" class="button">Изменить</button>
+                        <button onclick="removeItem(${index})" class="button">Удалить</button>
+                    </div>
                 `;
                 cartItems.appendChild(itemElement);
             });
             
             document.getElementById('total_amount').textContent = total;
+        }
+        
+        function editQuantity(index) {
+            const item = cart[index];
+            const newQuantity = prompt('Введите новое количество:', item.quantity);
+            
+            if (newQuantity !== null) {
+                const quantity = parseInt(newQuantity);
+                if (!isNaN(quantity) && quantity > 0) {
+                    item.quantity = quantity;
+                    sessionStorage.setItem('cart', JSON.stringify(cart));
+                    displayCart();
+                } else {
+                    tg.showAlert('Пожалуйста, введите корректное количество (больше 0)');
+                }
+            }
         }
         
         function removeItem(index) {
