@@ -1,12 +1,31 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@mui/material';
 import { MongoClient, ObjectId } from 'mongodb';
 
+interface BeerItem {
+  _id: string;
+  id: number;
+  name: string;
+  fullName: string;
+  volume: number;
+  price: number;
+  legalEntity: number;
+  quantity: number;
+}
+
 const Cart = () => {
+  const [cartItems, setCartItems] = useState<BeerItem[]>([]);
+
+  useEffect(() => {
+    const items = localStorage.getItem('cart');
+    if (items) {
+      setCartItems(JSON.parse(items));
+    }
+  }, []);
+
   const handleCreateOrder = async () => {
     try {
       const tg = window.Telegram.WebApp;
-      const cartItems = JSON.parse(localStorage.getItem('cart') || '[]');
       
       if (cartItems.length === 0) {
         tg.showAlert('Корзина пуста');
@@ -18,12 +37,9 @@ const Cart = () => {
       
       await client.connect();
       const db = client.db('Pivo');
-
-      // Создаем уникальный идентификатор для заказа
-      const orderId = new ObjectId();
       
       const orderData = {
-        _id: orderId,
+        _id: new ObjectId(),
         status: "in work",
         userid: tg.initDataUnsafe?.user?.id?.toString() || "unknown",
         username: "ООО Пивной мир",
@@ -31,10 +47,10 @@ const Cart = () => {
         positions: Object.fromEntries(
           cartItems.map((item, index) => [
             `Position_${index + 1}`, {
-              Beer_ID: Number(item.id),
+              Beer_ID: item.id,
               Beer_Name: item.name,
-              Legal_Entity: 2,
-              Beer_Count: Number(item.quantity)
+              Legal_Entity: item.legalEntity,
+              Beer_Count: item.quantity
             }
           ])
         )
@@ -48,20 +64,44 @@ const Cart = () => {
 
       // Очищаем корзину
       localStorage.removeItem('cart');
+      setCartItems([]);
       tg.showAlert('Заказ успешно создан!');
       tg.close();
       
     } catch (error) {
       console.error('Ошибка при создании заказа:', error);
-      alert('Произошла ошибка при создании заказа');
+      alert('Произошла ошибка при создании заказа: ' + error.message);
     }
   };
 
+  const totalSum = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
   return (
-    <>
+    <div style={{ padding: '20px' }}>
+      {cartItems.map((item, index) => (
+        <div key={index} style={{ 
+          marginBottom: '10px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(82, 136, 193, 0.1)',
+          borderRadius: '8px'
+        }}>
+          <div>{item.name}</div>
+          <div>Количество: {item.quantity}</div>
+          <div>Цена: {item.price}₽</div>
+          <div>Сумма: {item.price * item.quantity}₽</div>
+        </div>
+      ))}
+      
+      <div style={{ 
+        marginTop: '20px', 
+        marginBottom: '20px', 
+        fontWeight: 'bold' 
+      }}>
+        Итого: {totalSum}₽
+      </div>
+
       <Button 
         variant="contained" 
-        color="primary" 
         onClick={handleCreateOrder}
         fullWidth
         sx={{ 
@@ -74,6 +114,7 @@ const Cart = () => {
       >
         Оформить заказ
       </Button>
+      
       <Button 
         variant="contained"
         onClick={() => window.Telegram.WebApp.close()}
@@ -88,7 +129,7 @@ const Cart = () => {
       >
         Назад
       </Button>
-    </>
+    </div>
   );
 };
 
