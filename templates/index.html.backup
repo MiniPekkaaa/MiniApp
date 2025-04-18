@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Telegram WebApp</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div id="main_menu" class="container">
+        <h2 class="title">Новый заказ</h2>
+        <button onclick="showProductSelection()" class="button">
+            ✏️ Добавить позицию
+        </button>
+        <button onclick="showCart()" class="button">
+            ������ Корзина: <span id="cart_count">0</span> позиций
+        </button>
+        <button onclick="cancelOrder()" class="button">
+            ❌ Отменить заказ
+        </button>
+        <button onclick="closeApp()" class="button">
+            ������ Главное меню
+        </button>
+    </div>
+
+    <div id="product_selection" class="container" style="display: none;">
+        <select id="product_select" class="select">
+            <option value="">Выберите товар</option>
+            {% for product in products %}
+            <option value="{{ product.id }}" 
+                    data-name="{{ product.name }}"
+                    data-fullname="{{ product.fullName }}"
+                    data-volume="{{ product.volume }}"
+                    data-price="{{ product.price }}"
+                    data-legal-entity="{{ product.legalEntity }}">
+                {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
+            </option>
+            {% endfor %}
+        </select>
+        <div class="quantity-controls">
+            <button onclick="decrementQuantity()" class="button">-</button>
+            <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+            <button onclick="incrementQuantity()" class="button">+</button>
+        </div>
+        <button onclick="addToCart()" class="button">Добавить в корзину</button>
+        <button onclick="showMainMenu()" class="button">Назад</button>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        let products = {{ products|tojson|safe }};
+        console.log("Loaded products:", products);
+        
+        let cart = [];
+        
+        function closeApp() {
+            tg.close();
+        }
+
+        function showProductSelection() {
+            document.getElementById('main_menu').style.display = 'none';
+            document.getElementById('product_selection').style.display = 'block';
+        }
+        
+        function showMainMenu() {
+            document.getElementById('product_selection').style.display = 'none';
+            document.getElementById('main_menu').style.display = 'block';
+        }
+        
+        function incrementQuantity() {
+            let quantityInput = document.getElementById('quantity');
+            quantityInput.value = parseInt(quantityInput.value) + 1;
+        }
+        
+        function decrementQuantity() {
+            let quantityInput = document.getElementById('quantity');
+            if (parseInt(quantityInput.value) > 1) {
+                quantityInput.value = parseInt(quantityInput.value) - 1;
+            }
+        }
+        
+        function addToCart() {
+            let select = document.getElementById('product_select');
+            let quantity = parseInt(document.getElementById('quantity').value);
+            
+            if (select.value) {
+                let option = select.options[select.selectedIndex];
+                let product = {
+                    id: select.value,
+                    name: option.dataset.name,
+                    fullName: option.dataset.fullname,
+                    volume: parseFloat(option.dataset.volume),
+                    price: parseInt(option.dataset.price),
+                    legalEntity: parseInt(option.dataset.legalEntity),
+                    quantity: quantity
+                };
+                
+                cart.push(product);
+                updateCartCount();
+                showMainMenu();
+                
+                select.value = "";
+                document.getElementById('quantity').value = "1";
+            }
+        }
+        
+        function updateCartCount() {
+            let count = cart.reduce((total, item) => total + item.quantity, 0);
+            document.getElementById('cart_count').textContent = count;
+        }
+        
+        function showCart() {
+            if (cart.length === 0) {
+                tg.showAlert("Корзина пуста");
+                return;
+            }
+            
+            let message = "Ваш заказ:\n\n";
+            let total = 0;
+            
+            cart.forEach((item, index) => {
+                message += `${index + 1}. ${item.name}\n`;
+                message += `   Количество: ${item.quantity}\n`;
+                message += `   Цена: ${item.price}₽\n`;
+                message += `   Сумма: ${item.price * item.quantity}₽\n\n`;
+                total += item.price * item.quantity;
+            });
+            
+            message += `Общая сумма: ${total}₽`;
+            
+            tg.MainButton.text = "Оформить заказ";
+            tg.MainButton.show();
+            tg.MainButton.onClick(() => {
+                tg.sendData(JSON.stringify({
+                    action: "order",
+                    items: cart,
+                    total: total
+                }));
+            });
+            
+            tg.showAlert(message);
+        }
+        
+        function cancelOrder() {
+            if (cart.length === 0) {
+                tg.showAlert("Нечего отменять - корзина пуста");
+                return;
+            }
+            
+            if (confirm("Вы уверены, что хотите отменить заказ?")) {
+                cart = [];
+                updateCartCount();
+                tg.MainButton.hide();
+                tg.showAlert("Заказ отменен");
+            }
+        }
+    </script>
+</body>
+</html>

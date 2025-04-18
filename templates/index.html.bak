@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Заказ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Новый заказ</h1>
+        <div class="menu">
+            <button class="menu-button" onclick="addItem()">Добавить позицию</button>
+            <button class="menu-button" onclick="viewCart()">Корзина: 0 позиций</button>
+            <button class="menu-button" onclick="cancelOrder()">Отменить заказ</button>
+            <button class="menu-button" onclick="mainMenu()">Главное меню</button>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
