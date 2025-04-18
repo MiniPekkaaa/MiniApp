@@ -9,7 +9,6 @@
 </head>
 <body>
     <div class="container">
-        <h2>Ваша корзина</h2>
         <div id="cart_items">
             <!-- Здесь будут отображаться товары -->
         </div>
@@ -38,11 +37,13 @@
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
-                    <div class="cart-item-info">
-                        <h3>${item.name}</h3>
-                        <p>Количество: ${item.quantity}</p>
-                        <p>Цена: ${item.price}₽</p>
-                        <p>Сумма: ${itemTotal}₽</p>
+                    <div class="cart-item-header">
+                        <h3 class="cart-item-name">${item.name}</h3>
+                        <div class="cart-item-details">
+                            <p>Количество: ${item.quantity}</p>
+                            <p>Цена: ${item.price}₽</p>
+                            <p>Сумма: ${itemTotal}₽</p>
+                        </div>
                     </div>
                     <div class="cart-item-controls">
                         <button onclick="editQuantity(${index})" class="button">Изменить</button>
