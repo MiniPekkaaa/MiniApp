@@ -99,7 +99,20 @@
                     quantity: quantity
                 };
                 
-                cart.push(product);
+                // Ищем такой же товар в корзине
+                const existingItemIndex = cart.findIndex(item => 
+                    item.id === product.id && 
+                    item.price === product.price
+                );
+                
+                if (existingItemIndex !== -1) {
+                    // Если товар найден, увеличиваем количество
+                    cart[existingItemIndex].quantity += quantity;
+                } else {
+                    // Если товар не найден, добавляем новый
+                    cart.push(product);
+                }
+                
                 sessionStorage.setItem('cart', JSON.stringify(cart));
                 updateCartCount();
                 
