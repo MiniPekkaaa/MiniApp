@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@mui/material';
-import { MongoClient, ObjectId } from 'mongodb';
 
 interface BeerItem {
   _id: string;
@@ -32,42 +31,27 @@ const Cart = () => {
         return;
       }
 
-      const uri = 'mongodb://root:otlehjoq543680@46.101.121.75:27017/admin?authSource=admin&directConnection=true';
-      const client = new MongoClient(uri);
-      
-      await client.connect();
-      const db = client.db('Pivo');
-      
-      const orderData = {
-        _id: new ObjectId(),
-        status: "in work",
-        userid: tg.initDataUnsafe?.user?.id?.toString() || "unknown",
-        username: "ООО Пивной мир",
-        process: "промежуточный процесс добавления пива",
-        positions: Object.fromEntries(
-          cartItems.map((item, index) => [
-            `Position_${index + 1}`, {
-              Beer_ID: item.id,
-              Beer_Name: item.name,
-              Legal_Entity: item.legalEntity,
-              Beer_Count: item.quantity
-            }
-          ])
-        )
-      };
+      const response = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: tg.initDataUnsafe?.user?.id,
+          items: cartItems
+        })
+      });
 
-      console.log('Создаем заказ:', orderData);
-      const result = await db.collection('Orders').insertOne(orderData);
-      console.log('Результат создания заказа:', result);
+      const result = await response.json();
 
-      await client.close();
-
-      // Очищаем корзину
-      localStorage.removeItem('cart');
-      setCartItems([]);
-      tg.showAlert('Заказ успешно создан!');
-      tg.close();
-      
+      if (result.success) {
+        localStorage.removeItem('cart');
+        setCartItems([]);
+        tg.showAlert('Заказ успешно создан!');
+        tg.close();
+      } else {
+        throw new Error(result.error || 'Ошибка при создании заказа');
+      }
     } catch (error) {
       console.error('Ошибка при создании заказа:', error);
       alert('Произошла ошибка при создании заказа: ' + error.message);

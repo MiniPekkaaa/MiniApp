@@ -1,7 +1,7 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from flask_pymongo import PyMongo
 import logging
-from bson import json_util
+from bson import json_util, ObjectId
 import json
 
 # Настройка логирования
@@ -76,6 +76,44 @@ def get_products():
         return jsonify(formatted_products)
     except Exception as e:
         logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/create-order', methods=['POST'])
+def create_order():
+    try:
+        logger.debug("Получен запрос на создание заказа")
+        data = request.json
+        logger.debug(f"Данные заказа: {data}")
+
+        order_data = {
+            '_id': ObjectId(),
+            'status': "in work",
+            'userid': str(data.get('userId')),
+            'username': "ООО Пивной мир",
+            'process': "промежуточный процесс добавления пива",
+            'positions': {}
+        }
+
+        # Формируем позиции заказа
+        items = data.get('items', [])
+        for index, item in enumerate(items, 1):
+            position_key = f"Position_{index}"
+            order_data['positions'][position_key] = {
+                'Beer_ID': int(item['id']),
+                'Beer_Name': item['name'],
+                'Legal_Entity': int(item['legalEntity']),
+                'Beer_Count': int(item['quantity'])
+            }
+
+        logger.debug(f"Подготовленный заказ: {order_data}")
+        
+        # Сохраняем заказ в MongoDB
+        result = mongo.cx.Pivo.Orders.insert_one(order_data)
+        logger.debug(f"Заказ создан, ID: {result.inserted_id}")
+
+        return jsonify({"success": True, "orderId": str(result.inserted_id)})
+    except Exception as e:
+        logger.error(f"Ошибка при создании заказа: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
