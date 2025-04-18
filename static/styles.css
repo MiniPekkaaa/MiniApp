@@ -176,3 +176,25 @@ body {
 #show_more_button:active {
     opacity: 0.8;
 }
+
+.message-box {
+    text-align: center;
+    margin: 20px 0;
+    padding: 20px;
+    background-color: var(--tg-theme-bg-color);
+    border: 1px solid var(--tg-theme-hint-color);
+    border-radius: 8px;
+}
+
+.message-box h2 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--tg-theme-text-color);
+}
+
+.message-box p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--tg-theme-hint-color);
+}

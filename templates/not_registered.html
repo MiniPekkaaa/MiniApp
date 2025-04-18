@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Регистрация</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="message-box">
+            <h2>Вы не зарегистрированы в системе</h2>
+            <p>Для использования приложения необходимо пройти регистрацию в боте.</p>
+        </div>
+        <button onclick="openBot()" class="button">Пройти регистрацию в боте</button>
+        <button onclick="closeApp()" class="button">Закрыть</button>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        function openBot() {
+            tg.close();
+        }
+        
+        function closeApp() {
+            tg.close();
+        }
+    </script>
+</body>
+</html> 

@@ -28,6 +28,10 @@
         
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         let showAll = false;
+
+        // Получаем user_id из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user_id');
         
         function displayCart() {
             const cartItems = document.getElementById('cart_items');
@@ -103,27 +107,50 @@
             displayCart();
         }
         
-        function placeOrder() {
+        async function placeOrder() {
             if (cart.length === 0) {
                 tg.showAlert("Корзина пуста");
+                return;
+            }
+
+            if (!userId) {
+                tg.showAlert("Ошибка: не удалось определить пользователя");
                 return;
             }
             
             const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             
-            tg.MainButton.text = "Оформить заказ";
-            tg.MainButton.show();
-            tg.MainButton.onClick(() => {
-                tg.sendData(JSON.stringify({
-                    action: "order",
-                    items: cart,
-                    total: total
-                }));
-            });
+            try {
+                const response = await fetch('/api/create_order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        items: cart,
+                        total: total
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Очищаем корзину
+                    cart = [];
+                    sessionStorage.setItem('cart', JSON.stringify(cart));
+                    tg.showAlert("Заказ успешно создан");
+                    tg.close();
+                } else {
+                    tg.showAlert("Ошибка при создании заказа: " + (result.error || "Неизвестная ошибка"));
+                }
+            } catch (error) {
+                tg.showAlert("Ошибка при создании заказа: " + error.message);
+            }
         }
         
         function goBack() {
-            window.location.href = '/';
+            window.location.href = '/' + (userId ? `?user_id=${userId}` : '');
         }
         
         // Отображаем корзину при загрузке страницы
