@@ -31,7 +31,8 @@ def check_user_registration(user_id):
         # Проверяем существование пользователя в Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
-        return bool(user_data)  # Возвращаем True если данные существуют
+        # Проверяем что есть данные и UserChatID совпадает
+        return bool(user_data) and user_data.get('UserChatID') == str(user_id)
     except Exception as e:
         logger.error(f"Error checking Redis: {str(e)}")
         return False

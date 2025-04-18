@@ -20,7 +20,7 @@ export const connectToRedis = async () => {
 export const checkUserRegistration = async (userChatId: string) => {
   const client = await connectToRedis();
   const userData = await client.hGetAll(`beer:user:${userChatId}`);
-  return Object.keys(userData).length > 0;
+  return Object.keys(userData).length > 0 && userData.UserChatID === userChatId;
 };
 
 export const getUserData = async (userChatId: string) => {
