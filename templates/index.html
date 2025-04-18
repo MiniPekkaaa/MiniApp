@@ -51,6 +51,14 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
         
+        // Получаем user_id из Telegram WebApp
+        const userId = tg.initDataUnsafe?.user?.id;
+        
+        // Если user_id не в URL и он есть в WebApp, добавляем его и перезагружаем страницу
+        if (!window.location.search.includes('user_id') && userId) {
+            window.location.href = `${window.location.pathname}?user_id=${userId}`;
+        }
+        
         let products = {{ products|tojson|safe }};
         console.log("Loaded products:", products);
         
