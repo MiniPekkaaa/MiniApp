@@ -37,7 +37,7 @@
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
-                    <div class="cart-item-header">
+                    <div class="cart-item-info">
                         <h3 class="cart-item-name">${item.name}</h3>
                         <div class="cart-item-details">
                             <p>Количество: ${item.quantity}</p>
@@ -46,7 +46,7 @@
                         </div>
                     </div>
                     <div class="cart-item-controls">
-                        <button onclick="editQuantity(${index})" class="button">Изменить</button>
+                        <button onclick="editQuantity(${index})" class="button">Изменить объем</button>
                         <button onclick="removeItem(${index})" class="button">Удалить</button>
                     </div>
                 `;
