@@ -140,24 +140,24 @@ def create_order():
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         
-        order_data = {
-            '_id': ObjectId(),
-            'status': "in work",
-            'userid': str(user_id),
-            'username': user_data.get('organization', 'ООО Пивной мир'),
-            'process': "промежуточный процесс добавления пива",
-            'positions': {}
-        }
-
-        items = data.get('items', [])
-        for index, item in enumerate(items, 1):
+        # Формируем позиции заказа
+        positions = {}
+        for index, item in enumerate(data.get('items', []), 1):
             position_key = f"Position_{index}"
-            order_data['positions'][position_key] = {
+            positions[position_key] = {
                 'Beer_ID': int(item['id']),
                 'Beer_Name': item['name'],
                 'Legal_Entity': int(item['legalEntity']),
                 'Beer_Count': int(item['quantity'])
             }
+
+        # Создаем заказ
+        order_data = {
+            'status': "in work",
+            'userid': str(user_id),
+            'username': user_data.get('organization', 'ООО Пивной мир'),
+            'Positions': positions
+        }
 
         logger.debug(f"Подготовленный заказ: {order_data}")
         

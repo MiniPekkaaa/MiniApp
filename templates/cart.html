@@ -150,17 +150,35 @@
                 tg.showAlert("Корзина пуста");
                 return;
             }
-            
-            const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            
-            tg.MainButton.text = "Оформить заказ";
-            tg.MainButton.show();
-            tg.MainButton.onClick(() => {
-                tg.sendData(JSON.stringify({
-                    action: "order",
-                    items: cart,
-                    total: total
-                }));
+
+            // Отправляем запрос на создание заказа
+            fetch('/api/create-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: userId, // ID пользователя из Telegram WebApp
+                    items: cart
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // Очищаем корзину
+                    cart = [];
+                    sessionStorage.setItem('cart', JSON.stringify(cart));
+                    displayCart();
+                    tg.showAlert("Заказ успешно создан!");
+                    // Закрываем WebApp
+                    setTimeout(() => tg.close(), 1000);
+                } else {
+                    throw new Error(result.error || 'Ошибка при создании заказа');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при создании заказа:', error);
+                tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
             });
         }
         
