@@ -12,7 +12,7 @@
         <button onclick="showProductSelection()" class="button">
             Добавить товар
         </button>
-        <button onclick="goToCart()" class="button">
+        <button onclick="window.location.href='/cart'" class="button">
             Корзина <span id="cart_count">0</span>
         </button>
         <button onclick="cancelOrder()" class="button">
@@ -43,7 +43,7 @@
             <button onclick="incrementQuantity()" class="button">+</button>
         </div>
         <button onclick="addToCart()" class="button">Добавить в корзину</button>
-        <button onclick="goToCart()" class="button">Перейти в корзину</button>
+        <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
         <button onclick="showMainMenu()" class="button">Назад</button>
     </div>
 
@@ -56,10 +56,6 @@
         
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         updateCartCount();
-
-        // Получаем user_id из URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('user_id');
         
         function closeApp() {
             tg.close();
@@ -129,10 +125,6 @@
         
         function updateCartCount() {
             document.getElementById('cart_count').textContent = cart.length;
-        }
-        
-        function goToCart() {
-            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
         }
         
         function cancelOrder() {
