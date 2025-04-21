@@ -28,9 +28,6 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
         
-        // Получаем user_id из Telegram WebApp
-        const userId = tg.initDataUnsafe?.user?.id;
-        
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         updateCartCount();
         
