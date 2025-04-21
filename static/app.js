@@ -122,9 +122,21 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Products:', window.products);
 });
 
-// Обработчики кнопок
+// Функции для навигации между страницами
+function showOrderType() {
+    document.getElementById('main_menu').style.display = 'none';
+    document.getElementById('order_type').style.display = 'block';
+    document.getElementById('manual_input').style.display = 'none';
+}
+
+function showManualInput() {
+    document.getElementById('main_menu').style.display = 'none';
+    document.getElementById('order_type').style.display = 'none';
+    document.getElementById('manual_input').style.display = 'block';
+}
+
+// Обработчики кнопок главного меню
 function handleNewOrder() {
-    // Проверка авторизации
     const userId = tg.initDataUnsafe?.user?.id;
     if (!userId) {
         tg.showAlert('Необходима авторизация в Telegram');
@@ -157,7 +169,6 @@ function handleMyOrders() {
         .then(response => response.json())
         .then(data => {
             if (data.isAuthorized) {
-                // Здесь будет переход к списку заказов
                 tg.showAlert('Функция в разработке');
             } else {
                 tg.showAlert('Пожалуйста, зарегистрируйтесь в системе');
@@ -169,8 +180,8 @@ function handleMyOrders() {
         });
 }
 
+// Обработчики кнопок страницы выбора типа заказа
 function handleRemainingInput() {
-    // Здесь будет логика для ввода остатков
     tg.showAlert('Функция в разработке');
 }
 
