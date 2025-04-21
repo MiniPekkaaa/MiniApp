@@ -11,7 +11,8 @@ REDIS_CONFIG = {
     'host': '46.101.121.75',
     'port': 6379,
     'password': 'otlehjoq543680',
-    'db': 0
+    'db': 0,
+    'decode_responses': True
 }
 
 # MongoDB connection string

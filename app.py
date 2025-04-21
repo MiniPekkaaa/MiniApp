@@ -9,7 +9,11 @@ from config import REDIS_CONFIG
 # Настройка логирования
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -29,13 +33,17 @@ redis_client = redis.Redis(
 
 def check_user_registration(user_id):
     try:
+        logger.debug(f"Checking registration for user_id: {user_id}")
         # Проверяем существование пользователя в Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
+        logger.debug(f"Redis connection info: {redis_client.info()}")
         # Проверяем что есть данные и UserChatID совпадает
-        return bool(user_data) and user_data.get('UserChatID') == str(user_id)
+        is_registered = bool(user_data) and user_data.get('UserChatID') == str(user_id)
+        logger.debug(f"User {user_id} is registered: {is_registered}")
+        return is_registered
     except Exception as e:
-        logger.error(f"Error checking Redis: {str(e)}")
+        logger.error(f"Error checking Redis: {str(e)}", exc_info=True)
         return False
 
 @app.route('/check-auth')
