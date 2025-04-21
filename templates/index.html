@@ -95,7 +95,14 @@
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
                 // Показываем контент через небольшую задержку
-                setTimeout(showContent, 300);
+                setTimeout(() => {
+                    showContent();
+                    // Проверяем параметр show_product_selection
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('show_product_selection') === 'true') {
+                        showProductSelection();
+                    }
+                }, 300);
             }
         }
         
