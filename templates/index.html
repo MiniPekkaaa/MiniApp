@@ -1,70 +1,201 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Beer App</title>
+    <title>Telegram WebApp</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #5288c1;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-    <!-- Страница регистрации -->
-    <div id="registration" class="container" style="display: none;">
-        <h2 class="title">Регистрация</h2>
-        <p class="message">Для использования приложения необходимо зарегистрироваться в боте.</p>
-        <p class="message">Пожалуйста, напишите боту команду /start и следуйте инструкциям.</p>
+    <!-- Экран загрузки -->
+    <div id="loading" class="container" style="text-align: center; padding: 20px;">
+        <div class="loader"></div>
     </div>
 
-    <!-- Главное меню -->
-    <div id="main_menu" class="container" style="display: none;">
-        <h2 class="title">Главное меню</h2>
-        <button onclick="handleNewOrder()" class="button">
-            Новый заказ
-        </button>
-        <button onclick="handleMyOrders()" class="button">
-            Мои заказы
-        </button>
-    </div>
-
-    <!-- Выбор типа заказа -->
-    <div id="order_type" class="container" style="display: none;">
-        <h2 class="title">Выберите тип заказа</h2>
-        <button onclick="handleRemainingInput()" class="button">
-            Ввести остатки
-        </button>
-        <button onclick="handleManualInput()" class="button">
-            Добавить позиции вручную
-        </button>
-        <button onclick="showMainMenu()" class="button">
-            Главное меню
-        </button>
-    </div>
-
-    <!-- Ручной ввод позиций -->
-    <div id="manual_input" class="container" style="display: none;">
-        <h2 class="title">Добавление позиций</h2>
-        <select id="product_select" class="select">
-            <option value="">Выберите товар</option>
-            {% for product in products %}
-            <option value="{{ product.id }}" 
-                    data-name="{{ product.name }}"
-                    data-fullname="{{ product.fullName }}"
-                    data-volume="{{ product.volume }}"
-                    data-price="{{ product.price }}"
-                    data-legal-entity="{{ product.legalEntity }}">
-                {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
-            </option>
-            {% endfor %}
-        </select>
-        <div class="quantity-controls">
-            <button onclick="decrementQuantity()" class="button">-</button>
-            <input type="number" id="quantity" value="1" min="1" class="quantity-input">
-            <button onclick="incrementQuantity()" class="button">+</button>
+    <!-- Основной контент -->
+    <div id="content" class="hidden">
+        <div id="main_menu" class="container">
+            <button onclick="showProductSelection()" class="button">
+                Добавить товар
+            </button>
+            <button onclick="window.location.href='/cart'" class="button">
+                Корзина <span id="cart_count">0</span>
+            </button>
+            <button onclick="cancelOrder()" class="button">
+                Отменить заказ
+            </button>
+            <button onclick="closeApp()" class="button">
+                Главное меню
+            </button>
         </div>
-        <button onclick="addToCart()" class="button">Добавить в корзину</button>
-        <button onclick="showMainMenu()" class="button">Главное меню</button>
+
+        <div id="product_selection" class="container" style="display: none;">
+            <select id="product_select" class="select">
+                <option value="">Выберите товар</option>
+                {% for product in products %}
+                <option value="{{ product.id }}" 
+                        data-name="{{ product.name }}"
+                        data-fullname="{{ product.fullName }}"
+                        data-volume="{{ product.volume }}"
+                        data-price="{{ product.price }}"
+                        data-legal-entity="{{ product.legalEntity }}">
+                    {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
+                </option>
+                {% endfor %}
+            </select>
+            <div class="quantity-controls">
+                <button onclick="decrementQuantity()" class="button">-</button>
+                <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+                <button onclick="incrementQuantity()" class="button">+</button>
+            </div>
+            <button onclick="addToCart()" class="button">Добавить в корзину</button>
+            <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
+            <button onclick="showMainMenu()" class="button">Назад</button>
+        </div>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // Получаем user_id из Telegram WebApp
+        const userId = tg.initDataUnsafe?.user?.id;
+        console.log('Telegram WebApp user:', tg.initDataUnsafe?.user);
+        console.log('User ID:', userId);
+        
+        function showContent() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').classList.remove('hidden');
+        }
+
+        function checkAuthAndRedirect() {
+            if (!window.location.search.includes('user_id') && userId) {
+                console.log('Adding user_id to URL:', userId);
+                window.location.href = `${window.location.pathname}?user_id=${userId}`;
+            } else {
+                // Показываем контент через небольшую задержку
+                setTimeout(() => {
+                    showContent();
+                    // Проверяем параметр show_product_selection
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('show_product_selection') === 'true') {
+                        showProductSelection();
+                    }
+                }, 300);
+            }
+        }
+        
+        let products = {{ products|tojson|safe }};
+        console.log("Loaded products:", products);
+        
+        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        updateCartCount();
+        
+        function closeApp() {
+            tg.close();
+        }
+
+        function showProductSelection() {
+            document.getElementById('main_menu').style.display = 'none';
+            document.getElementById('product_selection').style.display = 'block';
+        }
+        
+        function showMainMenu() {
+            document.getElementById('product_selection').style.display = 'none';
+            document.getElementById('main_menu').style.display = 'block';
+        }
+        
+        function incrementQuantity() {
+            let quantityInput = document.getElementById('quantity');
+            quantityInput.value = parseInt(quantityInput.value) + 1;
+        }
+        
+        function decrementQuantity() {
+            let quantityInput = document.getElementById('quantity');
+            if (parseInt(quantityInput.value) > 1) {
+                quantityInput.value = parseInt(quantityInput.value) - 1;
+            }
+        }
+        
+        function addToCart() {
+            let select = document.getElementById('product_select');
+            let quantity = parseInt(document.getElementById('quantity').value);
+            
+            if (select.value) {
+                let option = select.options[select.selectedIndex];
+                let product = {
+                    id: select.value,
+                    name: option.dataset.name,
+                    fullName: option.dataset.fullname,
+                    volume: parseFloat(option.dataset.volume),
+                    price: parseInt(option.dataset.price),
+                    legalEntity: parseInt(option.dataset.legalEntity),
+                    quantity: quantity
+                };
+                
+                const existingItemIndex = cart.findIndex(item => 
+                    item.id === product.id && 
+                    item.price === product.price
+                );
+                
+                if (existingItemIndex !== -1) {
+                    cart[existingItemIndex].quantity += quantity;
+                } else {
+                    cart.push(product);
+                }
+                
+                sessionStorage.setItem('cart', JSON.stringify(cart));
+                updateCartCount();
+                
+                tg.showAlert("Позиция добавлена успешно");
+                
+                select.value = "";
+                document.getElementById('quantity').value = "1";
+            }
+        }
+        
+        function updateCartCount() {
+            document.getElementById('cart_count').textContent = cart.length;
+        }
+        
+        function cancelOrder() {
+            if (cart.length === 0) {
+                tg.showAlert("Нечего отменять - корзина пуста");
+                return;
+            }
+            
+            if (confirm("Вы уверены, что хотите отменить заказ?")) {
+                cart = [];
+                sessionStorage.setItem('cart', JSON.stringify(cart));
+                updateCartCount();
+                tg.MainButton.hide();
+                tg.showAlert("Заказ отменен");
+            }
+        }
+
+        // Запускаем проверку авторизации
+        checkAuthAndRedirect();
+    </script>
 </body>
 </html>

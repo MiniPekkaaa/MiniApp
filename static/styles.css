@@ -1,53 +1,48 @@
-.message {
-    text-align: center;
-    color: var(--tg-theme-text-color);
-    margin: 12px 0;
-    font-size: 16px;
-    line-height: 1.4;
-}
-
 :root {
-    --tg-theme-bg-color: #fff;
-    --tg-theme-text-color: #000;
-    --tg-theme-hint-color: #999;
+    --tg-theme-bg-color: #18222d;
+    --tg-theme-text-color: #ffffff;
+    --tg-theme-hint-color: #999999;
     --tg-theme-link-color: #2481cc;
-    --tg-theme-button-color: #2481cc;
-    --tg-theme-button-text-color: #fff;
+    --tg-theme-button-color: #3390ec;
+    --tg-theme-button-text-color: #ffffff;
 }
 
 body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    margin: 0;
+    padding: 0;
     background-color: var(--tg-theme-bg-color);
     color: var(--tg-theme-text-color);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    margin: 0;
-    padding: 16px;
 }
 
 .container {
-    max-width: 600px;
+    width: 100%;
+    max-width: 480px;
     margin: 0 auto;
     padding: 16px;
+    box-sizing: border-box;
 }
 
 .title {
     text-align: center;
-    margin-bottom: 24px;
-    font-size: 20px;
-    font-weight: 500;
+    margin-bottom: 20px;
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--tg-theme-text-color);
 }
 
 .button {
-    display: block;
     width: 100%;
-    padding: 12px 20px;
-    margin: 8px 0;
-    background-color: var(--tg-theme-button-color);
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--tg-theme-button-color);
     color: var(--tg-theme-button-text-color);
     border: none;
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 15px;
+    font-weight: 500;
     cursor: pointer;
-    transition: opacity 0.2s;
+    text-align: center;
 }
 
 .button:active {
@@ -57,20 +52,34 @@ body {
 .select {
     width: 100%;
     padding: 12px;
-    margin: 8px 0;
+    margin-bottom: 8px;
     background-color: var(--tg-theme-bg-color);
     color: var(--tg-theme-text-color);
     border: 1px solid var(--tg-theme-hint-color);
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 15px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
 }
 
 .quantity-controls {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 16px 0;
     gap: 8px;
+    margin: 8px 0;
+}
+
+.quantity-controls .button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin: 0;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .quantity-input {
@@ -81,7 +90,7 @@ body {
     color: var(--tg-theme-text-color);
     border: 1px solid var(--tg-theme-hint-color);
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 15px;
 }
 
 .cart-item {

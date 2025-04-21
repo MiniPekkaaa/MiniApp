@@ -4,64 +4,6 @@ let selectedProduct = null;
 
 // Инициализация Telegram WebApp
 tg.ready();
-tg.expand();
-
-// Проверка авторизации при загрузке страницы
-document.addEventListener('DOMContentLoaded', function() {
-    checkAuthorization();
-});
-
-// Функция проверки авторизации
-function checkAuthorization() {
-    const userId = tg.initDataUnsafe?.user?.id;
-    if (!userId) {
-        showRegistration();
-        return;
-    }
-
-    fetch(`/api/check-auth/${userId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.isAuthorized) {
-                showMainMenu();
-            } else {
-                showRegistration();
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка при проверке авторизации:', error);
-            showRegistration();
-        });
-}
-
-// Функции для навигации между страницами
-function showRegistration() {
-    document.getElementById('registration').style.display = 'block';
-    document.getElementById('main_menu').style.display = 'none';
-    document.getElementById('order_type').style.display = 'none';
-    document.getElementById('manual_input').style.display = 'none';
-}
-
-function showMainMenu() {
-    document.getElementById('registration').style.display = 'none';
-    document.getElementById('main_menu').style.display = 'block';
-    document.getElementById('order_type').style.display = 'none';
-    document.getElementById('manual_input').style.display = 'none';
-}
-
-function showOrderType() {
-    document.getElementById('registration').style.display = 'none';
-    document.getElementById('main_menu').style.display = 'none';
-    document.getElementById('order_type').style.display = 'block';
-    document.getElementById('manual_input').style.display = 'none';
-}
-
-function showManualInput() {
-    document.getElementById('registration').style.display = 'none';
-    document.getElementById('main_menu').style.display = 'none';
-    document.getElementById('order_type').style.display = 'none';
-    document.getElementById('manual_input').style.display = 'block';
-}
 
 // Функция для показа страницы выбора продукта
 function showProductSelection() {
@@ -69,6 +11,12 @@ function showProductSelection() {
     document.getElementById('productSelection').style.display = 'block';
     document.getElementById('productsList').style.display = 'none';
     document.getElementById('quantitySelection').style.display = 'none';
+}
+
+// Функция для показа главного меню
+function showMainMenu() {
+    document.getElementById('mainMenu').style.display = 'block';
+    document.getElementById('productSelection').style.display = 'none';
 }
 
 // Функция для переключения списка продуктов
@@ -171,68 +119,3 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded');
     console.log('Products:', window.products);
 });
-
-// Обработчики кнопок главного меню
-function handleNewOrder() {
-    showOrderType();
-}
-
-function handleMyOrders() {
-    tg.showAlert('Функция в разработке');
-}
-
-// Обработчики кнопок страницы выбора типа заказа
-function handleRemainingInput() {
-    tg.showAlert('Функция в разработке');
-}
-
-function handleManualInput() {
-    showManualInput();
-}
-
-// Функции для работы с количеством
-function incrementQuantity() {
-    let quantityInput = document.getElementById('quantity');
-    quantityInput.value = parseInt(quantityInput.value) + 1;
-}
-
-function decrementQuantity() {
-    let quantityInput = document.getElementById('quantity');
-    if (parseInt(quantityInput.value) > 1) {
-        quantityInput.value = parseInt(quantityInput.value) - 1;
-    }
-}
-
-// Функция добавления в корзину
-function addToCart() {
-    const productSelect = document.getElementById('product_select');
-    const quantityInput = document.getElementById('quantity');
-    
-    if (!productSelect.value) {
-        tg.showAlert('Выберите товар');
-        return;
-    }
-
-    const selectedOption = productSelect.selectedOptions[0];
-    const product = {
-        id: parseInt(productSelect.value),
-        name: selectedOption.dataset.name,
-        fullName: selectedOption.dataset.fullname,
-        volume: parseFloat(selectedOption.dataset.volume),
-        price: parseFloat(selectedOption.dataset.price),
-        legalEntity: parseInt(selectedOption.dataset.legalEntity),
-        quantity: parseInt(quantityInput.value)
-    };
-
-    try {
-        const existingCart = JSON.parse(localStorage.getItem('cart') || '[]');
-        const updatedCart = [...existingCart, product];
-        localStorage.setItem('cart', JSON.stringify(updatedCart));
-        tg.showAlert('Товар добавлен в корзину');
-        productSelect.value = '';
-        quantityInput.value = '1';
-    } catch (error) {
-        console.error('Ошибка при добавлении в корзину:', error);
-        tg.showAlert('Ошибка при добавлении в корзину');
-    }
-}
