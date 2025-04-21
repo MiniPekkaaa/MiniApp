@@ -25,6 +25,22 @@
         .hidden {
             display: none;
         }
+
+        .button-delete {
+            background-color: #ff4444 !important;
+            color: white !important;
+        }
+
+        .button-order {
+            background-color: #4CAF50 !important;
+            color: white !important;
+        }
+
+        .button-add-more {
+            background-color: #5288c1 !important;
+            color: white !important;
+            margin-bottom: 10px !important;
+        }
     </style>
 </head>
 <body>
@@ -45,7 +61,8 @@
             <div id="cart_total">
                 <h3>Итого: <span id="total_amount">0</span>₽</h3>
             </div>
-            <button onclick="placeOrder()" class="button">Оформить заказ</button>
+            <button onclick="addMore()" class="button button-add-more">Добавить ещё</button>
+            <button onclick="placeOrder()" class="button button-order">Оформить заказ</button>
             <button onclick="goBack()" class="button">Назад</button>
         </div>
     </div>
@@ -109,7 +126,7 @@
                     </div>
                     <div class="cart-item-controls">
                         <button onclick="editQuantity(${index})" class="button">Изменить объем</button>
-                        <button onclick="removeItem(${index})" class="button">Удалить</button>
+                        <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
                     </div>
                 `;
                 cartItems.appendChild(itemElement);
@@ -183,6 +200,10 @@
         }
         
         function goBack() {
+            window.location.href = '/';
+        }
+        
+        function addMore() {
             window.location.href = '/';
         }
         
