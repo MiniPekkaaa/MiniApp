@@ -6,6 +6,7 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
+import openai
 
 # Настройка логирования
 logging.basicConfig(
@@ -295,6 +296,87 @@ def get_last_orders():
 
     except Exception as e:
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/loading')
+def loading():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+        return render_template('loading.html', user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in loading route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
+@app.route('/api/analyze-remains', methods=['POST'])
+def analyze_remains():
+    try:
+        data = request.json
+        user_id = data.get('userId')
+        remains = data.get('remains')
+
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Получаем API ключ OpenAI из Redis
+        openai_key = redis_client.hget('beer:setting', 'OpenAI')
+        if not openai_key:
+            return jsonify({"error": "OpenAI API key not found"}), 500
+
+        openai.api_key = openai_key
+
+        # Получаем последние 3 заказа пользователя
+        last_orders = list(mongo.cx.Pivo.Orders.find(
+            {"userid": str(user_id)},
+            {"Positions": 1, "_id": 0}
+        ).sort([("date", -1)]).limit(3))
+
+        # Формируем контекст для OpenAI
+        order_history = []
+        for order in last_orders:
+            positions = order.get('Positions', {})
+            for pos in positions.values():
+                order_history.append({
+                    'name': pos['Beer_Name'],
+                    'count': pos['Beer_Count']
+                })
+
+        # Формируем промпт для OpenAI
+        prompt = f"""На основе следующих данных о последних заказах пользователя и текущих остатках, 
+        предложите рекомендуемое количество для заказа каждой позиции.
+
+        История заказов:
+        {json.dumps(order_history, ensure_ascii=False, indent=2)}
+
+        Текущие остатки:
+        {json.dumps(remains, ensure_ascii=False, indent=2)}
+
+        Пожалуйста, верните рекомендации в формате JSON, где ключ - это ID товара, а значение - рекомендуемое количество.
+        Учитывайте историю заказов и текущие остатки при формировании рекомендаций."""
+
+        # Отправляем запрос к OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Вы - аналитическая система, которая помогает предсказать оптимальное количество товара для заказа на основе истории заказов и текущих остатков."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        # Парсим ответ от OpenAI
+        try:
+            recommendations = json.loads(response.choices[0].message.content)
+        except:
+            recommendations = {}
+
+        return jsonify({
+            "success": True,
+            "recommendations": recommendations
+        })
+
+    except Exception as e:
+        logger.error(f"Error in analyze-remains: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

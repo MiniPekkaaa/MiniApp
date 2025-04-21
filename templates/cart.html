@@ -91,6 +91,42 @@
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         let showAll = false;
         
+        // Проверяем наличие рекомендованных товаров при загрузке страницы
+        function checkRecommendedItems() {
+            const recommendedItems = localStorage.getItem('recommendedItems');
+            if (recommendedItems) {
+                const recommendations = JSON.parse(recommendedItems);
+                
+                // Получаем список всех товаров
+                fetch('/api/products?user_id=' + userId)
+                    .then(response => response.json())
+                    .then(products => {
+                        // Добавляем рекомендованные товары в корзину
+                        for (const [productId, quantity] of Object.entries(recommendations)) {
+                            const product = products.find(p => p.id === productId);
+                            if (product) {
+                                cart.push({
+                                    id: product.id,
+                                    name: product.name,
+                                    price: product.price,
+                                    quantity: quantity,
+                                    legalEntity: product.legalEntity
+                                });
+                            }
+                        }
+                        
+                        // Сохраняем обновленную корзину и очищаем рекомендации
+                        sessionStorage.setItem('cart', JSON.stringify(cart));
+                        localStorage.removeItem('recommendedItems');
+                        displayCart();
+                    })
+                    .catch(error => {
+                        console.error('Error loading products:', error);
+                        tg.showAlert('Ошибка при загрузке рекомендованных товаров');
+                    });
+            }
+        }
+        
         function displayCart() {
             const cartItems = document.getElementById('cart_items');
             const showMoreContainer = document.getElementById('show_more_container');
@@ -211,6 +247,7 @@
         
         // Запускаем проверку авторизации и отображаем корзину
         checkAuthAndRedirect();
+        checkRecommendedItems();
         displayCart();
     </script>
 </body>

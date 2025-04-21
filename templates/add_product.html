@@ -333,11 +333,11 @@
                 return;
             }
 
-            // Здесь будет отправка остатков на анализ
-            console.log("Отправка остатков на анализ:", remainders);
-            tg.showAlert("Остатки отправлены на анализ");
-            // После отправки очищаем список
-            remainders = [];
+            // Сохраняем данные об остатках в localStorage
+            localStorage.setItem('remainsData', JSON.stringify(remainders));
+
+            // Перенаправляем на страницу загрузки
+            window.location.href = `/loading?user_id=${userId}`;
         }
 
         // Запускаем проверку авторизации
