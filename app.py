@@ -324,13 +324,20 @@ def analyze_remains():
             return jsonify({"error": "Unauthorized"}), 401
 
         # Получаем API ключ OpenAI из Redis
-        openai_key = redis_client.hget('beer:setting', 'OpenAI')
-        if not openai_key:
-            logger.error("OpenAI API ключ не найден в Redis")
-            return jsonify({"error": "OpenAI API key not found"}), 500
-
-        logger.debug("OpenAI API ключ успешно получен")
-        openai.api_key = openai_key
+        try:
+            redis_data = redis_client.hgetall('beer:setting')
+            openai_key = redis_data.get('OpenAI')
+            logger.debug(f"Данные из Redis beer:setting: {redis_data}")
+            
+            if not openai_key:
+                logger.error("OpenAI API ключ не найден в Redis")
+                return jsonify({"error": "OpenAI API key not found"}), 500
+                
+            logger.debug("OpenAI API ключ успешно получен")
+            openai.api_key = openai_key
+        except Exception as e:
+            logger.error(f"Ошибка при получении ключа OpenAI из Redis: {str(e)}")
+            return jsonify({"error": f"Ошибка при получении ключа OpenAI: {str(e)}"}), 500
 
         # Получаем последние 3 заказа пользователя
         last_orders = list(mongo.cx.Pivo.Orders.find(
