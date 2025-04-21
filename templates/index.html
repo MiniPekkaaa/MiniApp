@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Telegram WebApp</title>
+    <title>Beer App</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -28,51 +28,51 @@
     </style>
 </head>
 <body>
-    <!-- Экран загрузки -->
-    <div id="loading" class="container" style="text-align: center; padding: 20px;">
-        <div class="loader"></div>
+    <div id="main_menu" class="container">
+        <h2 class="title">Главное меню</h2>
+        <button onclick="handleNewOrder()" class="button">
+            Новый заказ
+        </button>
+        <button onclick="handleMyOrders()" class="button">
+            Мои заказы
+        </button>
     </div>
 
-    <!-- Основной контент -->
-    <div id="content" class="hidden">
-        <div id="main_menu" class="container">
-            <button onclick="showProductSelection()" class="button">
-                Добавить товар
-            </button>
-            <button onclick="window.location.href='/cart'" class="button">
-                Корзина <span id="cart_count">0</span>
-            </button>
-            <button onclick="cancelOrder()" class="button">
-                Отменить заказ
-            </button>
-            <button onclick="closeApp()" class="button">
-                Главное меню
-            </button>
-        </div>
+    <div id="order_type" class="container" style="display: none;">
+        <h2 class="title">Выберите тип заказа</h2>
+        <button onclick="handleRemainingInput()" class="button">
+            Ввести остатки
+        </button>
+        <button onclick="handleManualInput()" class="button">
+            Добавить позиции вручную
+        </button>
+        <button onclick="showMainMenu()" class="button">
+            Главное меню
+        </button>
+    </div>
 
-        <div id="product_selection" class="container" style="display: none;">
-            <select id="product_select" class="select">
-                <option value="">Выберите товар</option>
-                {% for product in products %}
-                <option value="{{ product.id }}" 
-                        data-name="{{ product.name }}"
-                        data-fullname="{{ product.fullName }}"
-                        data-volume="{{ product.volume }}"
-                        data-price="{{ product.price }}"
-                        data-legal-entity="{{ product.legalEntity }}">
-                    {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
-                </option>
-                {% endfor %}
-            </select>
-            <div class="quantity-controls">
-                <button onclick="decrementQuantity()" class="button">-</button>
-                <input type="number" id="quantity" value="1" min="1" class="quantity-input">
-                <button onclick="incrementQuantity()" class="button">+</button>
-            </div>
-            <button onclick="addToCart()" class="button">Добавить в корзину</button>
-            <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
-            <button onclick="showMainMenu()" class="button">Назад</button>
+    <div id="manual_input" class="container" style="display: none;">
+        <h2 class="title">Добавление позиций</h2>
+        <select id="product_select" class="select">
+            <option value="">Выберите товар</option>
+            {% for product in products %}
+            <option value="{{ product.id }}" 
+                    data-name="{{ product.name }}"
+                    data-fullname="{{ product.fullName }}"
+                    data-volume="{{ product.volume }}"
+                    data-price="{{ product.price }}"
+                    data-legal-entity="{{ product.legalEntity }}">
+                {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
+            </option>
+            {% endfor %}
+        </select>
+        <div class="quantity-controls">
+            <button onclick="decrementQuantity()" class="button">-</button>
+            <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+            <button onclick="incrementQuantity()" class="button">+</button>
         </div>
+        <button onclick="addToCart()" class="button">Добавить в корзину</button>
+        <button onclick="showMainMenu()" class="button">Главное меню</button>
     </div>
 
     <script>

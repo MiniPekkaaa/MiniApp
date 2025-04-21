@@ -4,6 +4,7 @@ let selectedProduct = null;
 
 // Инициализация Telegram WebApp
 tg.ready();
+tg.expand();
 
 // Функция для показа страницы выбора продукта
 function showProductSelection() {
@@ -15,8 +16,9 @@ function showProductSelection() {
 
 // Функция для показа главного меню
 function showMainMenu() {
-    document.getElementById('mainMenu').style.display = 'block';
-    document.getElementById('productSelection').style.display = 'none';
+    document.getElementById('main_menu').style.display = 'block';
+    document.getElementById('order_type').style.display = 'none';
+    document.getElementById('manual_input').style.display = 'none';
 }
 
 // Функция для переключения списка продуктов
@@ -119,3 +121,106 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded');
     console.log('Products:', window.products);
 });
+
+// Обработчики кнопок
+function handleNewOrder() {
+    // Проверка авторизации
+    const userId = tg.initDataUnsafe?.user?.id;
+    if (!userId) {
+        tg.showAlert('Необходима авторизация в Telegram');
+        return;
+    }
+
+    fetch(`/api/check-auth/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.isAuthorized) {
+                showOrderType();
+            } else {
+                tg.showAlert('Пожалуйста, зарегистрируйтесь в системе');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка при проверке авторизации:', error);
+            tg.showAlert('Ошибка при проверке авторизации');
+        });
+}
+
+function handleMyOrders() {
+    const userId = tg.initDataUnsafe?.user?.id;
+    if (!userId) {
+        tg.showAlert('Необходима авторизация в Telegram');
+        return;
+    }
+
+    fetch(`/api/check-auth/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.isAuthorized) {
+                // Здесь будет переход к списку заказов
+                tg.showAlert('Функция в разработке');
+            } else {
+                tg.showAlert('Пожалуйста, зарегистрируйтесь в системе');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка при проверке авторизации:', error);
+            tg.showAlert('Ошибка при проверке авторизации');
+        });
+}
+
+function handleRemainingInput() {
+    // Здесь будет логика для ввода остатков
+    tg.showAlert('Функция в разработке');
+}
+
+function handleManualInput() {
+    showManualInput();
+}
+
+// Функции для работы с количеством
+function incrementQuantity() {
+    let quantityInput = document.getElementById('quantity');
+    quantityInput.value = parseInt(quantityInput.value) + 1;
+}
+
+function decrementQuantity() {
+    let quantityInput = document.getElementById('quantity');
+    if (parseInt(quantityInput.value) > 1) {
+        quantityInput.value = parseInt(quantityInput.value) - 1;
+    }
+}
+
+// Функция добавления в корзину
+function addToCart() {
+    const productSelect = document.getElementById('product_select');
+    const quantityInput = document.getElementById('quantity');
+    
+    if (!productSelect.value) {
+        tg.showAlert('Выберите товар');
+        return;
+    }
+
+    const selectedOption = productSelect.selectedOptions[0];
+    const product = {
+        id: parseInt(productSelect.value),
+        name: selectedOption.dataset.name,
+        fullName: selectedOption.dataset.fullname,
+        volume: parseFloat(selectedOption.dataset.volume),
+        price: parseFloat(selectedOption.dataset.price),
+        legalEntity: parseInt(selectedOption.dataset.legalEntity),
+        quantity: parseInt(quantityInput.value)
+    };
+
+    try {
+        const existingCart = JSON.parse(localStorage.getItem('cart') || '[]');
+        const updatedCart = [...existingCart, product];
+        localStorage.setItem('cart', JSON.stringify(updatedCart));
+        tg.showAlert('Товар добавлен в корзину');
+        productSelect.value = '';
+        quantityInput.value = '1';
+    } catch (error) {
+        console.error('Ошибка при добавлении в корзину:', error);
+        tg.showAlert('Ошибка при добавлении в корзину');
+    }
+}
