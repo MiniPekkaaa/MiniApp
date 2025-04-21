@@ -29,16 +29,20 @@ redis_client = redis.Redis(
     decode_responses=True
 )
 
+def get_openai_key():
+    """Получение API ключа OpenAI из Redis"""
+    try:
+        settings = redis_client.hgetall('beer:setting')
+        if settings and 'OpenAI' in settings:
+            return settings['OpenAI']
+        logger.error("OpenAI API key not found in Redis settings")
+        return None
+    except Exception as e:
+        logger.error(f"Error loading OpenAI API key from Redis: {str(e)}")
+        return None
+
 # Конфигурация OpenAI
-try:
-    settings = redis_client.hgetall('beer:setting')
-    if not settings or 'OpenAI' not in settings:
-        raise Exception("OpenAI API key not found in Redis settings")
-    openai.api_key = settings['OpenAI']
-    logger.info("Successfully loaded OpenAI API key from Redis")
-except Exception as e:
-    logger.error(f"Error loading OpenAI API key from Redis: {str(e)}")
-    raise
+openai.api_key = None  # Инициализируем как None
 
 def check_user_registration(user_id):
     try:
@@ -305,6 +309,13 @@ def get_last_orders(user_id, limit=3):
 def analyze_with_gpt(product_history):
     """Анализирует историю заказов с помощью GPT-4"""
     try:
+        # Получаем ключ непосредственно перед использованием
+        api_key = get_openai_key()
+        if not api_key:
+            # Если ключ не получен, возвращаем среднее значение
+            return sum(product_history['history']) // len(product_history['history'])
+
+        openai.api_key = api_key
         prompt = f"""Проанализируй историю заказов пива и предложи оптимальное количество для следующего заказа.
 История заказов (последние 3 заказа): {product_history['history']}
 Название пива: {product_history['Beer_Name']}
