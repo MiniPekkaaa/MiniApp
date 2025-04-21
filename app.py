@@ -323,16 +323,27 @@ def analyze_remains():
             logger.error(f"Неавторизованный запрос для пользователя {user_id}")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Получаем API ключ OpenAI из Redis тем же способом, как при проверке пользователей
+        # Получаем API ключ OpenAI из Redis
         try:
             settings_data = redis_client.hgetall('beer:setting')
             logger.debug(f"Данные из Redis beer:setting: {settings_data}")
             
-            if not settings_data or 'OpenAI' not in settings_data:
+            # Проверяем наличие ключа с учетом регистра
+            if not settings_data:
+                logger.error("Данные beer:setting не найдены в Redis")
+                return jsonify({"error": "Settings not found in Redis"}), 500
+
+            # Ищем поле OpenAI (именно в таком регистре)
+            openai_key = None
+            for key in settings_data:
+                if key == 'OpenAI':  # Точное совпадение с учетом регистра
+                    openai_key = settings_data[key]
+                    break
+
+            if not openai_key:
                 logger.error("OpenAI API ключ не найден в Redis")
                 return jsonify({"error": "OpenAI API key not found"}), 500
                 
-            openai_key = settings_data['OpenAI']
             logger.debug("OpenAI API ключ успешно получен")
             openai.api_key = openai_key
         except Exception as e:
