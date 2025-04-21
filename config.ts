@@ -1,1 +1,0 @@
-export const MONGODB_URI = 'mongodb://root:otlehjoq543680@46.101.121.75:27017/admin?authSource=admin&directConnection=true'; 

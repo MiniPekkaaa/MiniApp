@@ -4,16 +4,11 @@ import logging
 from bson import json_util, ObjectId
 import json
 import redis
-from config import REDIS_CONFIG
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('app.log')
-    ]
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -25,25 +20,21 @@ mongo = PyMongo(app)
 
 # Конфигурация Redis
 redis_client = redis.Redis(
-    host=REDIS_CONFIG['host'],
-    port=REDIS_CONFIG['port'],
-    password=REDIS_CONFIG['password'],
-    db=REDIS_CONFIG['db']
+    host='46.101.121.75',
+    port=6379,
+    password='otlehjoq',
+    decode_responses=True
 )
 
 def check_user_registration(user_id):
     try:
-        logger.debug(f"Checking registration for user_id: {user_id}")
         # Проверяем существование пользователя в Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
-        logger.debug(f"Redis connection info: {redis_client.info()}")
         # Проверяем что есть данные и UserChatID совпадает
-        is_registered = bool(user_data) and user_data.get('UserChatID') == str(user_id)
-        logger.debug(f"User {user_id} is registered: {is_registered}")
-        return is_registered
+        return bool(user_data) and user_data.get('UserChatID') == str(user_id)
     except Exception as e:
-        logger.error(f"Error checking Redis: {str(e)}", exc_info=True)
+        logger.error(f"Error checking Redis: {str(e)}")
         return False
 
 @app.route('/check-auth')
