@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Новый заказ</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Новый заказ</h1>
+        <button onclick="window.location.href='/products?user_id={{ user_id }}&show_product_selection=true'" class="button">
+            🛍️ Добавить позицию
+        </button>
+        <button onclick="window.location.href='/cart?user_id={{ user_id }}'" class="button">
+            🛒 Корзина: <span id="cart_count">0</span> позиций
+        </button>
+        <button onclick="cancelOrder()" class="button">
+            ❌ Отменить заказ
+        </button>
+        <button onclick="window.location.href='/?user_id={{ user_id }}'" class="button">
+            🏠 Главное меню
+        </button>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // Получаем user_id из Telegram WebApp
+        const userId = tg.initDataUnsafe?.user?.id;
+        
+        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        updateCartCount();
+        
+        function updateCartCount() {
+            document.getElementById('cart_count').textContent = cart.length;
+        }
+        
+        function cancelOrder() {
+            if (cart.length === 0) {
+                tg.showAlert("Нечего отменять - корзина пуста");
+                return;
+            }
+            
+            if (confirm("Вы уверены, что хотите отменить заказ?")) {
+                cart = [];
+                sessionStorage.setItem('cart', JSON.stringify(cart));
+                updateCartCount();
+                tg.MainButton.hide();
+                tg.showAlert("Заказ отменен");
+            }
+        }
+    </script>
+</body>
+</html> 

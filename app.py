@@ -236,5 +236,16 @@ def create_order():
         logger.error(f"Ошибка при создании заказа: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/order_menu')
+def order_menu():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+        return render_template('order_menu.html', user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
