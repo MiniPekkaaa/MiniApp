@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Загрузка...</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         .loader-container {
             display: flex;
@@ -32,11 +33,26 @@
     </div>
     
     <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // Функция для возврата на предыдущую страницу
+        function goBack() {
+            const userId = new URLSearchParams(window.location.search).get('user_id');
+            window.location.href = `/add_product?user_id=${userId}`;
+        }
+
         // Отправляем запрос на анализ данных сразу после загрузки страницы
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             const userId = urlParams.get('user_id');
             const remainsData = JSON.parse(localStorage.getItem('remainsData'));
+            
+            if (!remainsData || remainsData.length === 0) {
+                tg.showAlert('Ошибка: нет данных об остатках');
+                goBack();
+                return;
+            }
             
             fetch('/api/analyze-remains', {
                 method: 'POST',
@@ -55,12 +71,14 @@
                     localStorage.setItem('recommendedItems', JSON.stringify(data.recommendations));
                     window.location.href = `/cart?user_id=${userId}`;
                 } else {
-                    alert('Произошла ошибка при анализе данных');
+                    throw new Error(data.error || 'Произошла ошибка при анализе данных');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Произошла ошибка при отправке данных');
+                tg.showAlert(error.message || 'Произошла ошибка при отправке данных');
+                // Возвращаемся на предыдущую страницу после показа ошибки
+                setTimeout(goBack, 1000);
             });
         };
     </script>

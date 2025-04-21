@@ -316,14 +316,20 @@ def analyze_remains():
         user_id = data.get('userId')
         remains = data.get('remains')
 
+        logger.debug(f"Получен запрос на анализ остатков для пользователя {user_id}")
+        logger.debug(f"Данные об остатках: {remains}")
+
         if not user_id or not check_user_registration(user_id):
+            logger.error(f"Неавторизованный запрос для пользователя {user_id}")
             return jsonify({"error": "Unauthorized"}), 401
 
         # Получаем API ключ OpenAI из Redis
         openai_key = redis_client.hget('beer:setting', 'OpenAI')
         if not openai_key:
+            logger.error("OpenAI API ключ не найден в Redis")
             return jsonify({"error": "OpenAI API key not found"}), 500
 
+        logger.debug("OpenAI API ключ успешно получен")
         openai.api_key = openai_key
 
         # Получаем последние 3 заказа пользователя
@@ -331,6 +337,8 @@ def analyze_remains():
             {"userid": str(user_id)},
             {"Positions": 1, "_id": 0}
         ).sort([("date", -1)]).limit(3))
+
+        logger.debug(f"Найдено {len(last_orders)} последних заказов")
 
         # Формируем контекст для OpenAI
         order_history = []
@@ -341,6 +349,8 @@ def analyze_remains():
                     'name': pos['Beer_Name'],
                     'count': pos['Beer_Count']
                 })
+
+        logger.debug(f"Сформирована история заказов: {order_history}")
 
         # Формируем промпт для OpenAI
         prompt = f"""На основе следующих данных о последних заказах пользователя и текущих остатках, 
@@ -355,20 +365,31 @@ def analyze_remains():
         Пожалуйста, верните рекомендации в формате JSON, где ключ - это ID товара, а значение - рекомендуемое количество.
         Учитывайте историю заказов и текущие остатки при формировании рекомендаций."""
 
+        logger.debug("Отправляем запрос к OpenAI")
+        
         # Отправляем запрос к OpenAI
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Вы - аналитическая система, которая помогает предсказать оптимальное количество товара для заказа на основе истории заказов и текущих остатков."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Вы - аналитическая система, которая помогает предсказать оптимальное количество товара для заказа на основе истории заказов и текущих остатков."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            logger.debug("Получен ответ от OpenAI")
+            logger.debug(f"Ответ OpenAI: {response.choices[0].message.content}")
+        except Exception as e:
+            logger.error(f"Ошибка при запросе к OpenAI: {str(e)}")
+            return jsonify({"error": f"Ошибка при запросе к OpenAI: {str(e)}"}), 500
 
         # Парсим ответ от OpenAI
         try:
             recommendations = json.loads(response.choices[0].message.content)
-        except:
-            recommendations = {}
+            logger.debug(f"Распарсены рекомендации: {recommendations}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка при парсинге ответа OpenAI: {str(e)}")
+            logger.error(f"Содержимое ответа: {response.choices[0].message.content}")
+            return jsonify({"error": "Ошибка при обработке ответа от OpenAI"}), 500
 
         return jsonify({
             "success": True,
@@ -376,7 +397,7 @@ def analyze_remains():
         })
 
     except Exception as e:
-        logger.error(f"Error in analyze-remains: {str(e)}", exc_info=True)
+        logger.error(f"Необработанная ошибка в analyze-remains: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
