@@ -334,8 +334,25 @@ def analyze_remains():
             logger.error(f"Неавторизованный запрос для пользователя {user_id}")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Используем ключ API из конфигурационного файла
-        openai.api_key = OPENAI_API_KEY
+        # Пробуем получить ключ из Redis
+        try:
+            settings_data = redis_client.hgetall('beer:setting')
+            logger.debug(f"Данные из Redis beer:setting: {settings_data}")
+            openai_key = settings_data.get('OpenAI')
+            
+            # Если ключ не найден в Redis, используем из конфига
+            if not openai_key:
+                logger.debug("Ключ не найден в Redis, используем из конфига")
+                openai_key = OPENAI_API_KEY
+            
+            if not openai_key:
+                logger.error("OpenAI API ключ не найден")
+                return jsonify({"error": "OpenAI API key not found"}), 500
+
+            openai.api_key = openai_key
+        except Exception as e:
+            logger.error(f"Ошибка при получении ключа OpenAI: {str(e)}")
+            return jsonify({"error": str(e)}), 500
 
         # Получаем последние 3 заказа пользователя
         last_orders = list(mongo.cx.Pivo.Orders.find(
@@ -371,8 +388,7 @@ def analyze_remains():
         Учитывайте историю заказов и текущие остатки при формировании рекомендаций."""
 
         logger.debug("Отправляем запрос к OpenAI")
-        
-        # Отправляем запрос к OpenAI
+
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
@@ -381,19 +397,16 @@ def analyze_remains():
                     {"role": "user", "content": prompt}
                 ]
             )
-            logger.debug("Получен ответ от OpenAI")
-            logger.debug(f"Ответ OpenAI: {response.choices[0].message.content}")
+            logger.debug(f"Получен ответ от OpenAI: {response.choices[0].message.content}")
         except Exception as e:
             logger.error(f"Ошибка при запросе к OpenAI: {str(e)}")
             return jsonify({"error": f"Ошибка при запросе к OpenAI: {str(e)}"}), 500
 
-        # Парсим ответ от OpenAI
         try:
             recommendations = json.loads(response.choices[0].message.content)
             logger.debug(f"Распарсены рекомендации: {recommendations}")
         except json.JSONDecodeError as e:
             logger.error(f"Ошибка при парсинге ответа OpenAI: {str(e)}")
-            logger.error(f"Содержимое ответа: {response.choices[0].message.content}")
             return jsonify({"error": "Ошибка при обработке ответа от OpenAI"}), 500
 
         return jsonify({
