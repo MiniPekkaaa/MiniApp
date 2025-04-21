@@ -175,7 +175,7 @@
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    userId: userId, // ID пользователя из Telegram WebApp
+                    userId: userId,
                     items: cart
                 })
             })
@@ -187,8 +187,10 @@
                     sessionStorage.setItem('cart', JSON.stringify(cart));
                     displayCart();
                     tg.showAlert("Заказ успешно создан!");
-                    // Закрываем WebApp
-                    setTimeout(() => tg.close(), 1000);
+                    // Перенаправляем на главное меню
+                    setTimeout(() => {
+                        window.location.href = `/?user_id=${userId}`;
+                    }, 1000);
                 } else {
                     throw new Error(result.error || 'Ошибка при создании заказа');
                 }
