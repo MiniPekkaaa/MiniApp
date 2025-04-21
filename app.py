@@ -30,7 +30,15 @@ redis_client = redis.Redis(
 )
 
 # Конфигурация OpenAI
-openai.api_key = 'your-api-key-here'  # Замените на ваш ключ API
+try:
+    settings = redis_client.hgetall('beer:setting')
+    if not settings or 'OpenAI' not in settings:
+        raise Exception("OpenAI API key not found in Redis settings")
+    openai.api_key = settings['OpenAI']
+    logger.info("Successfully loaded OpenAI API key from Redis")
+except Exception as e:
+    logger.error(f"Error loading OpenAI API key from Redis: {str(e)}")
+    raise
 
 def check_user_registration(user_id):
     try:
