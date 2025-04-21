@@ -10,6 +10,7 @@
             align-items: center;
             height: 100vh;
             background-color: #f5f5f5;
+            flex-direction: column;
         }
         
         .loader {
@@ -19,17 +20,26 @@
             border-top: 5px solid #3498db;
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin-bottom: 20px;
         }
         
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .error-message {
+            color: #ff0000;
+            margin-top: 20px;
+            text-align: center;
+            padding: 0 20px;
+        }
     </style>
 </head>
 <body>
     <div class="loader-container">
         <div class="loader"></div>
+        <div id="status">Анализируем ваши данные...</div>
     </div>
     
     <script>
@@ -42,17 +52,31 @@
             window.location.href = `/add_product?user_id=${userId}`;
         }
 
-        // Отправляем запрос на анализ данных сразу после загрузки страницы
+        // Устанавливаем таймаут на случай, если запрос выполняется слишком долго
+        const timeoutId = setTimeout(() => {
+            tg.showAlert('Превышено время ожидания ответа. Попробуйте еще раз.');
+            goBack();
+        }, 30000); // 30 секунд таймаут
+
+        // Функция для обновления статуса
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        // Отправляем запрос на анализ данных
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             const userId = urlParams.get('user_id');
             const remainsData = JSON.parse(localStorage.getItem('remainsData'));
             
             if (!remainsData || remainsData.length === 0) {
+                clearTimeout(timeoutId);
                 tg.showAlert('Ошибка: нет данных об остатках');
                 goBack();
                 return;
             }
+
+            updateStatus('Отправляем данные на анализ...');
             
             fetch('/api/analyze-remains', {
                 method: 'POST',
@@ -64,20 +88,32 @@
                     remains: remainsData
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Произошла ошибка при анализе данных');
+                    });
+                }
+                updateStatus('Обрабатываем результаты...');
+                return response.json();
+            })
             .then(data => {
+                clearTimeout(timeoutId);
                 if (data.success) {
-                    // Сохраняем рекомендации и переходим в корзину
+                    updateStatus('Готово! Переходим в корзину...');
                     localStorage.setItem('recommendedItems', JSON.stringify(data.recommendations));
-                    window.location.href = `/cart?user_id=${userId}`;
+                    // Небольшая задержка, чтобы пользователь увидел сообщение об успехе
+                    setTimeout(() => {
+                        window.location.href = `/cart?user_id=${userId}`;
+                    }, 1000);
                 } else {
-                    throw new Error(data.error || 'Произошла ошибка при анализе данных');
+                    throw new Error(data.error || 'Неизвестная ошибка');
                 }
             })
             .catch(error => {
+                clearTimeout(timeoutId);
                 console.error('Error:', error);
                 tg.showAlert(error.message || 'Произошла ошибка при отправке данных');
-                // Возвращаемся на предыдущую страницу после показа ошибки
                 setTimeout(goBack, 1000);
             });
         };
