@@ -6,6 +6,7 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
+import openai
 
 # Настройка логирования
 logging.basicConfig(
@@ -295,6 +296,87 @@ def get_last_orders():
 
     except Exception as e:
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/get-order-recommendations', methods=['POST'])
+def get_order_recommendations():
+    try:
+        data = request.json
+        user_id = data.get('userId')
+        current_remainders = data.get('remainders', [])
+        
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Получаем API ключ OpenAI из Redis
+        openai.api_key = redis_client.hget('beer:setting', 'OpenAI')
+
+        # Получаем последние 3 заказа
+        last_orders = list(mongo.cx.Pivo.Orders.find(
+            {"userid": str(user_id)},
+            {"Positions": 1, "date": 1, "_id": 0}
+        ).sort("date", -1).limit(3))
+
+        # Формируем промпт для ChatGPT
+        prompt = f"""На основе следующих данных предложи рекомендуемое количество для заказа каждой позиции:
+
+Текущие остатки:
+{json.dumps(current_remainders, ensure_ascii=False, indent=2)}
+
+Последние 3 заказа:
+{json.dumps(last_orders, ensure_ascii=False, indent=2)}
+
+Проанализируй паттерны заказов и текущие остатки. Верни только JSON в формате:
+{{
+    "recommendations": [
+        {{
+            "id": "id товара",
+            "name": "название товара",
+            "recommended_quantity": количество,
+            "explanation": "краткое объяснение"
+        }}
+    ]
+}}"""
+
+        # Получаем рекомендации от ChatGPT
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Ты - аналитик, который помогает предсказать оптимальное количество товара для заказа на основе исторических данных и текущих остатков."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+
+        # Парсим ответ
+        try:
+            recommendations = json.loads(response.choices[0].message.content)
+            
+            # Форматируем данные для корзины
+            cart_items = []
+            for rec in recommendations['recommendations']:
+                # Находим полную информацию о товаре
+                product = mongo.cx.Pivo.catalog.find_one({"id": rec['id']})
+                if product:
+                    cart_items.append({
+                        'id': rec['id'],
+                        'name': rec['name'],
+                        'quantity': rec['recommended_quantity'],
+                        'legalEntity': product.get('legalEntity', 1),
+                        'explanation': rec['explanation']
+                    })
+
+            return jsonify({
+                "success": True,
+                "recommendations": recommendations['recommendations'],
+                "cart_items": cart_items
+            })
+
+        except json.JSONDecodeError:
+            return jsonify({"error": "Ошибка при обработке рекомендаций"}), 500
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении рекомендаций: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

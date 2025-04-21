@@ -333,11 +333,34 @@
                 return;
             }
 
-            // Здесь будет отправка остатков на анализ
-            console.log("Отправка остатков на анализ:", remainders);
-            tg.showAlert("Остатки отправлены на анализ");
-            // После отправки очищаем список
-            remainders = [];
+            // Отправляем остатки на анализ
+            fetch('/api/get-order-recommendations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    remainders: remainders
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Сохраняем рекомендованные позиции в корзину
+                    sessionStorage.setItem('cart', JSON.stringify(data.cart_items));
+                    // Сохраняем объяснения рекомендаций
+                    sessionStorage.setItem('recommendations', JSON.stringify(data.recommendations));
+                    // Переходим в корзину
+                    window.location.href = `/cart?user_id=${userId}`;
+                } else {
+                    throw new Error(data.error || 'Ошибка при получении рекомендаций');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                tg.showAlert('Произошла ошибка: ' + error.message);
+            });
         }
 
         // Запускаем проверку авторизации
