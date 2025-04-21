@@ -186,6 +186,10 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
+        // Инициализация переменных для работы с продуктами
+        const productsList = JSON.parse('{{ products|tojson|safe }}');
+        const remainders = [];
+        
         function showContent() {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
@@ -198,9 +202,6 @@
                 loadLastOrdersProducts();
             }
         }
-        
-        let products = {{ products|tojson|safe }};
-        let remainders = [];
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
