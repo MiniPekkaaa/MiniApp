@@ -199,12 +199,12 @@
             });
         }
         
-        function goBack() {
-            window.location.href = '/';
+        function addMore() {
+            window.location.href = `/?user_id=${userId}&show_product_selection=true`;
         }
         
-        function addMore() {
-            window.location.href = '/add_product';
+        function goBack() {
+            window.location.href = `/?user_id=${userId}`;
         }
         
         // Запускаем проверку авторизации и отображаем корзину

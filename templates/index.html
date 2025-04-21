@@ -39,7 +39,7 @@
             <button onclick="showProductSelection()" class="button">
                 Добавить товар
             </button>
-            <button onclick="window.location.href='/cart'" class="button">
+            <button onclick="window.location.href='/cart?user_id=' + userId" class="button">
                 Корзина <span id="cart_count">0</span>
             </button>
             <button onclick="cancelOrder()" class="button">
@@ -70,7 +70,7 @@
                 <button onclick="incrementQuantity()" class="button">+</button>
             </div>
             <button onclick="addToCart()" class="button">Добавить в корзину</button>
-            <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
+            <button onclick="window.location.href='/cart?user_id=' + userId" class="button">Перейти в корзину</button>
             <button onclick="showMainMenu()" class="button">Назад</button>
         </div>
     </div>
