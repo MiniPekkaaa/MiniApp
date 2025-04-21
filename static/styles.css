@@ -1,3 +1,11 @@
+.message {
+    text-align: center;
+    color: var(--tg-theme-text-color);
+    margin: 12px 0;
+    font-size: 16px;
+    line-height: 1.4;
+}
+
 :root {
     --tg-theme-bg-color: #fff;
     --tg-theme-text-color: #000;

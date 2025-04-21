@@ -6,19 +6,69 @@ let selectedProduct = null;
 tg.ready();
 tg.expand();
 
+// Проверка авторизации при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    checkAuthorization();
+});
+
+// Функция проверки авторизации
+function checkAuthorization() {
+    const userId = tg.initDataUnsafe?.user?.id;
+    if (!userId) {
+        showRegistration();
+        return;
+    }
+
+    fetch(`/api/check-auth/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.isAuthorized) {
+                showMainMenu();
+            } else {
+                showRegistration();
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка при проверке авторизации:', error);
+            showRegistration();
+        });
+}
+
+// Функции для навигации между страницами
+function showRegistration() {
+    document.getElementById('registration').style.display = 'block';
+    document.getElementById('main_menu').style.display = 'none';
+    document.getElementById('order_type').style.display = 'none';
+    document.getElementById('manual_input').style.display = 'none';
+}
+
+function showMainMenu() {
+    document.getElementById('registration').style.display = 'none';
+    document.getElementById('main_menu').style.display = 'block';
+    document.getElementById('order_type').style.display = 'none';
+    document.getElementById('manual_input').style.display = 'none';
+}
+
+function showOrderType() {
+    document.getElementById('registration').style.display = 'none';
+    document.getElementById('main_menu').style.display = 'none';
+    document.getElementById('order_type').style.display = 'block';
+    document.getElementById('manual_input').style.display = 'none';
+}
+
+function showManualInput() {
+    document.getElementById('registration').style.display = 'none';
+    document.getElementById('main_menu').style.display = 'none';
+    document.getElementById('order_type').style.display = 'none';
+    document.getElementById('manual_input').style.display = 'block';
+}
+
 // Функция для показа страницы выбора продукта
 function showProductSelection() {
     document.getElementById('mainMenu').style.display = 'none';
     document.getElementById('productSelection').style.display = 'block';
     document.getElementById('productsList').style.display = 'none';
     document.getElementById('quantitySelection').style.display = 'none';
-}
-
-// Функция для показа главного меню
-function showMainMenu() {
-    document.getElementById('main_menu').style.display = 'block';
-    document.getElementById('order_type').style.display = 'none';
-    document.getElementById('manual_input').style.display = 'none';
 }
 
 // Функция для переключения списка продуктов
@@ -122,62 +172,13 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Products:', window.products);
 });
 
-// Функции для навигации между страницами
-function showOrderType() {
-    document.getElementById('main_menu').style.display = 'none';
-    document.getElementById('order_type').style.display = 'block';
-    document.getElementById('manual_input').style.display = 'none';
-}
-
-function showManualInput() {
-    document.getElementById('main_menu').style.display = 'none';
-    document.getElementById('order_type').style.display = 'none';
-    document.getElementById('manual_input').style.display = 'block';
-}
-
 // Обработчики кнопок главного меню
 function handleNewOrder() {
-    const userId = tg.initDataUnsafe?.user?.id;
-    if (!userId) {
-        tg.showAlert('Необходима авторизация в Telegram');
-        return;
-    }
-
-    fetch(`/api/check-auth/${userId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.isAuthorized) {
-                showOrderType();
-            } else {
-                tg.showAlert('Пожалуйста, зарегистрируйтесь в системе');
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка при проверке авторизации:', error);
-            tg.showAlert('Ошибка при проверке авторизации');
-        });
+    showOrderType();
 }
 
 function handleMyOrders() {
-    const userId = tg.initDataUnsafe?.user?.id;
-    if (!userId) {
-        tg.showAlert('Необходима авторизация в Telegram');
-        return;
-    }
-
-    fetch(`/api/check-auth/${userId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.isAuthorized) {
-                tg.showAlert('Функция в разработке');
-            } else {
-                tg.showAlert('Пожалуйста, зарегистрируйтесь в системе');
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка при проверке авторизации:', error);
-            tg.showAlert('Ошибка при проверке авторизации');
-        });
+    tg.showAlert('Функция в разработке');
 }
 
 // Обработчики кнопок страницы выбора типа заказа
