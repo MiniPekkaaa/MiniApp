@@ -74,6 +74,30 @@
         .button:last-child {
             margin-bottom: 0;
         }
+
+        .product-list {
+            margin-bottom: 20px;
+        }
+
+        .product-item {
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .product-info {
+            flex-grow: 1;
+        }
+
+        .product-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -85,6 +109,12 @@
     <!-- Основной контент -->
     <div id="content" class="hidden">
         <div class="container">
+            <h2 style="margin-bottom: 20px; color: var(--tg-theme-text-color);">Позиции из последних заказов</h2>
+            <div id="last_orders_products" class="product-list">
+                <!-- Сюда будут добавляться позиции из последних заказов -->
+            </div>
+
+            <h2 style="margin: 20px 0; color: var(--tg-theme-text-color);">Добавить новую позицию</h2>
             <select id="product_select" class="select">
                 <option value="">Выберите товар</option>
                 {% for product in products %}
@@ -104,7 +134,7 @@
                 <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
             </div>
             <button onclick="addToCart()" class="button">Добавить в корзину</button>
-            <button onclick="window.location.href='/cart'" class="button">Перейти в корзину</button>
+            <button onclick="window.location.href='/cart?user_id=' + userId" class="button">Перейти в корзину</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
     </div>
@@ -125,7 +155,7 @@
             if (!window.location.search.includes('user_id') && userId) {
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
-                setTimeout(showContent, 300);
+                loadLastOrdersProducts();
             }
         }
         
@@ -142,6 +172,69 @@
             if (parseInt(quantityInput.value) > 1) {
                 quantityInput.value = parseInt(quantityInput.value) - 1;
             }
+        }
+
+        function loadLastOrdersProducts() {
+            fetch(`/api/get-last-orders?user_id=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const container = document.getElementById('last_orders_products');
+                        container.innerHTML = ''; // Очищаем контейнер
+
+                        data.positions.forEach(position => {
+                            const productDiv = document.createElement('div');
+                            productDiv.className = 'product-item';
+                            
+                            productDiv.innerHTML = `
+                                <div class="product-info">
+                                    <div>${position.Beer_Name}</div>
+                                </div>
+                                <div class="product-controls">
+                                    <input type="number" value="1" min="1" class="quantity-input" style="width: 60px;">
+                                    <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value)" 
+                                            class="button" style="width: auto; padding: 5px 15px;">
+                                        Добавить
+                                    </button>
+                                </div>
+                            `;
+                            
+                            container.appendChild(productDiv);
+                        });
+                        
+                        showContent();
+                    } else {
+                        throw new Error(data.error || 'Ошибка при загрузке позиций');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при загрузке позиций:', error);
+                    tg.showAlert('Ошибка при загрузке позиций: ' + error.message);
+                    showContent();
+                });
+        }
+
+        function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
+            const product = {
+                id: beerId.toString(),
+                name: beerName,
+                legalEntity: legalEntity,
+                quantity: parseInt(quantity)
+            };
+
+            const existingItemIndex = cart.findIndex(item => 
+                item.id === product.id && 
+                item.legalEntity === product.legalEntity
+            );
+            
+            if (existingItemIndex !== -1) {
+                cart[existingItemIndex].quantity += product.quantity;
+            } else {
+                cart.push(product);
+            }
+            
+            sessionStorage.setItem('cart', JSON.stringify(cart));
+            tg.showAlert("Позиция добавлена успешно");
         }
         
         function addToCart() {
@@ -162,7 +255,7 @@
                 
                 const existingItemIndex = cart.findIndex(item => 
                     item.id === product.id && 
-                    item.price === product.price
+                    item.legalEntity === product.legalEntity
                 );
                 
                 if (existingItemIndex !== -1) {
@@ -172,7 +265,6 @@
                 }
                 
                 sessionStorage.setItem('cart', JSON.stringify(cart));
-                
                 tg.showAlert("Позиция добавлена успешно");
                 
                 select.value = "";

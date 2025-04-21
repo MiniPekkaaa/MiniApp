@@ -262,5 +262,40 @@ def order_menu():
         logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
         return f"Error: {str(e)}", 500
 
+@app.route('/api/get-last-orders')
+def get_last_orders():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Получаем последние 3 заказа пользователя, отсортированные по дате
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {"userid": str(user_id)},
+            {"Positions": 1, "_id": 0}
+        ).sort("date", -1).limit(3))
+
+        # Собираем все уникальные позиции
+        unique_positions = {}
+        for order in orders:
+            positions = order.get('Positions', {})
+            for position in positions.values():
+                position_key = f"{position['Beer_ID']}_{position['Legal_Entity']}"
+                if position_key not in unique_positions:
+                    unique_positions[position_key] = {
+                        'Beer_ID': position['Beer_ID'],
+                        'Beer_Name': position['Beer_Name'],
+                        'Legal_Entity': position['Legal_Entity'],
+                        'Beer_Count': 0  # Начальное значение для количества
+                    }
+
+        # Преобразуем в список
+        result = list(unique_positions.values())
+        return jsonify({"success": True, "positions": result})
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
