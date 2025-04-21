@@ -148,7 +148,7 @@
 
     <!-- Основной контент -->
     <div id="content" class="hidden">
-        <div class="container">
+        <div class="container" data-products='{{ products|tojson|safe }}'>
             <h2 style="margin-bottom: 20px; color: var(--tg-theme-text-color);">Позиции из последних заказов</h2>
             <div id="last_orders_products" class="product-list">
                 <!-- Сюда будут добавляться позиции из последних заказов -->
@@ -187,7 +187,7 @@
         const userId = tg.initDataUnsafe?.user?.id;
         
         // Инициализация переменных для работы с продуктами
-        const productsList = JSON.parse('{{ products|tojson|safe }}');
+        const productsList = JSON.parse(document.querySelector('.container').dataset.products);
         const remainders = [];
         
         function showContent() {
