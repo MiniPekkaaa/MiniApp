@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Добавить товар</title>
+    <title>Ввод остатков</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -98,6 +98,12 @@
             align-items: center;
             gap: 10px;
         }
+
+        .submit-button {
+            background-color: #50a8eb;
+            color: white;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -124,7 +130,7 @@
                         data-volume="{{ product.volume }}"
                         data-price="{{ product.price }}"
                         data-legal-entity="{{ product.legalEntity }}">
-                    {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
+                    {{ product.name }} ({{ product.volume }}л)
                 </option>
                 {% endfor %}
             </select>
@@ -133,8 +139,8 @@
                 <input type="number" id="quantity" value="1" min="1" class="quantity-input">
                 <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
             </div>
-            <button onclick="addToCart()" class="button">Добавить в корзину</button>
-            <button onclick="window.location.href='/cart?user_id=' + userId" class="button">Перейти в корзину</button>
+            <button onclick="addToRemainders()" class="button">Добавить остаток</button>
+            <button onclick="submitRemainders()" class="button submit-button">Отправить на анализ</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
     </div>
@@ -160,7 +166,7 @@
         }
         
         let products = {{ products|tojson|safe }};
-        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        let remainders = [];
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
@@ -222,22 +228,21 @@
                 quantity: parseInt(quantity)
             };
 
-            const existingItemIndex = cart.findIndex(item => 
+            const existingItemIndex = remainders.findIndex(item => 
                 item.id === product.id && 
                 item.legalEntity === product.legalEntity
             );
             
             if (existingItemIndex !== -1) {
-                cart[existingItemIndex].quantity += product.quantity;
+                remainders[existingItemIndex].quantity = product.quantity;
             } else {
-                cart.push(product);
+                remainders.push(product);
             }
             
-            sessionStorage.setItem('cart', JSON.stringify(cart));
-            tg.showAlert("Позиция добавлена успешно");
+            tg.showAlert("Остаток добавлен");
         }
         
-        function addToCart() {
+        function addToRemainders() {
             let select = document.getElementById('product_select');
             let quantity = parseInt(document.getElementById('quantity').value);
             
@@ -246,30 +251,39 @@
                 let product = {
                     id: select.value,
                     name: option.dataset.name,
-                    fullName: option.dataset.fullname,
-                    volume: parseFloat(option.dataset.volume),
-                    price: parseInt(option.dataset.price),
                     legalEntity: parseInt(option.dataset.legalEntity),
                     quantity: quantity
                 };
                 
-                const existingItemIndex = cart.findIndex(item => 
+                const existingItemIndex = remainders.findIndex(item => 
                     item.id === product.id && 
                     item.legalEntity === product.legalEntity
                 );
                 
                 if (existingItemIndex !== -1) {
-                    cart[existingItemIndex].quantity += quantity;
+                    remainders[existingItemIndex].quantity = quantity;
                 } else {
-                    cart.push(product);
+                    remainders.push(product);
                 }
                 
-                sessionStorage.setItem('cart', JSON.stringify(cart));
-                tg.showAlert("Позиция добавлена успешно");
+                tg.showAlert("Остаток добавлен");
                 
                 select.value = "";
                 document.getElementById('quantity').value = "1";
             }
+        }
+
+        function submitRemainders() {
+            if (remainders.length === 0) {
+                tg.showAlert("Добавьте хотя бы один остаток");
+                return;
+            }
+
+            // Здесь будет отправка остатков на анализ
+            console.log("Отправка остатков на анализ:", remainders);
+            tg.showAlert("Остатки отправлены на анализ");
+            // После отправки очищаем список
+            remainders = [];
         }
 
         // Запускаем проверку авторизации
