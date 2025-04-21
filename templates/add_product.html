@@ -292,16 +292,8 @@
             if (index !== -1) {
                 remainders.splice(index, 1);
                 
-                // Возвращаем кнопку в активное состояние
-                const addButton = productItem.querySelector('.add-button');
-                addButton.classList.remove('button-disabled');
-                addButton.disabled = false;
-                
-                // Скрываем кнопку удаления
-                const deleteButton = productItem.querySelector('.delete-button');
-                if (deleteButton) {
-                    deleteButton.style.display = 'none';
-                }
+                // Удаляем карточку товара из DOM
+                productItem.remove();
             }
         }
         
