@@ -4,7 +4,8 @@ import logging
 from bson import json_util, ObjectId
 import json
 import redis
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
 
 # Настройка логирования
 logging.basicConfig(
@@ -184,9 +185,11 @@ def create_order():
             }
 
         # Создаем заказ
+        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
+        current_time = datetime.now(timezone)
         order_data = {
             'status': "in work",
-            'date': datetime.now().strftime("%d.%m.%y %H:%M"),
+            'date': current_time.strftime("%d.%m.%y %H:%M"),
             'userid': str(user_id),
             'username': user_data.get('organization', 'ООО Пивной мир'),
             'Positions': positions
