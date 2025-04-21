@@ -6,7 +6,6 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
-import openai
 
 # Настройка логирования
 logging.basicConfig(
@@ -28,21 +27,6 @@ redis_client = redis.Redis(
     password='otlehjoq',
     decode_responses=True
 )
-
-def get_openai_key():
-    """Получение API ключа OpenAI из Redis"""
-    try:
-        settings = redis_client.hgetall('beer:setting')
-        if settings and 'OpenAI' in settings:
-            return settings['OpenAI']
-        logger.error("OpenAI API key not found in Redis settings")
-        return None
-    except Exception as e:
-        logger.error(f"Error loading OpenAI API key from Redis: {str(e)}")
-        return None
-
-# Конфигурация OpenAI
-openai.api_key = None  # Инициализируем как None
 
 def check_user_registration(user_id):
     try:
@@ -277,122 +261,6 @@ def order_menu():
     except Exception as e:
         logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
         return f"Error: {str(e)}", 500
-
-def get_last_orders(user_id, limit=3):
-    """Получает последние заказы пользователя"""
-    try:
-        orders = list(mongo.cx.Pivo.Orders.find(
-            {'userid': str(user_id)},
-            {'Positions': 1, 'date': 1}
-        ).sort('date', -1).limit(limit))
-        
-        # Собираем уникальные позиции
-        unique_positions = {}
-        for order in orders:
-            positions = order.get('Positions', {})
-            for pos in positions.values():
-                beer_id = pos.get('Beer_ID')
-                if beer_id not in unique_positions:
-                    unique_positions[beer_id] = {
-                        'Beer_ID': beer_id,
-                        'Beer_Name': pos.get('Beer_Name'),
-                        'Legal_Entity': pos.get('Legal_Entity'),
-                        'history': []
-                    }
-                unique_positions[beer_id]['history'].append(pos.get('Beer_Count', 0))
-        
-        return list(unique_positions.values())
-    except Exception as e:
-        logger.error(f"Error getting last orders: {str(e)}")
-        return []
-
-def analyze_with_gpt(product_history):
-    """Анализирует историю заказов с помощью GPT-4"""
-    try:
-        # Получаем ключ непосредственно перед использованием
-        api_key = get_openai_key()
-        if not api_key:
-            # Если ключ не получен, возвращаем среднее значение
-            return sum(product_history['history']) // len(product_history['history'])
-
-        openai.api_key = api_key
-        prompt = f"""Проанализируй историю заказов пива и предложи оптимальное количество для следующего заказа.
-История заказов (последние 3 заказа): {product_history['history']}
-Название пива: {product_history['Beer_Name']}
-
-Учитывай следующие факторы:
-1. Тренд изменения количества в заказах
-2. Среднее значение заказов
-3. Сезонность (если очевидна)
-
-Ответ дай только числом (количество для заказа)."""
-
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Ты - аналитик, специализирующийся на прогнозировании заказов."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=50
-        )
-
-        suggested_amount = int(response.choices[0].message.content.strip())
-        return suggested_amount
-    except Exception as e:
-        logger.error(f"Error in GPT analysis: {str(e)}")
-        # Если произошла ошибка, возвращаем среднее значение
-        return sum(product_history['history']) // len(product_history['history'])
-
-@app.route('/get_remaining_input')
-def get_remaining_input():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-
-        # Получаем последние заказы
-        last_orders = get_last_orders(user_id)
-        return render_template('remaining_input.html', products=last_orders, user_id=user_id)
-    except Exception as e:
-        logger.error(f"Error in get_remaining_input: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
-
-@app.route('/analyze_remaining', methods=['POST'])
-def analyze_remaining():
-    try:
-        data = request.json
-        user_id = data.get('userId')
-        remaining = data.get('remaining', {})
-        
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        # Получаем историю заказов
-        products = get_last_orders(user_id)
-        
-        # Анализируем каждую позицию
-        suggestions = []
-        for product in products:
-            if str(product['Beer_ID']) in remaining:
-                current_remaining = int(remaining[str(product['Beer_ID'])])
-                # Добавляем текущий остаток в историю для анализа
-                product['history'].append(current_remaining)
-                
-                # Получаем рекомендацию от GPT
-                suggested_amount = analyze_with_gpt(product)
-                
-                suggestions.append({
-                    'id': product['Beer_ID'],
-                    'name': product['Beer_Name'],
-                    'legal_entity': product['Legal_Entity'],
-                    'quantity': suggested_amount
-                })
-
-        return jsonify({"success": True, "suggestions": suggestions})
-    except Exception as e:
-        logger.error(f"Error in analyze_remaining: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
