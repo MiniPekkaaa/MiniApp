@@ -2,6 +2,7 @@
   "name": "beer-app",
   "version": "1.0.0",
   "private": true,
+  "main": "app/index.tsx",
   "dependencies": {
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
