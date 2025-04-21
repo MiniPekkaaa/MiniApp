@@ -4,6 +4,7 @@ import logging
 from bson import json_util, ObjectId
 import json
 import redis
+from config import REDIS_CONFIG
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,10 +21,10 @@ mongo = PyMongo(app)
 
 # Конфигурация Redis
 redis_client = redis.Redis(
-    host='46.101.121.75',
-    port=6379,
-    password='otlehjoq',
-    decode_responses=True
+    host=REDIS_CONFIG['host'],
+    port=REDIS_CONFIG['port'],
+    password=REDIS_CONFIG['password'],
+    db=REDIS_CONFIG['db']
 )
 
 def check_user_registration(user_id):

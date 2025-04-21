@@ -1,7 +1,7 @@
 import { MongoClient, ObjectId } from 'mongodb';
+import { MONGODB_URI } from '../../config';
 
-const uri = 'mongodb://root:otlehjoq543680@46.101.121.75:27017/admin?authSource=admin&directConnection=true';
-const client = new MongoClient(uri);
+const client = new MongoClient(MONGODB_URI);
 
 export const createOrder = async (orderData: {
   _id: string;
