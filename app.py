@@ -7,6 +7,7 @@ import redis
 from datetime import datetime, timedelta
 import pytz
 import openai
+from config import OPENAI_API_KEY
 
 # Настройка логирования
 logging.basicConfig(
@@ -333,14 +334,8 @@ def analyze_remains():
             logger.error(f"Неавторизованный запрос для пользователя {user_id}")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Получаем API ключ OpenAI из Redis точно так же, как получаем данные пользователя
-        openai_key = get_openai_key()
-        if not openai_key:
-            logger.error("OpenAI API ключ не найден в Redis")
-            return jsonify({"error": "OpenAI API key not found"}), 500
-
-        logger.debug("OpenAI API ключ успешно получен")
-        openai.api_key = openai_key
+        # Используем ключ API из конфигурационного файла
+        openai.api_key = OPENAI_API_KEY
 
         # Получаем последние 3 заказа пользователя
         last_orders = list(mongo.cx.Pivo.Orders.find(
