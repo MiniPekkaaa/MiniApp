@@ -120,7 +120,6 @@
             border: none;
             cursor: pointer;
             font-size: 14px;
-            display: none;
             min-width: 80px;
         }
 
@@ -273,14 +272,9 @@
                 remainders.push(product);
             }
             
-            // Делаем кнопку серой и показываем кнопку удаления
+            // Делаем кнопку серой
             buttonElement.classList.add('button-disabled');
             buttonElement.disabled = true;
-            const productItem = buttonElement.closest('.product-item');
-            const deleteButton = productItem.querySelector('.delete-button');
-            if (deleteButton) {
-                deleteButton.style.display = 'block';
-            }
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
