@@ -52,8 +52,8 @@ def check_auth():
         logger.error(f"Error in check-auth: {str(e)}")
         return jsonify({"authorized": False, "error": str(e)})
 
-@app.route('/')
-def index():
+@app.route('/main_menu')
+def main_menu():
     try:
         user_id = request.args.get('user_id')
         logger.debug(f"Checking authorization for user: {user_id}")
@@ -65,6 +65,30 @@ def index():
         if not check_user_registration(user_id):
             return render_template('unauthorized.html')
 
+        return render_template('main_menu.html', user_id=user_id)
+    
+    except Exception as e:
+        logger.error(f"Error in main_menu route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
+@app.route('/order_type')
+def order_type():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return render_template('unauthorized.html')
+        return render_template('order_type.html', user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in order_type route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
+@app.route('/')
+def index():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return redirect('/main_menu')
+        
         logger.debug("Attempting to connect to MongoDB...")
         products = list(mongo.cx.Pivo.catalog.find())
         logger.debug(f"Found {len(products)} products")
@@ -97,18 +121,16 @@ def index():
 @app.route('/cart')
 def cart():
     user_id = request.args.get('user_id')
-    if not user_id or not check_user_registration(user_id):
-        return render_template('unauthorized.html')
+    if not user_id:
+        return redirect('/main_menu')
     return render_template('cart.html')
 
 @app.route('/add_product')
 def add_product():
     try:
         user_id = request.args.get('user_id')
-        logger.debug(f"Checking authorization for add_product page, user: {user_id}")
-        
-        if not user_id or not check_user_registration(user_id):
-            return render_template('unauthorized.html')
+        if not user_id:
+            return redirect('/main_menu')
 
         products = list(mongo.cx.Pivo.catalog.find())
         
@@ -136,7 +158,7 @@ def add_product():
 def get_products():
     try:
         user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
+        if not user_id:
             return jsonify({"error": "Unauthorized"}), 401
 
         products = list(mongo.cx.Pivo.catalog.find())
@@ -165,7 +187,7 @@ def create_order():
         data = request.json
         user_id = data.get('userId')
         
-        if not user_id or not check_user_registration(user_id):
+        if not user_id:
             return jsonify({"error": "Unauthorized"}), 401
 
         logger.debug(f"Данные заказа: {data}")
