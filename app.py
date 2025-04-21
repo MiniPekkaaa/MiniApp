@@ -334,84 +334,15 @@ def analyze_remains():
             logger.error(f"Неавторизованный запрос для пользователя {user_id}")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Пробуем получить ключ из Redis
-        try:
-            settings_data = redis_client.hgetall('beer:setting')
-            logger.debug(f"Данные из Redis beer:setting: {settings_data}")
-            openai_key = settings_data.get('OpenAI')
-            
-            # Если ключ не найден в Redis, используем из конфига
-            if not openai_key:
-                logger.debug("Ключ не найден в Redis, используем из конфига")
-                openai_key = OPENAI_API_KEY
-            
-            if not openai_key:
-                logger.error("OpenAI API ключ не найден")
-                return jsonify({"error": "OpenAI API key not found"}), 500
-
-            openai.api_key = openai_key
-        except Exception as e:
-            logger.error(f"Ошибка при получении ключа OpenAI: {str(e)}")
-            return jsonify({"error": str(e)}), 500
-
-        # Получаем последние 3 заказа пользователя
-        last_orders = list(mongo.cx.Pivo.Orders.find(
-            {"userid": str(user_id)},
-            {"Positions": 1, "_id": 0}
-        ).sort([("date", -1)]).limit(3))
-
-        logger.debug(f"Найдено {len(last_orders)} последних заказов")
-
-        # Формируем контекст для OpenAI
-        order_history = []
-        for order in last_orders:
-            positions = order.get('Positions', {})
-            for pos in positions.values():
-                order_history.append({
-                    'name': pos['Beer_Name'],
-                    'count': pos['Beer_Count']
-                })
-
-        logger.debug(f"Сформирована история заказов: {order_history}")
-
-        # Формируем промпт для OpenAI
-        prompt = f"""На основе следующих данных о последних заказах пользователя и текущих остатках, 
-        предложите рекомендуемое количество для заказа каждой позиции.
-
-        История заказов:
-        {json.dumps(order_history, ensure_ascii=False, indent=2)}
-
-        Текущие остатки:
-        {json.dumps(remains, ensure_ascii=False, indent=2)}
-
-        Пожалуйста, верните рекомендации в формате JSON, где ключ - это ID товара, а значение - рекомендуемое количество.
-        Учитывайте историю заказов и текущие остатки при формировании рекомендаций."""
-
-        logger.debug("Отправляем запрос к OpenAI")
-
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Вы - аналитическая система, которая помогает предсказать оптимальное количество товара для заказа на основе истории заказов и текущих остатков."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            logger.debug(f"Получен ответ от OpenAI: {response.choices[0].message.content}")
-        except Exception as e:
-            logger.error(f"Ошибка при запросе к OpenAI: {str(e)}")
-            return jsonify({"error": f"Ошибка при запросе к OpenAI: {str(e)}"}), 500
-
-        try:
-            recommendations = json.loads(response.choices[0].message.content)
-            logger.debug(f"Распарсены рекомендации: {recommendations}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Ошибка при парсинге ответа OpenAI: {str(e)}")
-            return jsonify({"error": "Ошибка при обработке ответа от OpenAI"}), 500
+        # Получаем рекомендации от AI
+        analysis_result = analyze_remains(user_id, remains)
+        
+        if not analysis_result['success']:
+            return jsonify({'error': analysis_result['error']}), 500
 
         return jsonify({
-            "success": True,
-            "recommendations": recommendations
+            'success': True,
+            'recommendations': analysis_result['recommendations']
         })
 
     except Exception as e:
@@ -420,67 +351,61 @@ def analyze_remains():
 
 def analyze_remains(user_id, remains):
     try:
-        openai.api_key = get_openai_key()
+        # Получаем ключ OpenAI
+        openai_key = get_openai_key()
+        if not openai_key:
+            logger.error("OpenAI API ключ не найден")
+            return {'success': False, 'error': 'OpenAI API ключ не найден'}
+
+        openai.api_key = openai_key
         
         # Подготовка данных для промпта
-        formatted_remains = "\n".join([f"- {item['name']}: {item['quantity']} {item['unit']}" for item in remains])
+        formatted_remains = "\n".join([f"- {item['name']}: {item['quantity']} шт." for item in remains])
         
-        # Системный промпт с четкой структурой ответа
+        # Системный промпт
         system_prompt = """Вы - опытный менеджер по закупкам в сфере пивной продукции. 
-Ваша задача - проанализировать текущие остатки и предложить оптимальные позиции для дозаказа.
-Ваши рекомендации должны быть структурированы строго в следующем формате JSON:
-{
-    "recommendations": [
-        {
-            "name": "Название продукта",
-            "quantity": количество для заказа (целое число),
-            "reason": "Краткое обоснование рекомендации (до 100 символов)"
-        },
-        ...
-    ]
-}
-
-При формировании рекомендаций учитывайте:
-1. Текущие остатки каждой позиции
-2. Стандартные объемы продаж и поставок
-3. Сезонность и текущий месяц
-4. Необходимость поддержания ассортимента
-5. Оптимальное соотношение разных типов продукции
-
-Рекомендации должны быть конкретными и обоснованными, с указанием точного количества для заказа."""
+Проанализируйте текущие остатки и предложите оптимальные позиции для дозаказа.
+Верните ответ строго в формате JSON:
+[
+    {
+        "name": "Название продукта",
+        "quantity": количество_для_заказа
+    },
+    ...
+]"""
 
         user_prompt = f"""Текущие остатки на складе:
 {formatted_remains}
 
-Пожалуйста, проанализируйте эти данные и предоставьте рекомендации по дозаказу в указанном формате JSON."""
+Проанализируйте эти данные и предоставьте рекомендации по дозаказу в указанном формате JSON."""
 
-        # Запрос к GPT-4
+        # Запрос к OpenAI
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.7,
-            max_tokens=2000
+            max_tokens=1000
         )
 
         # Получение и парсинг ответа
         try:
             recommendations = json.loads(response.choices[0].message.content)
-            if not isinstance(recommendations, dict) or 'recommendations' not in recommendations:
+            if not isinstance(recommendations, list):
                 raise ValueError("Неверный формат ответа от AI")
             
             # Проверка структуры каждой рекомендации
-            for rec in recommendations['recommendations']:
-                if not all(key in rec for key in ['name', 'quantity', 'reason']):
+            for rec in recommendations:
+                if not all(key in rec for key in ['name', 'quantity']):
                     raise ValueError("Неполные данные в рекомендациях")
                 if not isinstance(rec['quantity'], int) or rec['quantity'] <= 0:
                     raise ValueError("Некорректное количество в рекомендациях")
 
             return {
                 'success': True,
-                'recommendations': recommendations['recommendations']
+                'recommendations': recommendations
             }
 
         except json.JSONDecodeError:

@@ -83,6 +83,14 @@
             document.getElementById('substatus').textContent = submessage;
         }
 
+        // Функция для обработки ошибок
+        function handleError(error) {
+            console.error('Error:', error);
+            clearTimeout(timeoutId);
+            tg.showAlert(error.message || 'Произошла ошибка при обработке данных');
+            setTimeout(goBack, 1000);
+        }
+
         // Устанавливаем таймаут
         const timeoutId = setTimeout(() => {
             tg.showAlert('Превышено время ожидания ответа. Попробуйте еще раз.');
@@ -96,9 +104,7 @@
             const remainsData = JSON.parse(localStorage.getItem('remainsData'));
             
             if (!remainsData || remainsData.length === 0) {
-                clearTimeout(timeoutId);
-                tg.showAlert('Ошибка: нет данных об остатках');
-                goBack();
+                handleError(new Error('Ошибка: нет данных об остатках'));
                 return;
             }
 
@@ -125,6 +131,7 @@
             })
             .then(data => {
                 clearTimeout(timeoutId);
+                console.log('Received data:', data);
                 if (data.success && data.recommendations) {
                     updateStatus('Готово!', 'Переходим в корзину...');
                     localStorage.setItem('recommendedItems', JSON.stringify(data.recommendations));
@@ -135,12 +142,7 @@
                     throw new Error('Не удалось получить рекомендации');
                 }
             })
-            .catch(error => {
-                clearTimeout(timeoutId);
-                console.error('Error:', error);
-                tg.showAlert(error.message || 'Произошла ошибка при отправке данных');
-                setTimeout(goBack, 1000);
-            });
+            .catch(handleError);
         };
     </script>
 </body>
