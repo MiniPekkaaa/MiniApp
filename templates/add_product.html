@@ -100,9 +100,23 @@
         }
 
         .submit-button {
-            background-color: #50a8eb;
+            background-color: #4CAF50 !important;
             color: white;
             font-weight: bold;
+        }
+
+        .button-disabled {
+            background-color: #808080 !important;
+            cursor: default;
+        }
+
+        .delete-button {
+            background-color: transparent;
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            font-size: 16px;
         }
     </style>
 </head>
@@ -140,7 +154,7 @@
                 <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
             </div>
             <button onclick="addToRemainders()" class="button">Добавить остаток</button>
-            <button onclick="submitRemainders()" class="button submit-button">Отправить на анализ</button>
+            <button onclick="submitRemainders()" class="button submit-button">Далее</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
     </div>
@@ -198,9 +212,13 @@
                                 </div>
                                 <div class="product-controls">
                                     <input type="number" value="1" min="1" class="quantity-input" style="width: 60px;">
-                                    <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value)" 
+                                    <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value, this)" 
                                             class="button" style="width: auto; padding: 5px 15px;">
                                         Добавить
+                                    </button>
+                                    <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
+                                            class="delete-button" style="display: none;">
+                                        ❌
                                     </button>
                                 </div>
                             `;
@@ -220,7 +238,7 @@
                 });
         }
 
-        function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
+        function addLastOrderProduct(beerId, beerName, legalEntity, quantity, buttonElement) {
             const product = {
                 id: beerId.toString(),
                 name: beerName,
@@ -239,7 +257,39 @@
                 remainders.push(product);
             }
             
+            // Делаем кнопку серой и показываем кнопку удаления
+            buttonElement.classList.add('button-disabled');
+            buttonElement.disabled = true;
+            const deleteButton = buttonElement.nextElementSibling;
+            if (deleteButton) {
+                deleteButton.style.display = 'block';
+            }
+            
             tg.showAlert("Остаток добавлен");
+        }
+        
+        function deleteRemainder(beerId, legalEntity, productItem) {
+            const index = remainders.findIndex(item => 
+                item.id === beerId.toString() && 
+                item.legalEntity === legalEntity
+            );
+            
+            if (index !== -1) {
+                remainders.splice(index, 1);
+                
+                // Возвращаем кнопку в активное состояние
+                const addButton = productItem.querySelector('.button');
+                addButton.classList.remove('button-disabled');
+                addButton.disabled = false;
+                
+                // Скрываем кнопку удаления
+                const deleteButton = productItem.querySelector('.delete-button');
+                if (deleteButton) {
+                    deleteButton.style.display = 'none';
+                }
+                
+                tg.showAlert("Остаток удален");
+            }
         }
         
         function addToRemainders() {
