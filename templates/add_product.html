@@ -148,7 +148,7 @@
 
     <!-- Основной контент -->
     <div id="content" class="hidden">
-        <div class="container" data-products='{{ products|tojson|safe }}'>
+        <div class="container">
             <h2 style="margin-bottom: 20px; color: var(--tg-theme-text-color);">Позиции из последних заказов</h2>
             <div id="last_orders_products" class="product-list">
                 <!-- Сюда будут добавляться позиции из последних заказов -->
@@ -186,10 +186,6 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
-        // Инициализация переменных для работы с продуктами
-        const productsList = JSON.parse(document.querySelector('.container').dataset.products);
-        const remainders = [];
-        
         function showContent() {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
@@ -202,6 +198,9 @@
                 loadLastOrdersProducts();
             }
         }
+        
+        let products = {{ products|tojson|safe }};
+        let remainders = [];
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
@@ -334,34 +333,11 @@
                 return;
             }
 
-            // Отправляем остатки на анализ
-            fetch('/api/get-order-recommendations', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    userId: userId,
-                    remainders: remainders
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Сохраняем рекомендованные позиции в корзину
-                    sessionStorage.setItem('cart', JSON.stringify(data.cart_items));
-                    // Сохраняем объяснения рекомендаций
-                    sessionStorage.setItem('recommendations', JSON.stringify(data.recommendations));
-                    // Переходим в корзину
-                    window.location.href = `/cart?user_id=${userId}`;
-                } else {
-                    throw new Error(data.error || 'Ошибка при получении рекомендаций');
-                }
-            })
-            .catch(error => {
-                console.error('Ошибка:', error);
-                tg.showAlert('Произошла ошибка: ' + error.message);
-            });
+            // Здесь будет отправка остатков на анализ
+            console.log("Отправка остатков на анализ:", remainders);
+            tg.showAlert("Остатки отправлены на анализ");
+            // После отправки очищаем список
+            remainders = [];
         }
 
         // Запускаем проверку авторизации

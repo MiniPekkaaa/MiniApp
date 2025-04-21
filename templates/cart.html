@@ -41,22 +41,6 @@
             color: white !important;
             margin-bottom: 10px !important;
         }
-
-        .cart-item {
-            background-color: var(--tg-theme-secondary-bg-color);
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-        }
-
-        .recommendation-info {
-            font-size: 14px;
-            color: #4CAF50;
-            margin-top: 8px;
-            padding: 8px;
-            background-color: rgba(76, 175, 80, 0.1);
-            border-radius: 4px;
-        }
     </style>
 </head>
 <body>
@@ -108,42 +92,47 @@
         let showAll = false;
         
         function displayCart() {
-            const container = document.getElementById('cart_items');
-            container.innerHTML = '';
+            const cartItems = document.getElementById('cart_items');
+            const showMoreContainer = document.getElementById('show_more_container');
+            const showMoreButton = document.getElementById('show_more_button');
+            cartItems.innerHTML = '';
+            let total = 0;
             
-            // Получаем рекомендации, если они есть
-            const recommendations = JSON.parse(sessionStorage.getItem('recommendations') || '[]');
-            const recommendationsMap = {};
-            recommendations.forEach(rec => {
-                recommendationsMap[rec.id] = rec.explanation;
-            });
-
+            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
+            
+            if (cart.length > 5) {
+                showMoreContainer.style.display = 'block';
+                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
+            } else {
+                showMoreContainer.style.display = 'none';
+            }
+            
             cart.forEach((item, index) => {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'cart-item';
+                if (index >= itemsToShow) return;
                 
-                itemDiv.innerHTML = `
-                    <div class="item-info">
-                        <div>${item.name}</div>
-                        <div class="quantity-controls">
-                            <button onclick="decrementCartItem(${index})" class="quantity-button">-</button>
-                            <input type="number" value="${item.quantity}" min="1" 
-                                   onchange="updateCartItemQuantity(${index}, this.value)"
-                                   class="quantity-input">
-                            <button onclick="incrementCartItem(${index})" class="quantity-button">+</button>
+                const itemTotal = item.price * item.quantity;
+                total += itemTotal;
+                
+                const itemElement = document.createElement('div');
+                itemElement.className = 'cart-item';
+                itemElement.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3 class="cart-item-name">${item.name}</h3>
+                        <div class="cart-item-details">
+                            <p>Количество: ${item.quantity}</p>
+                            <p>Цена: ${item.price}₽</p>
+                            <p>Сумма: ${itemTotal}₽</p>
                         </div>
                     </div>
-                    ${recommendationsMap[item.id] ? 
-                        `<div class="recommendation-info">
-                            💡 ${recommendationsMap[item.id]}
-                        </div>` : 
-                        ''}
+                    <div class="cart-item-controls">
+                        <button onclick="editQuantity(${index})" class="button">Изменить объем</button>
+                        <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
+                    </div>
                 `;
-                
-                container.appendChild(itemDiv);
+                cartItems.appendChild(itemElement);
             });
-
-            updateTotalItems();
+            
+            document.getElementById('total_amount').textContent = total;
         }
         
         function toggleShowAll() {
