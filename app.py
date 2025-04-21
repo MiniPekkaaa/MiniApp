@@ -40,6 +40,16 @@ def check_user_registration(user_id):
         logger.error(f"Error checking Redis: {str(e)}")
         return False
 
+def get_openai_key():
+    try:
+        # Получаем данные точно так же, как при проверке пользователя
+        settings_data = redis_client.hgetall('beer:setting')
+        logger.debug(f"Redis settings data: {settings_data}")
+        return settings_data.get('OpenAI')
+    except Exception as e:
+        logger.error(f"Error getting OpenAI key from Redis: {str(e)}")
+        return None
+
 @app.route('/check-auth')
 def check_auth():
     try:
@@ -323,22 +333,14 @@ def analyze_remains():
             logger.error(f"Неавторизованный запрос для пользователя {user_id}")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Получаем API ключ OpenAI из Redis
-        try:
-            # Прямой доступ к полю OpenAI в хэше beer:setting
-            openai_key = redis_client.hget('beer:setting', 'OpenAI')
-            logger.debug(f"Попытка получить ключ OpenAI: {openai_key}")
-            
-            if not openai_key:
-                logger.error("OpenAI API ключ не найден в Redis")
-                return jsonify({"error": "OpenAI API key not found"}), 500
-            
-            logger.debug("OpenAI API ключ успешно получен")
-            openai.api_key = openai_key.decode('utf-8') if isinstance(openai_key, bytes) else openai_key
-            
-        except Exception as e:
-            logger.error(f"Ошибка при получении ключа OpenAI из Redis: {str(e)}")
-            return jsonify({"error": f"Ошибка при получении ключа OpenAI: {str(e)}"}), 500
+        # Получаем API ключ OpenAI из Redis точно так же, как получаем данные пользователя
+        openai_key = get_openai_key()
+        if not openai_key:
+            logger.error("OpenAI API ключ не найден в Redis")
+            return jsonify({"error": "OpenAI API key not found"}), 500
+
+        logger.debug("OpenAI API ключ успешно получен")
+        openai.api_key = openai_key
 
         # Получаем последние 3 заказа пользователя
         last_orders = list(mongo.cx.Pivo.Orders.find(
