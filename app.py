@@ -418,5 +418,174 @@ def analyze_remains():
         logger.error(f"Необработанная ошибка в analyze-remains: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+def analyze_remains(user_id, remains):
+    try:
+        openai.api_key = get_openai_key()
+        
+        # Подготовка данных для промпта
+        formatted_remains = "\n".join([f"- {item['name']}: {item['quantity']} {item['unit']}" for item in remains])
+        
+        # Системный промпт с четкой структурой ответа
+        system_prompt = """Вы - опытный менеджер по закупкам в сфере пивной продукции. 
+Ваша задача - проанализировать текущие остатки и предложить оптимальные позиции для дозаказа.
+Ваши рекомендации должны быть структурированы строго в следующем формате JSON:
+{
+    "recommendations": [
+        {
+            "name": "Название продукта",
+            "quantity": количество для заказа (целое число),
+            "reason": "Краткое обоснование рекомендации (до 100 символов)"
+        },
+        ...
+    ]
+}
+
+При формировании рекомендаций учитывайте:
+1. Текущие остатки каждой позиции
+2. Стандартные объемы продаж и поставок
+3. Сезонность и текущий месяц
+4. Необходимость поддержания ассортимента
+5. Оптимальное соотношение разных типов продукции
+
+Рекомендации должны быть конкретными и обоснованными, с указанием точного количества для заказа."""
+
+        user_prompt = f"""Текущие остатки на складе:
+{formatted_remains}
+
+Пожалуйста, проанализируйте эти данные и предоставьте рекомендации по дозаказу в указанном формате JSON."""
+
+        # Запрос к GPT-4
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+
+        # Получение и парсинг ответа
+        try:
+            recommendations = json.loads(response.choices[0].message.content)
+            if not isinstance(recommendations, dict) or 'recommendations' not in recommendations:
+                raise ValueError("Неверный формат ответа от AI")
+            
+            # Проверка структуры каждой рекомендации
+            for rec in recommendations['recommendations']:
+                if not all(key in rec for key in ['name', 'quantity', 'reason']):
+                    raise ValueError("Неполные данные в рекомендациях")
+                if not isinstance(rec['quantity'], int) or rec['quantity'] <= 0:
+                    raise ValueError("Некорректное количество в рекомендациях")
+
+            return {
+                'success': True,
+                'recommendations': recommendations['recommendations']
+            }
+
+        except json.JSONDecodeError:
+            logger.error("Ошибка парсинга JSON ответа от OpenAI")
+            return {'success': False, 'error': 'Ошибка обработки рекомендаций'}
+        except ValueError as e:
+            logger.error(f"Ошибка валидации ответа от OpenAI: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    except Exception as e:
+        logger.error(f"Ошибка при анализе остатков: {str(e)}")
+        return {'success': False, 'error': 'Ошибка при анализе данных'}
+
+def process_recommendations(user_id, recommendations):
+    try:
+        # Проверяем существование корзины пользователя
+        cart = get_user_cart(user_id)
+        if not cart:
+            cart = create_user_cart(user_id)
+
+        # Добавляем рекомендованные товары в корзину
+        for rec in recommendations:
+            add_to_cart(user_id, {
+                'name': rec['name'],
+                'quantity': rec['quantity']
+            })
+
+        return {
+            'success': True,
+            'message': 'Рекомендованные товары добавлены в корзину'
+        }
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке рекомендаций: {str(e)}")
+        return {
+            'success': False,
+            'error': 'Не удалось добавить товары в корзину'
+        }
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        remains = data.get('remains')
+
+        if not user_id or not remains:
+            return jsonify({'error': 'Отсутствуют необходимые данные'}), 400
+
+        # Получаем рекомендации от AI
+        analysis_result = analyze_remains(user_id, remains)
+        
+        if not analysis_result['success']:
+            return jsonify({'error': analysis_result['error']}), 500
+
+        # Обрабатываем рекомендации и добавляем товары в корзину
+        process_result = process_recommendations(user_id, analysis_result['recommendations'])
+        
+        if not process_result['success']:
+            return jsonify({'error': process_result['error']}), 500
+
+        return jsonify({
+            'success': True,
+            'recommendations': analysis_result['recommendations'],
+            'message': process_result['message']
+        })
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке запроса: {str(e)}")
+        return jsonify({'error': 'Внутренняя ошибка сервера'}), 500
+
+def get_user_cart(user_id):
+    """Получение корзины пользователя"""
+    try:
+        cart = mongo.cx.Pivo.carts.find_one({'user_id': user_id})
+        return cart
+    except Exception as e:
+        logger.error(f"Ошибка при получении корзины: {str(e)}")
+        return None
+
+def create_user_cart(user_id):
+    """Создание новой корзины для пользователя"""
+    try:
+        cart = {
+            'user_id': user_id,
+            'items': [],
+            'created_at': datetime.utcnow()
+        }
+        result = mongo.cx.Pivo.carts.insert_one(cart)
+        return cart if result.inserted_id else None
+    except Exception as e:
+        logger.error(f"Ошибка при создании корзины: {str(e)}")
+        return None
+
+def add_to_cart(user_id, item):
+    """Добавление товара в корзину"""
+    try:
+        result = mongo.cx.Pivo.carts.update_one(
+            {'user_id': user_id},
+            {'$push': {'items': item}}
+        )
+        return result.modified_count > 0
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении в корзину: {str(e)}")
+        return False
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

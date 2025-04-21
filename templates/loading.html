@@ -4,23 +4,31 @@
     <title>Загрузка...</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--tg-theme-bg-color, #1f1f1f);
+            color: var(--tg-theme-text-color, #ffffff);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
         .loader-container {
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-color: #f5f5f5;
             flex-direction: column;
+            padding: 0 20px;
         }
         
         .loader {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--tg-theme-secondary-bg-color, #2f2f2f);
+            border-top: 3px solid var(--tg-theme-button-color, #3498db);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         
         @keyframes spin {
@@ -28,8 +36,23 @@
             100% { transform: rotate(360deg); }
         }
 
+        #status {
+            font-size: 16px;
+            text-align: center;
+            color: var(--tg-theme-text-color, #ffffff);
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        #substatus {
+            font-size: 14px;
+            text-align: center;
+            color: var(--tg-theme-hint-color, #aaaaaa);
+            opacity: 0.7;
+        }
+
         .error-message {
-            color: #ff0000;
+            color: #ff5555;
             margin-top: 20px;
             text-align: center;
             padding: 0 20px;
@@ -39,12 +62,14 @@
 <body>
     <div class="loader-container">
         <div class="loader"></div>
-        <div id="status">Анализируем ваши данные...</div>
+        <div id="status">Отправляем данные на анализ...</div>
+        <div id="substatus">Это может занять несколько секунд</div>
     </div>
     
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
+        tg.setBackgroundColor('secondary_bg_color');
 
         // Функция для возврата на предыдущую страницу
         function goBack() {
@@ -52,16 +77,17 @@
             window.location.href = `/add_product?user_id=${userId}`;
         }
 
-        // Устанавливаем таймаут на случай, если запрос выполняется слишком долго
+        // Функция для обновления статуса
+        function updateStatus(message, submessage = '') {
+            document.getElementById('status').textContent = message;
+            document.getElementById('substatus').textContent = submessage;
+        }
+
+        // Устанавливаем таймаут
         const timeoutId = setTimeout(() => {
             tg.showAlert('Превышено время ожидания ответа. Попробуйте еще раз.');
             goBack();
-        }, 30000); // 30 секунд таймаут
-
-        // Функция для обновления статуса
-        function updateStatus(message) {
-            document.getElementById('status').textContent = message;
-        }
+        }, 40000); // 40 секунд таймаут
 
         // Отправляем запрос на анализ данных
         window.onload = function() {
@@ -76,7 +102,7 @@
                 return;
             }
 
-            updateStatus('Отправляем данные на анализ...');
+            updateStatus('Анализируем ваши данные...', 'Обрабатываем историю заказов');
             
             fetch('/api/analyze-remains', {
                 method: 'POST',
@@ -94,20 +120,19 @@
                         throw new Error(data.error || 'Произошла ошибка при анализе данных');
                     });
                 }
-                updateStatus('Обрабатываем результаты...');
+                updateStatus('Обрабатываем результаты...', 'Формируем рекомендации');
                 return response.json();
             })
             .then(data => {
                 clearTimeout(timeoutId);
-                if (data.success) {
-                    updateStatus('Готово! Переходим в корзину...');
+                if (data.success && data.recommendations) {
+                    updateStatus('Готово!', 'Переходим в корзину...');
                     localStorage.setItem('recommendedItems', JSON.stringify(data.recommendations));
-                    // Небольшая задержка, чтобы пользователь увидел сообщение об успехе
                     setTimeout(() => {
                         window.location.href = `/cart?user_id=${userId}`;
                     }, 1000);
                 } else {
-                    throw new Error(data.error || 'Неизвестная ошибка');
+                    throw new Error('Не удалось получить рекомендации');
                 }
             })
             .catch(error => {
