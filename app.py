@@ -43,13 +43,25 @@ def check_user_registration(user_id):
 
 def get_openai_key():
     try:
-        # Получаем данные точно так же, как при проверке пользователя
+        # Сначала пытаемся получить ключ из Redis
         settings_data = redis_client.hgetall('beer:setting')
-        logger.debug(f"Redis settings data: {settings_data}")
-        return settings_data.get('OpenAI')
-    except Exception as e:
-        logger.error(f"Error getting OpenAI key from Redis: {str(e)}")
+        openai_key = settings_data.get('OpenAI')
+        
+        if openai_key:
+            logger.debug("OpenAI ключ получен из Redis")
+            return openai_key
+            
+        # Если ключ не найден в Redis, используем из конфига
+        logger.debug("Ключ не найден в Redis, используем из конфига")
+        if OPENAI_API_KEY:
+            return OPENAI_API_KEY
+            
+        logger.error("OpenAI API ключ не найден ни в Redis, ни в конфиге")
         return None
+    except Exception as e:
+        logger.error(f"Ошибка при получении ключа OpenAI: {str(e)}")
+        # В случае ошибки, пробуем использовать ключ из конфига
+        return OPENAI_API_KEY if OPENAI_API_KEY else None
 
 @app.route('/check-auth')
 def check_auth():
