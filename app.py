@@ -99,6 +99,37 @@ def cart():
         return render_template('unauthorized.html')
     return render_template('cart.html')
 
+@app.route('/add_product')
+def add_product():
+    try:
+        user_id = request.args.get('user_id')
+        logger.debug(f"Checking authorization for add_product page, user: {user_id}")
+        
+        if not user_id or not check_user_registration(user_id):
+            return render_template('unauthorized.html')
+
+        products = list(mongo.cx.Pivo.catalog.find())
+        
+        # Форматируем данные для шаблона
+        formatted_products = []
+        for product in products:
+            formatted_product = {
+                'id': product.get('id', ''),
+                '_id': str(product.get('_id', '')),
+                'name': product.get('name', ''),
+                'fullName': product.get('fullName', ''),
+                'volume': float(product.get('volume', 0)),
+                'price': int(product.get('price', 0)),
+                'legalEntity': int(product.get('legalEntity', 1))
+            }
+            formatted_products.append(formatted_product)
+
+        return render_template('add_product.html', products=formatted_products)
+    
+    except Exception as e:
+        logger.error(f"Error in add_product route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
 @app.route('/api/products')
 def get_products():
     try:
