@@ -116,11 +116,16 @@
             padding: 8px 15px;
             border-radius: 8px;
             background-color: transparent;
+            border: 1px solid #FF3B30;
             color: #FF3B30;
-            border: none;
             cursor: pointer;
             font-size: 14px;
             min-width: 80px;
+            transition: all 0.2s ease;
+        }
+
+        .delete-button:hover {
+            background-color: rgba(255, 59, 48, 0.1);
         }
 
         .button-disabled {
@@ -278,6 +283,11 @@
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
+            // Удаляем карточку товара из DOM независимо от того, 
+            // была ли позиция добавлена в remainders
+            productItem.remove();
+
+            // Если позиция была в remainders, удаляем её оттуда
             const index = remainders.findIndex(item => 
                 item.id === beerId.toString() && 
                 item.legalEntity === legalEntity
@@ -285,9 +295,6 @@
             
             if (index !== -1) {
                 remainders.splice(index, 1);
-                
-                // Удаляем карточку товара из DOM
-                productItem.remove();
             }
         }
         
