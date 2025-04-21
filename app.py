@@ -325,27 +325,16 @@ def analyze_remains():
 
         # Получаем API ключ OpenAI из Redis
         try:
-            # Пробуем разные варианты получения ключа
-            openai_key = None
-            
-            # Пробуем получить как обычное значение
-            openai_key = redis_client.get('beer:setting:OpenAI')
-            
-            if not openai_key:
-                # Если не получилось, пробуем получить из хэша
-                settings = redis_client.hgetall('beer:setting')
-                logger.debug(f"Содержимое beer:setting: {settings}")
-                if settings and 'OpenAI' in settings:
-                    openai_key = settings['OpenAI']
-                elif settings and 'openai' in settings:
-                    openai_key = settings['openai']
+            # Прямой доступ к полю OpenAI в хэше beer:setting
+            openai_key = redis_client.hget('beer:setting', 'OpenAI')
+            logger.debug(f"Попытка получить ключ OpenAI: {openai_key}")
             
             if not openai_key:
                 logger.error("OpenAI API ключ не найден в Redis")
                 return jsonify({"error": "OpenAI API key not found"}), 500
             
             logger.debug("OpenAI API ключ успешно получен")
-            openai.api_key = openai_key
+            openai.api_key = openai_key.decode('utf-8') if isinstance(openai_key, bytes) else openai_key
             
         except Exception as e:
             logger.error(f"Ошибка при получении ключа OpenAI из Redis: {str(e)}")
