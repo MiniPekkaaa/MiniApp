@@ -389,6 +389,10 @@
         }
 
         function submitRemainders() {
+            // Показываем загрузочный экран
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').classList.add('hidden');
+
             // Собираем все позиции из списка
             const container = document.getElementById('last_orders_products');
             const items = container.querySelectorAll('.product-item');
@@ -470,22 +474,13 @@
                     if (!response.ok) {
                         if (response.status === 502) {
                             // В случае 502 ошибки просто переходим в корзину с текущими данными
-                            const cartItems = allRemainders.map(item => ({
-                                name: item.name,
-                                quantity: item.quantity,
-                                price: 0
-                            }));
-                            sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
-                            return;
+                            return processCartItems(allRemainders);
                         }
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
                     }
                     
-                    // Пробуем прочитать ответ как текст
                     return response.text().then(text => {
                         try {
-                            // Пытаемся распарсить JSON
                             return text ? JSON.parse(text) : {};
                         } catch (e) {
                             console.warn('Не удалось распарсить ответ как JSON:', text);
@@ -494,58 +489,87 @@
                     });
                 })
                 .then(responseData => {
-                    if (!responseData) {
-                        // Если нет данных, используем текущие remainders
-                        const cartItems = allRemainders.map(item => ({
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: 0
-                        }));
-                        sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    } else {
-                        // Если есть данные от n8n, используем их
-                        if (responseData.generalRecommendation) {
-                            localStorage.setItem('recommendation', responseData.generalRecommendation);
-                        }
-
-                        if (responseData.positions && Array.isArray(responseData.positions)) {
-                            sessionStorage.setItem('cart', JSON.stringify(responseData.positions));
-                        } else {
-                            // Если нет positions, используем текущие remainders
-                            const cartItems = allRemainders.map(item => ({
-                                name: item.name,
-                                quantity: item.quantity,
-                                price: 0
-                            }));
-                            sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                        }
+                    if (!responseData || !responseData.positions) {
+                        return processCartItems(allRemainders);
                     }
 
-                    // Очищаем remainders
-                    remainders.length = 0;
+                    // Сохраняем рекомендацию
+                    if (responseData.generalRecommendation) {
+                        localStorage.setItem('recommendation', responseData.generalRecommendation);
+                    }
 
-                    // Перенаправляем в корзину
-                    window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+                    // Получаем цены для всех позиций из MongoDB
+                    return fetch('/api/get-products-prices', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            positions: responseData.positions.map(pos => pos.name)
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(pricesData => {
+                        // Создаем массив для корзины с ценами из MongoDB
+                        const cartItems = responseData.positions.map(position => {
+                            const productPrice = pricesData[position.name] || 0;
+                            return {
+                                name: position.name,
+                                quantity: position.quantity || 0,
+                                price: productPrice
+                            };
+                        });
+
+                        sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                        remainders.length = 0;
+                        window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+                    });
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
-                    
-                    // В случае любой ошибки сохраняем текущие remainders и переходим в корзину
-                    const cartItems = allRemainders.map(item => ({
-                        name: item.name,
-                        quantity: item.quantity,
-                        price: 0
-                    }));
-                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    
-                    // Показываем ошибку
-                    tg.showAlert('Внимание: ' + error.message + '. Данные сохранены локально.');
-                    
-                    // Перенаправляем в корзину
-                    setTimeout(() => {
-                        window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
-                    }, 1000);
+                    return processCartItems(allRemainders);
+                })
+                .finally(() => {
+                    // Скрываем загрузочный экран в случае ошибки
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').classList.remove('hidden');
                 });
+        }
+
+        // Функция для обработки элементов корзины
+        function processCartItems(items) {
+            // Получаем цены для всех позиций из MongoDB
+            return fetch('/api/get-products-prices', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    positions: items.map(item => item.name)
+                })
+            })
+            .then(response => response.json())
+            .then(pricesData => {
+                const cartItems = items.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity || 0,
+                    price: pricesData[item.name] || 0
+                }));
+
+                sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                remainders.length = 0;
+                window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+            })
+            .catch(error => {
+                console.error('Ошибка при получении цен:', error);
+                const cartItems = items.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity || 0,
+                    price: 0
+                }));
+                sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+            });
         }
 
         // Запускаем проверку авторизации
