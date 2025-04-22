@@ -481,51 +481,54 @@
             fetch(`/api/get-last-orders?user_id=${userId}`)
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
+                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.json();
                 })
+                .then(data => {
+                    if (!data.org_ID) {
+                        throw new Error('org_ID не найден');
+                    }
+
+                    const data_to_send = {
+                        telegram_id: userId,
+                        org_ID: data.org_ID,
+                        remainders: allRemainders
+                    };
+
+                    console.log('Отправляем данные в n8n:', data_to_send);
+
+                    return fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(data_to_send)
+                    });
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
+                    }
+                    return response.json(); // Теперь ожидаем JSON ответ
+                })
                 .then(responseData => {
-                    // Сохраняем рекомендацию
+                    // Сохраняем рекомендацию в localStorage
                     if (responseData.generalRecommendation) {
                         localStorage.setItem('recommendation', responseData.generalRecommendation);
                     }
-
-                    // Сохраняем позиции в корзину
-                    if (responseData.positions && Array.isArray(responseData.positions)) {
-                        const cartItems = responseData.positions.map(position => {
-                            // Находим информацию о товаре из select
-                            const productSelect = document.getElementById('product_select');
-                            const option = Array.from(productSelect.options).find(opt => 
-                                opt.dataset.name === position.name
-                            );
-                            
-                            return {
-                                name: position.name,
-                                quantity: position.quantity,
-                                price: option ? parseFloat(option.dataset.price) : 0
-                            };
-                        });
-                        sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    }
-
-                    // Очищаем remainders и скрываем лоадер
+                    
+                    // Очищаем список остатков
                     remainders.length = 0;
-                    hideRecommendationLoader();
-
-                    // Перенаправляем на страницу корзины
-                    const cartUrl = '/cart' + (userId ? `?user_id=${userId}` : '');
-                    tg.MainButton.setText('Перейти в корзину');
-                    tg.MainButton.show();
-                    tg.MainButton.onClick(() => {
-                        window.location.href = cartUrl;
-                    });
-                    window.location.href = cartUrl;
+                    
+                    // Перенаправляем в корзину
+                    window.location.href = '/cart';
                 })
                 .catch(error => {
-                    console.error('Ошибка:', error);
+                    console.error('Ошибка при отправке остатков:', error);
                     hideRecommendationLoader();
-                    tg.showAlert('Ошибка: ' + error.message);
+                    tg.showAlert('Ошибка при отправке остатков: ' + error.message);
                 });
         }
 

@@ -149,53 +149,60 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
-        let cart = [];
-        try {
-            const savedCart = sessionStorage.getItem('cart');
-            if (savedCart) {
-                cart = JSON.parse(savedCart);
+        function showContent() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').classList.remove('hidden');
+        }
+
+        function checkAuthAndRedirect() {
+            if (!window.location.search.includes('user_id') && userId) {
+                window.location.href = `${window.location.pathname}?user_id=${userId}`;
+            } else {
+                // Проверяем наличие рекомендации в localStorage
+                const recommendation = localStorage.getItem('recommendation');
+                if (recommendation) {
+                    showRecommendation(recommendation);
+                    // Удаляем рекомендацию после показа
+                    localStorage.removeItem('recommendation');
+                }
+                // Показываем контент через небольшую задержку
+                setTimeout(showContent, 300);
             }
-        } catch (error) {
-            console.error('Ошибка при загрузке корзины:', error);
-            cart = [];
         }
         
+        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         let showAll = false;
         
         function displayCart() {
-            console.log('Отображение корзины:', cart);
             const cartItems = document.getElementById('cart_items');
+            const showMoreContainer = document.getElementById('show_more_container');
+            const showMoreButton = document.getElementById('show_more_button');
             cartItems.innerHTML = '';
             let total = 0;
-            
-            if (!Array.isArray(cart)) {
-                console.error('Корзина не является массивом:', cart);
-                cart = [];
-            }
             
             const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
             
             if (cart.length > 5) {
-                document.getElementById('show_more_container').style.display = 'block';
-                document.getElementById('show_more_button').textContent = showAll ? 'Свернуть' : 'Показать все';
+                showMoreContainer.style.display = 'block';
+                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
             } else {
-                document.getElementById('show_more_container').style.display = 'none';
+                showMoreContainer.style.display = 'none';
             }
             
             cart.forEach((item, index) => {
                 if (index >= itemsToShow) return;
                 
-                const itemTotal = (item.price || 0) * (item.quantity || 0);
+                const itemTotal = item.price * item.quantity;
                 total += itemTotal;
                 
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
                     <div class="cart-item-info">
-                        <h3 class="cart-item-name">${item.name || 'Без названия'}</h3>
+                        <h3 class="cart-item-name">${item.name}</h3>
                         <div class="cart-item-details">
-                            <p>Количество: ${item.quantity || 0}</p>
-                            <p>Цена: ${item.price || 0}₽</p>
+                            <p>Количество: ${item.quantity}</p>
+                            <p>Цена: ${item.price}₽</p>
                             <p>Сумма: ${itemTotal}₽</p>
                         </div>
                     </div>
@@ -210,30 +217,12 @@
             document.getElementById('total_amount').textContent = total;
             
             // Проверяем корзину для рекомендаций
-            if (cart.length > 0) {
-                checkCartForRecommendations(cart);
-            }
+            checkCartForRecommendations(cart);
         }
-
-        function showContent() {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').classList.remove('hidden');
-            
-            // Проверяем рекомендацию после загрузки контента
-            const recommendation = localStorage.getItem('recommendation');
-            if (recommendation) {
-                showRecommendation(recommendation);
-                localStorage.removeItem('recommendation');
-            }
-        }
-
-        function checkAuthAndRedirect() {
-            if (!window.location.search.includes('user_id') && userId) {
-                window.location.href = `${window.location.pathname}?user_id=${userId}`;
-            } else {
-                displayCart();
-                setTimeout(showContent, 300);
-            }
+        
+        function toggleShowAll() {
+            showAll = !showAll;
+            displayCart();
         }
         
         function editQuantity(index) {
@@ -283,15 +272,13 @@
 
         function showRecommendation(message) {
             const notification = document.getElementById('recommendationNotification');
-            if (notification) {
-                notification.textContent = message;
-                notification.style.display = 'block';
-                
-                // Скрываем уведомление через 5 секунд
-                setTimeout(() => {
-                    notification.style.display = 'none';
-                }, 5000);
-            }
+            notification.textContent = message;
+            notification.style.display = 'block';
+            
+            // Скрыть уведомление через 5 секунд
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
         }
         
         function addMore() {
@@ -312,6 +299,7 @@
         
         // Инициализация при загрузке страницы
         checkAuthAndRedirect();
+        displayCart();
     </script>
 </body>
 </html> 
