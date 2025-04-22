@@ -70,6 +70,7 @@
             color: var(--tg-theme-button-text-color);
             border: none;
             cursor: pointer;
+            font-size: 14px;
         }
 
         .button:last-child {
@@ -121,7 +122,6 @@
             cursor: pointer;
             font-size: 14px;
             min-width: 80px;
-            transition: all 0.2s ease;
         }
 
         .delete-button:hover {
@@ -233,11 +233,8 @@
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="number" value="1" min="1" class="quantity-input">
-                                    <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value, this)" 
-                                            class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); margin: 0 5px;">
-                                        Добавить остаток
-                                    </button>
+                                    <input type="number" value="1" min="1" class="quantity-input" 
+                                           onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
                                     <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
@@ -301,7 +298,7 @@
             }
         }
 
-        function addLastOrderProduct(beerId, beerName, legalEntity, quantity, buttonElement) {
+        function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
             const product = {
                 id: beerId.toString(),
                 name: beerName,
@@ -322,9 +319,6 @@
             
             // Показываем уведомление о добавлении остатка
             tg.showAlert("Остаток добавлен");
-            // Делаем кнопку серой
-            buttonElement.classList.add('button-disabled');
-            buttonElement.disabled = true;
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
