@@ -475,6 +475,7 @@
                         if (response.status === 502) {
                             // В случае 502 ошибки просто переходим в корзину с текущими данными
                             const cartItems = allRemainders.map(item => ({
+                                id: item.id,
                                 name: item.name,
                                 quantity: item.quantity,
                                 price: 0
@@ -504,6 +505,7 @@
                     if (!recommendation || !recommendation.positions) {
                         // Если нет данных, используем текущие remainders
                         const cartItems = allRemainders.map(item => ({
+                            id: item.id,
                             name: item.name,
                             quantity: item.quantity,
                             price: 0
@@ -515,7 +517,7 @@
                             localStorage.setItem('recommendation', recommendation.generalRecommendation);
                         }
 
-                        // Используем количество из n8n
+                        // Создаем массив для корзины
                         const cartItems = recommendation.positions.map(position => {
                             const option = Array.from(document.getElementById('product_select').options)
                                 .find(opt => opt.dataset.name === position.name);
@@ -528,7 +530,6 @@
                             };
                         });
 
-                        console.log('Позиции для корзины:', cartItems);
                         sessionStorage.setItem('cart', JSON.stringify(cartItems));
                     }
 
@@ -543,6 +544,7 @@
                     
                     // В случае любой ошибки сохраняем текущие remainders и переходим в корзину
                     const cartItems = allRemainders.map(item => ({
+                        id: item.id,
                         name: item.name,
                         quantity: item.quantity,
                         price: 0
