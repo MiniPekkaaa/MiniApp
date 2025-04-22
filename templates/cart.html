@@ -239,6 +239,29 @@
                 return;
             }
 
+            // Получаем идентификаторы и цены товаров из select
+            const selectElement = document.getElementById('product_select');
+            const productsMap = {};
+            Array.from(selectElement.options).forEach(option => {
+                if (option.dataset.name) {
+                    productsMap[option.dataset.name] = {
+                        id: option.value,
+                        price: parseFloat(option.dataset.price) || 0
+                    };
+                }
+            });
+
+            // Формируем items с id для каждой позиции
+            const orderItems = cart.map(item => {
+                const productInfo = productsMap[item.name] || {};
+                return {
+                    id: productInfo.id, // Добавляем id товара
+                    name: item.name,
+                    quantity: parseInt(item.quantity),
+                    price: parseFloat(item.price)
+                };
+            });
+
             // Отправляем запрос на создание заказа
             fetch('/api/create-order', {
                 method: 'POST',
@@ -247,7 +270,7 @@
                 },
                 body: JSON.stringify({
                     userId: userId,
-                    items: cart
+                    items: orderItems
                 })
             })
             .then(response => response.json())
@@ -257,7 +280,7 @@
                     cart = [];
                     sessionStorage.setItem('cart', JSON.stringify(cart));
                     displayCart();
-                    tg.showAlert("Заказ успешно создан!");
+                    showNotification("Заказ успешно создан!");
                     // Перенаправляем на главное меню
                     setTimeout(() => {
                         window.location.href = `/?user_id=${userId}`;
@@ -268,7 +291,7 @@
             })
             .catch(error => {
                 console.error('Ошибка при создании заказа:', error);
-                tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
+                showNotification('Произошла ошибка при создании заказа: ' + error.message, 5000);
             });
         }
         
