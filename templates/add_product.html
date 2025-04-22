@@ -174,11 +174,11 @@
                     <input type="number" id="quantity" value="1" min="1" class="quantity-input">
                     <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
                 </div>
-                <button onclick="addToRemainders()" class="button add-button" style="margin-top: 10px;">Добавить остаток</button>
+                <button onclick="addToRemainders()" class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); margin-top: 10px;">Добавить остаток</button>
             </div>
 
-            <button onclick="submitRemainders()" class="button submit-button">Далее</button>
-            <button onclick="window.location.href='/'" class="button">Назад</button>
+            <button onclick="submitRemainders()" class="button" style="background-color: #4CAF50; color: white; margin-top: 20px;">Далее</button>
+            <button onclick="window.location.href='/'" class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color);">Назад</button>
         </div>
     </div>
 
@@ -228,23 +228,13 @@
                             const productDiv = document.createElement('div');
                             productDiv.className = 'product-item';
                             
-                            const isInRemainders = remainders.some(item => 
-                                item.id === position.Beer_ID.toString() && 
-                                item.legalEntity === position.Legal_Entity
-                            );
-
                             productDiv.innerHTML = `
                                 <div class="product-info">
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="number" value="1" min="1" class="quantity-input">
-                                    ${!isInRemainders ? `
-                                        <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value, this.parentElement)"
-                                                class="add-button">
-                                            Добавить остаток
-                                        </button>
-                                    ` : ''}
+                                    <input type="number" value="1" min="1" class="quantity-input" 
+                                           onchange="updateRemainderQuantity(${position.Beer_ID}, ${position.Legal_Entity}, this.value)">
                                     <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
