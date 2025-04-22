@@ -449,11 +449,11 @@
                         throw new Error('org_ID не найден');
                     }
 
-                    // Подготавливаем данные для отправки
+                    // Подготавливаем данные для отправки в нужном порядке
                     const data_to_send = {
                         telegram_id: userId,
-                        remainders: allRemainders,
-                        org_ID: data.org_ID
+                        org_ID: data.org_ID,
+                        remainders: allRemainders
                     };
 
                     console.log('Отправляем данные в n8n:', data_to_send);
