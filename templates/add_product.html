@@ -154,7 +154,7 @@
                 <!-- Сюда будут добавляться позиции из последних заказов -->
             </div>
 
-            <h2 style="margin: 20px 0; color: var(--tg-theme-text-color);">Добавить новую позицию</h2>
+            <h2 style="margin: 20px 0; color: var(--tg-theme-text-color);">Добавить новый остаток</h2>
             <select id="product_select" class="select">
                 <option value="">Выберите товар</option>
                 {% for product in products %}
@@ -170,10 +170,9 @@
             </select>
             <div class="quantity-controls">
                 <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
-                <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+                <input type="number" id="quantity" value="1" min="1" class="quantity-input" onchange="addToRemainders()">
                 <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
             </div>
-            <button onclick="addToRemainders()" class="button">Добавить остаток</button>
             <button onclick="submitRemainders()" class="button submit-button">Далее</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
@@ -199,18 +198,19 @@
             }
         }
         
-        let products = {{ products|tojson|safe }};
-        let remainders = [];
+        const remainders = [];
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
             quantityInput.value = parseInt(quantityInput.value) + 1;
+            addToRemainders();
         }
         
         function decrementQuantity() {
             let quantityInput = document.getElementById('quantity');
             if (parseInt(quantityInput.value) > 1) {
                 quantityInput.value = parseInt(quantityInput.value) - 1;
+                addToRemainders();
             }
         }
 
@@ -231,11 +231,8 @@
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="number" value="1" min="1" class="quantity-input">
-                                    <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value, this)" 
-                                            class="add-button">
-                                        Добавить
-                                    </button>
+                                    <input type="number" value="1" min="1" class="quantity-input" 
+                                           onchange="updateRemainder(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value, this)">
                                     <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
@@ -258,7 +255,7 @@
                 });
         }
 
-        function addLastOrderProduct(beerId, beerName, legalEntity, quantity, buttonElement) {
+        function updateRemainder(beerId, beerName, legalEntity, quantity, inputElement) {
             const product = {
                 id: beerId.toString(),
                 name: beerName,
@@ -276,10 +273,6 @@
             } else {
                 remainders.push(product);
             }
-            
-            // Делаем кнопку серой
-            buttonElement.classList.add('button-disabled');
-            buttonElement.disabled = true;
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
@@ -321,9 +314,6 @@
                 } else {
                     remainders.push(product);
                 }
-                
-                select.value = "";
-                document.getElementById('quantity').value = "1";
             }
         }
 
