@@ -489,13 +489,20 @@
                     });
                 })
                 .then(responseData => {
-                    if (!responseData || !responseData.positions) {
+                    if (!responseData) {
+                        return processCartItems(allRemainders);
+                    }
+
+                    // Обрабатываем ответ как массив
+                    const recommendation = Array.isArray(responseData) ? responseData[0] : responseData;
+
+                    if (!recommendation || !recommendation.positions) {
                         return processCartItems(allRemainders);
                     }
 
                     // Сохраняем рекомендацию
-                    if (responseData.generalRecommendation) {
-                        localStorage.setItem('recommendation', responseData.generalRecommendation);
+                    if (recommendation.generalRecommendation) {
+                        localStorage.setItem('recommendation', recommendation.generalRecommendation);
                     }
 
                     // Получаем цены для всех позиций из MongoDB
@@ -505,13 +512,15 @@
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            positions: responseData.positions.map(pos => pos.name)
+                            positions: recommendation.positions.map(pos => pos.name)
                         })
                     })
                     .then(response => response.json())
                     .then(pricesData => {
+                        console.log('Позиции из n8n:', recommendation.positions);
+                        
                         // Создаем массив для корзины с ценами из MongoDB
-                        const cartItems = responseData.positions.map(position => {
+                        const cartItems = recommendation.positions.map(position => {
                             // Получаем цену из select элемента, если не найдена в MongoDB
                             let productPrice = pricesData[position.name];
                             if (productPrice === undefined) {
@@ -524,9 +533,12 @@
                                 }
                             }
                             
+                            const quantity = parseInt(position.quantity);
+                            console.log(`Обработка позиции: ${position.name}, количество: ${quantity}`);
+                            
                             return {
                                 name: position.name,
-                                quantity: parseInt(position.quantity) || 0,
+                                quantity: quantity || 0,
                                 price: parseFloat(productPrice) || 0
                             };
                         });
