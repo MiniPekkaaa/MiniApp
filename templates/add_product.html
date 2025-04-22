@@ -505,30 +505,31 @@
                         localStorage.setItem('recommendation', recommendation.generalRecommendation);
                     }
 
-                    // Получаем цены из select элемента
-                    const selectElement = document.getElementById('product_select');
-                    const pricesMap = {};
-                    Array.from(selectElement.options).forEach(option => {
-                        if (option.dataset.name) {
-                            pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
+                    // Создаем массив для корзины
+                    const cartItems = recommendation.positions.map(position => {
+                        // Ищем соответствующую опцию в select по названию
+                        const option = Array.from(document.getElementById('product_select').options)
+                            .find(opt => opt.dataset.name === position.name);
+
+                        if (option) {
+                            // Если нашли соответствующий товар, берем все данные из него
+                            return {
+                                id: option.value,
+                                name: position.name,
+                                quantity: parseInt(position.quantity) || 0,
+                                price: parseFloat(option.dataset.price) || 0
+                            };
+                        } else {
+                            console.warn(`Товар не найден: ${position.name}`);
+                            return {
+                                id: '',
+                                name: position.name,
+                                quantity: parseInt(position.quantity) || 0,
+                                price: 0
+                            };
                         }
                     });
 
-                    // Создаем массив для корзины с ценами из select
-                    const cartItems = recommendation.positions.map(position => {
-                        const price = pricesMap[position.name] || 0;
-                        const quantity = parseInt(position.quantity);
-                        
-                        console.log(`Добавляем позицию: ${position.name}, количество из n8n: ${quantity}, цена: ${price}`);
-                        
-                        return {
-                            name: position.name,
-                            quantity: quantity,
-                            price: price
-                        };
-                    });
-
-                    console.log('Итоговая корзина:', cartItems);
                     sessionStorage.setItem('cart', JSON.stringify(cartItems));
                     remainders.length = 0;
                     window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
