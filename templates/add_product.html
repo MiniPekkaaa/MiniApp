@@ -519,11 +519,35 @@
                         localStorage.setItem('recommendation', responseData.generalRecommendation);
                     }
                     
-                    // Очищаем список остатков
-                    remainders.length = 0;
+                    // Получаем текущую корзину или создаем новую
+                    let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+                    
+                    // Добавляем позиции из рекомендаций в корзину
+                    if (responseData.positions && Array.isArray(responseData.positions)) {
+                        responseData.positions.forEach(position => {
+                            // Проверяем, есть ли такой товар уже в корзине
+                            const existingItem = cart.find(item => item.name === position.name);
+                            
+                            if (existingItem) {
+                                // Если товар уже есть, обновляем количество
+                                existingItem.quantity = position.quantity;
+                            } else {
+                                // Если товара нет, добавляем новый
+                                cart.push({
+                                    name: position.name,
+                                    quantity: position.quantity,
+                                    // Здесь можно добавить дополнительные поля, если они нужны
+                                    price: 0 // Временно установим цену 0, её нужно будет получать из данных о товаре
+                                });
+                            }
+                        });
+                        
+                        // Сохраняем обновленную корзину
+                        sessionStorage.setItem('cart', JSON.stringify(cart));
+                    }
                     
                     // Перенаправляем в корзину
-                    window.location.href = '/cart';
+                    window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
