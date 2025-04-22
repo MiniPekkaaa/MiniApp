@@ -154,6 +154,11 @@
                 <!-- Сюда будут добавляться позиции из последних заказов -->
             </div>
 
+            <div id="current_remainders" class="product-list">
+                <h3 style="margin-bottom: 15px;">Текущие остатки</h3>
+                <!-- Сюда будут добавляться текущие остатки -->
+            </div>
+
             <div class="select-container">
                 <h3>Добавить новый остаток</h3>
                 <select id="product_select" class="select" onchange="addToRemainders()">
@@ -256,6 +261,47 @@
                 });
         }
 
+        function displayRemainders() {
+            const container = document.getElementById('current_remainders');
+            // Очищаем контейнер, сохраняя заголовок
+            const header = container.querySelector('h3');
+            container.innerHTML = '';
+            container.appendChild(header);
+
+            remainders.forEach(remainder => {
+                const remainderDiv = document.createElement('div');
+                remainderDiv.className = 'product-item';
+                
+                remainderDiv.innerHTML = `
+                    <div class="product-info">
+                        ${remainder.name}
+                    </div>
+                    <div class="product-controls">
+                        <input type="number" value="${remainder.quantity}" min="1" class="quantity-input" 
+                               onchange="updateRemainderQuantity('${remainder.id}', ${remainder.legalEntity}, this.value)">
+                        <button onclick="deleteRemainder('${remainder.id}', ${remainder.legalEntity}, this.closest('.product-item'))"
+                                class="delete-button">
+                            Удалить
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(remainderDiv);
+            });
+        }
+
+        function updateRemainderQuantity(beerId, legalEntity, newQuantity) {
+            const index = remainders.findIndex(item => 
+                item.id === beerId && 
+                item.legalEntity === legalEntity
+            );
+            
+            if (index !== -1) {
+                remainders[index].quantity = parseInt(newQuantity);
+                tg.showAlert("Количество обновлено");
+            }
+        }
+
         function addLastOrderProduct(beerId, beerName, legalEntity, quantity, parentElement) {
             const product = {
                 id: beerId.toString(),
@@ -277,11 +323,12 @@
             
             // Показываем уведомление о добавлении остатка
             tg.showAlert("Остаток добавлен");
+            // Обновляем отображение остатков
+            displayRemainders();
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
-            // Удаляем карточку товара из DOM независимо от того, 
-            // была ли позиция добавлена в remainders
+            // Удаляем карточку товара
             productItem.remove();
 
             // Если позиция была в remainders, удаляем её оттуда
@@ -292,6 +339,8 @@
             
             if (index !== -1) {
                 remainders.splice(index, 1);
+                // Обновляем отображение остатков
+                displayRemainders();
             }
         }
         
@@ -324,6 +373,8 @@
                 
                 // Показываем уведомление о добавлении остатка
                 tg.showAlert("Остаток добавлен");
+                // Обновляем отображение остатков
+                displayRemainders();
             }
         }
 
