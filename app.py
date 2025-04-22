@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import pytz
 import openai
 from config import OPENAI_API_KEY
+import requests
 
 # Настройка логирования
 logging.basicConfig(
@@ -363,69 +364,36 @@ def analyze_remains():
 
 def analyze_remains(user_id, remains):
     try:
-        # Получаем ключ OpenAI
-        openai_key = get_openai_key()
-        if not openai_key:
-            logger.error("OpenAI API ключ не найден")
-            return {'success': False, 'error': 'OpenAI API ключ не найден'}
-
-        openai.api_key = openai_key
+        # URL вебхука n8n
+        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
         
-        # Подготовка данных для промпта
-        formatted_remains = "\n".join([f"- {item['name']}: {item['quantity']} шт." for item in remains])
+        # Подготавливаем данные для отправки
+        data = {
+            "user_id": user_id,
+            "remains": remains,
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
-        # Системный промпт
-        system_prompt = """Вы - опытный менеджер по закупкам в сфере пивной продукции. 
-Проанализируйте текущие остатки и предложите оптимальные позиции для дозаказа.
-Верните ответ строго в формате JSON:
-[
-    {
-        "name": "Название продукта",
-        "quantity": количество_для_заказа
-    },
-    ...
-]"""
-
-        user_prompt = f"""Текущие остатки на складе:
-{formatted_remains}
-
-Проанализируйте эти данные и предоставьте рекомендации по дозаказу в указанном формате JSON."""
-
-        # Запрос к OpenAI
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1000
-        )
-
-        # Получение и парсинг ответа
-        try:
-            recommendations = json.loads(response.choices[0].message.content)
-            if not isinstance(recommendations, list):
-                raise ValueError("Неверный формат ответа от AI")
-            
-            # Проверка структуры каждой рекомендации
-            for rec in recommendations:
-                if not all(key in rec for key in ['name', 'quantity']):
-                    raise ValueError("Неполные данные в рекомендациях")
-                if not isinstance(rec['quantity'], int) or rec['quantity'] <= 0:
-                    raise ValueError("Некорректное количество в рекомендациях")
-
-            return {
-                'success': True,
-                'recommendations': recommendations
-            }
-
-        except json.JSONDecodeError:
-            logger.error("Ошибка парсинга JSON ответа от OpenAI")
-            return {'success': False, 'error': 'Ошибка обработки рекомендаций'}
-        except ValueError as e:
-            logger.error(f"Ошибка валидации ответа от OpenAI: {str(e)}")
-            return {'success': False, 'error': str(e)}
+        # Отправляем запрос к n8n
+        response = requests.post(webhook_url, json=data)
+        
+        if response.status_code == 200:
+            try:
+                result = response.json()
+                if result.get('success'):
+                    return {
+                        'success': True,
+                        'recommendations': result.get('recommendations', [])
+                    }
+                else:
+                    logger.error(f"Ошибка в ответе n8n: {result.get('error')}")
+                    return {'success': False, 'error': result.get('error', 'Ошибка при анализе данных')}
+            except json.JSONDecodeError:
+                logger.error("Неверный формат ответа от n8n")
+                return {'success': False, 'error': 'Неверный формат ответа от сервера анализа'}
+        else:
+            logger.error(f"Ошибка HTTP при запросе к n8n: {response.status_code}")
+            return {'success': False, 'error': f'Ошибка сервера: {response.status_code}'}
 
     except Exception as e:
         logger.error(f"Ошибка при анализе остатков: {str(e)}")

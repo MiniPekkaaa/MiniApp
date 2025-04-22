@@ -108,7 +108,7 @@
                 return;
             }
 
-            updateStatus('Анализируем ваши данные...', 'Обрабатываем историю заказов');
+            updateStatus('Анализируем ваши данные...', 'Отправляем данные на сервер');
             
             fetch('/api/analyze-remains', {
                 method: 'POST',
@@ -126,7 +126,7 @@
                         throw new Error(data.error || 'Произошла ошибка при анализе данных');
                     });
                 }
-                updateStatus('Обрабатываем результаты...', 'Формируем рекомендации');
+                updateStatus('Обрабатываем результаты...', 'Получаем рекомендации');
                 return response.json();
             })
             .then(data => {
@@ -139,7 +139,7 @@
                         window.location.href = `/cart?user_id=${userId}`;
                     }, 1000);
                 } else {
-                    throw new Error('Не удалось получить рекомендации');
+                    throw new Error(data.error || 'Не удалось получить рекомендации');
                 }
             })
             .catch(handleError);
