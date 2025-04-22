@@ -389,10 +389,6 @@
         }
 
         function submitRemainders() {
-            // Показываем загрузочный экран
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('content').classList.add('hidden');
-
             // Собираем все позиции из списка
             const container = document.getElementById('last_orders_products');
             const items = container.querySelectorAll('.product-item');
@@ -486,17 +482,7 @@
                         }
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
                     }
-                    
-                    // Пробуем прочитать ответ как текст
-                    return response.text().then(text => {
-                        try {
-                            // Пытаемся распарсить JSON
-                            return text ? JSON.parse(text) : {};
-                        } catch (e) {
-                            console.warn('Не удалось распарсить ответ как JSON:', text);
-                            return {};
-                        }
-                    });
+                    return response.json();
                 })
                 .then(responseData => {
                     // Обрабатываем ответ как массив
@@ -517,7 +503,6 @@
                             localStorage.setItem('recommendation', recommendation.generalRecommendation);
                         }
 
-                        // Создаем массив для корзины
                         const cartItems = recommendation.positions.map(position => {
                             const option = Array.from(document.getElementById('product_select').options)
                                 .find(opt => opt.dataset.name === position.name);
