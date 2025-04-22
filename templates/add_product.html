@@ -154,26 +154,28 @@
                 <!-- Сюда будут добавляться позиции из последних заказов -->
             </div>
 
-            <h2 style="margin: 20px 0; color: var(--tg-theme-text-color);">Добавить новую позицию</h2>
-            <select id="product_select" class="select">
-                <option value="">Выберите товар</option>
-                {% for product in products %}
-                <option value="{{ product.id }}" 
-                        data-name="{{ product.name }}"
-                        data-fullname="{{ product.fullName }}"
-                        data-volume="{{ product.volume }}"
-                        data-price="{{ product.price }}"
-                        data-legal-entity="{{ product.legalEntity }}">
-                    {{ product.name }} ({{ product.volume }}л)
-                </option>
-                {% endfor %}
-            </select>
-            <div class="quantity-controls">
-                <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
-                <input type="number" id="quantity" value="1" min="1" class="quantity-input">
-                <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
+            <div class="select-container">
+                <h3>Добавить новый остаток</h3>
+                <select id="product_select" class="select" onchange="addToRemainders()">
+                    <option value="">Выберите товар</option>
+                    {% for product in products %}
+                    <option value="{{ product.id }}" 
+                            data-name="{{ product.name }}"
+                            data-fullname="{{ product.fullName }}"
+                            data-volume="{{ product.volume }}"
+                            data-price="{{ product.price }}"
+                            data-legal-entity="{{ product.legalEntity }}">
+                        {{ product.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="quantity-controls">
+                    <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
+                    <input type="number" id="quantity" value="1" min="1" class="quantity-input" onchange="addToRemainders()">
+                    <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
+                </div>
             </div>
-            <button onclick="addToRemainders()" class="button">Добавить остаток</button>
+
             <button onclick="submitRemainders()" class="button submit-button">Далее</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
@@ -200,7 +202,7 @@
         }
         
         let products = {{ products|tojson|safe }};
-        let remainders = [];
+        const remainders = [];
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
