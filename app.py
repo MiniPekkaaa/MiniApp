@@ -6,8 +6,6 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
-import openai
-from config import OPENAI_API_KEY
 import requests
 
 # Настройка логирования
@@ -33,36 +31,60 @@ redis_client = redis.Redis(
 
 def check_user_registration(user_id):
     try:
-        # Проверяем существование пользователя в Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
-        # Проверяем что есть данные и UserChatID совпадает
         return bool(user_data) and user_data.get('UserChatID') == str(user_id)
     except Exception as e:
         logger.error(f"Error checking Redis: {str(e)}")
         return False
 
-def get_openai_key():
+@app.route('/api/analyze-remains', methods=['POST'])
+def analyze_remains_api():
     try:
-        # Сначала пытаемся получить ключ из Redis
-        settings_data = redis_client.hgetall('beer:setting')
-        openai_key = settings_data.get('OpenAI')
+        data = request.json
+        user_id = data.get('userId')
+        remains = data.get('remains')
+
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        if not remains:
+            return jsonify({"error": "Отсутствуют данные об остатках"}), 400
+
+        # Отправляем данные на вебхук n8n
+        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
         
-        if openai_key:
-            logger.debug("OpenAI ключ получен из Redis")
-            return openai_key
-            
-        # Если ключ не найден в Redis, используем из конфига
-        logger.debug("Ключ не найден в Redis, используем из конфига")
-        if OPENAI_API_KEY:
-            return OPENAI_API_KEY
-            
-        logger.error("OpenAI API ключ не найден ни в Redis, ни в конфиге")
-        return None
+        webhook_data = {
+            "user_id": user_id,
+            "remains": remains,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        try:
+            response = requests.post(webhook_url, json=webhook_data)
+            if response.ok:
+                return jsonify({"success": True, "message": "Данные успешно отправлены"})
+            else:
+                logger.error(f"Ошибка при отправке на вебхук: {response.status_code}")
+                return jsonify({"error": "Ошибка при отправке данных"}), 500
+        except Exception as e:
+            logger.error(f"Ошибка при отправке на вебхук: {str(e)}")
+            return jsonify({"error": "Ошибка при отправке данных"}), 500
+
     except Exception as e:
-        logger.error(f"Ошибка при получении ключа OpenAI: {str(e)}")
-        # В случае ошибки, пробуем использовать ключ из конфига
-        return OPENAI_API_KEY if OPENAI_API_KEY else None
+        logger.error(f"Ошибка в analyze-remains-api: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/loading')
+def loading():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+        return render_template('loading.html', user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in loading route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
 
 @app.route('/check-auth')
 def check_auth():
@@ -322,109 +344,6 @@ def get_last_orders():
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/loading')
-def loading():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-        return render_template('loading.html', user_id=user_id)
-    except Exception as e:
-        logger.error(f"Error in loading route: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
-
-@app.route('/api/analyze-remains', methods=['POST'])
-def analyze_remains():
-    try:
-        data = request.json
-        user_id = data.get('userId')
-        remains = data.get('remains')
-
-        logger.debug(f"Получен запрос на анализ остатков для пользователя {user_id}")
-        logger.debug(f"Данные об остатках: {remains}")
-
-        if not user_id or not check_user_registration(user_id):
-            logger.error(f"Неавторизованный запрос для пользователя {user_id}")
-            return jsonify({"error": "Unauthorized"}), 401
-
-        # Получаем рекомендации от AI
-        analysis_result = analyze_remains(user_id, remains)
-        
-        if not analysis_result['success']:
-            return jsonify({'error': analysis_result['error']}), 500
-
-        return jsonify({
-            'success': True,
-            'recommendations': analysis_result['recommendations']
-        })
-
-    except Exception as e:
-        logger.error(f"Необработанная ошибка в analyze-remains: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-def analyze_remains(user_id, remains):
-    try:
-        # URL вебхука n8n
-        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
-        
-        # Подготавливаем данные для отправки
-        data = {
-            "user_id": user_id,
-            "remains": remains,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        # Отправляем запрос к n8n
-        response = requests.post(webhook_url, json=data)
-        
-        if response.status_code == 200:
-            try:
-                result = response.json()
-                if result.get('success'):
-                    return {
-                        'success': True,
-                        'recommendations': result.get('recommendations', [])
-                    }
-                else:
-                    logger.error(f"Ошибка в ответе n8n: {result.get('error')}")
-                    return {'success': False, 'error': result.get('error', 'Ошибка при анализе данных')}
-            except json.JSONDecodeError:
-                logger.error("Неверный формат ответа от n8n")
-                return {'success': False, 'error': 'Неверный формат ответа от сервера анализа'}
-        else:
-            logger.error(f"Ошибка HTTP при запросе к n8n: {response.status_code}")
-            return {'success': False, 'error': f'Ошибка сервера: {response.status_code}'}
-
-    except Exception as e:
-        logger.error(f"Ошибка при анализе остатков: {str(e)}")
-        return {'success': False, 'error': 'Ошибка при анализе данных'}
-
-def process_recommendations(user_id, recommendations):
-    try:
-        # Проверяем существование корзины пользователя
-        cart = get_user_cart(user_id)
-        if not cart:
-            cart = create_user_cart(user_id)
-
-        # Добавляем рекомендованные товары в корзину
-        for rec in recommendations:
-            add_to_cart(user_id, {
-                'name': rec['name'],
-                'quantity': rec['quantity']
-            })
-
-        return {
-            'success': True,
-            'message': 'Рекомендованные товары добавлены в корзину'
-        }
-
-    except Exception as e:
-        logger.error(f"Ошибка при обработке рекомендаций: {str(e)}")
-        return {
-            'success': False,
-            'error': 'Не удалось добавить товары в корзину'
-        }
-
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
@@ -491,6 +410,32 @@ def add_to_cart(user_id, item):
     except Exception as e:
         logger.error(f"Ошибка при добавлении в корзину: {str(e)}")
         return False
+
+def process_recommendations(user_id, recommendations):
+    try:
+        # Проверяем существование корзины пользователя
+        cart = get_user_cart(user_id)
+        if not cart:
+            cart = create_user_cart(user_id)
+
+        # Добавляем рекомендованные товары в корзину
+        for rec in recommendations:
+            add_to_cart(user_id, {
+                'name': rec['name'],
+                'quantity': rec['quantity']
+            })
+
+        return {
+            'success': True,
+            'message': 'Рекомендованные товары добавлены в корзину'
+        }
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке рекомендаций: {str(e)}")
+        return {
+            'success': False,
+            'error': 'Не удалось добавить товары в корзину'
+        }
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

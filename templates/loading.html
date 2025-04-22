@@ -50,13 +50,6 @@
             color: var(--tg-theme-hint-color, #aaaaaa);
             opacity: 0.7;
         }
-
-        .error-message {
-            color: #ff5555;
-            margin-top: 20px;
-            text-align: center;
-            padding: 0 20px;
-        }
     </style>
 </head>
 <body>
@@ -86,16 +79,9 @@
         // Функция для обработки ошибок
         function handleError(error) {
             console.error('Error:', error);
-            clearTimeout(timeoutId);
             tg.showAlert(error.message || 'Произошла ошибка при обработке данных');
-            setTimeout(goBack, 1000);
+            setTimeout(goBack, 2000);
         }
-
-        // Устанавливаем таймаут
-        const timeoutId = setTimeout(() => {
-            tg.showAlert('Превышено время ожидания ответа. Попробуйте еще раз.');
-            goBack();
-        }, 40000); // 40 секунд таймаут
 
         // Отправляем запрос на анализ данных
         window.onload = function() {
@@ -108,7 +94,7 @@
                 return;
             }
 
-            updateStatus('Анализируем ваши данные...', 'Отправляем данные на сервер');
+            updateStatus('Отправляем данные...', 'Пожалуйста, подождите');
             
             fetch('/api/analyze-remains', {
                 method: 'POST',
@@ -123,23 +109,18 @@
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(data => {
-                        throw new Error(data.error || 'Произошла ошибка при анализе данных');
+                        throw new Error(data.error || 'Произошла ошибка при отправке данных');
                     });
                 }
-                updateStatus('Обрабатываем результаты...', 'Получаем рекомендации');
                 return response.json();
             })
             .then(data => {
-                clearTimeout(timeoutId);
-                console.log('Received data:', data);
-                if (data.success && data.recommendations) {
-                    updateStatus('Готово!', 'Переходим в корзину...');
-                    localStorage.setItem('recommendedItems', JSON.stringify(data.recommendations));
-                    setTimeout(() => {
-                        window.location.href = `/cart?user_id=${userId}`;
-                    }, 1000);
+                console.log('Response:', data);
+                if (data.success) {
+                    updateStatus('Данные успешно отправлены!', 'Возвращаемся назад...');
+                    setTimeout(goBack, 2000);
                 } else {
-                    throw new Error(data.error || 'Не удалось получить рекомендации');
+                    throw new Error(data.error || 'Ошибка при отправке данных');
                 }
             })
             .catch(handleError);
