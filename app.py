@@ -223,6 +223,7 @@ def create_order():
             'date': current_time.strftime("%d.%m.%y %H:%M"),
             'userid': str(user_id),
             'username': user_data.get('organization', 'ООО Пивной мир'),
+            'org_ID': user_data.get('org_ID'),
             'Positions': positions
         }
 
