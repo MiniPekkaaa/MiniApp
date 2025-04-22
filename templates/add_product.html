@@ -174,7 +174,7 @@
                     <input type="number" id="quantity" value="1" min="1" class="quantity-input">
                     <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
                 </div>
-                <button onclick="addToRemainders()" class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color);">Добавить остаток</button>
+                <button onclick="addToRemainders()" class="button" style="margin-bottom: 20px;">Добавить остаток</button>
             </div>
 
             <button onclick="submitRemainders()" class="button submit-button">Далее</button>
@@ -359,13 +359,32 @@
                     remainders.push(product);
                 }
                 
+                // Добавляем новый остаток в список позиций
+                const container = document.getElementById('last_orders_products');
+                const productDiv = document.createElement('div');
+                productDiv.className = 'product-item';
+                
+                productDiv.innerHTML = `
+                    <div class="product-info">
+                        ${product.name}
+                    </div>
+                    <div class="product-controls">
+                        <input type="number" value="${quantity}" min="1" class="quantity-input" 
+                               onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
+                        <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
+                                class="delete-button">
+                            Удалить
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(productDiv);
+                
                 select.value = "";
                 document.getElementById('quantity').value = "1";
                 
                 // Показываем уведомление о добавлении остатка
                 tg.showAlert("Остаток добавлен");
-                // Перезагружаем список
-                loadLastOrdersProducts();
             }
         }
 
