@@ -436,29 +436,44 @@
 
             console.log('Отправляем остатки:', allRemainders);
 
-            // Подготавливаем данные для отправки
-            const data = {
-                telegram_id: userId,
-                remainders: allRemainders
-            };
+            // Получаем org_ID из последнего запроса
+            fetch(`/api/get-last-orders?user_id=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.org_ID) {
+                        throw new Error('org_ID не найден');
+                    }
 
-            // Отправляем данные на вебхук
-            fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
+                    // Подготавливаем данные для отправки
+                    const data_to_send = {
+                        telegram_id: userId,
+                        remainders: allRemainders,
+                        org_ID: data.org_ID
+                    };
 
-            // Очищаем список остатков
-            remainders.length = 0;
-            // Перезагружаем список позиций
-            loadLastOrdersProducts();
-            // Показываем уведомление
-            tg.showAlert("Остатки отправлены");
-            // Закрываем WebApp
-            tg.close();
+                    // Отправляем данные на вебхук
+                    return fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data_to_send)
+                    });
+                })
+                .then(() => {
+                    // Очищаем список остатков
+                    remainders.length = 0;
+                    // Перезагружаем список позиций
+                    loadLastOrdersProducts();
+                    // Показываем уведомление
+                    tg.showAlert("Остатки отправлены");
+                    // Закрываем WebApp
+                    tg.close();
+                })
+                .catch(error => {
+                    console.error('Ошибка при отправке остатков:', error);
+                    tg.showAlert('Ошибка при отправке остатков: ' + error.message);
+                });
         }
 
         // Запускаем проверку авторизации
