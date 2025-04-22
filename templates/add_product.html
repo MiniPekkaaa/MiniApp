@@ -521,16 +521,26 @@
                         localStorage.setItem('recommendation', responseData.generalRecommendation);
                     }
                     
-                    // Получаем текущую корзину или создаем новую
+                    // Формируем данные для корзины
                     let cart = [];
                     
                     // Добавляем позиции из рекомендаций в корзину
                     if (responseData.positions && Array.isArray(responseData.positions)) {
-                        cart = responseData.positions.map(position => ({
-                            name: position.name,
-                            quantity: position.quantity,
-                            price: 0 // Временно установим цену 0
-                        }));
+                        cart = responseData.positions.map(position => {
+                            // Находим информацию о товаре из select
+                            const productSelect = document.getElementById('product_select');
+                            const option = Array.from(productSelect.options).find(opt => 
+                                opt.dataset.name === position.name
+                            );
+                            
+                            return {
+                                name: position.name,
+                                quantity: position.quantity,
+                                price: option ? parseFloat(option.dataset.price) : 0,
+                                id: option ? option.value : null,
+                                legalEntity: option ? parseInt(option.dataset.legalEntity) : null
+                            };
+                        });
                     }
                     
                     // Сохраняем новую корзину
@@ -545,13 +555,16 @@
                     
                     console.log('Корзина обновлена, выполняем перенаправление...');
                     
-                    // Используем Telegram WebApp для перенаправления
-                    const redirectUrl = '/cart' + (userId ? `?user_id=${userId}` : '');
-                    if (tg && tg.WebApp) {
-                        tg.WebApp.openLink(redirectUrl);
-                    } else {
-                        window.location.href = redirectUrl;
-                    }
+                    // Формируем URL для перенаправления
+                    const baseUrl = window.location.origin;
+                    const cartPath = '/cart';
+                    const userIdParam = userId ? `?user_id=${userId}` : '';
+                    const redirectUrl = baseUrl + cartPath + userIdParam;
+                    
+                    console.log('URL для перенаправления:', redirectUrl);
+                    
+                    // Перенаправляем на страницу корзины
+                    window.location.href = redirectUrl;
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);

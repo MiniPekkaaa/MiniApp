@@ -161,24 +161,50 @@
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
                 console.log('Загрузка корзины...');
-                displayCart();
+                loadCart();
                 // Показываем контент через небольшую задержку
                 setTimeout(showContent, 300);
             }
         }
         
-        let cart = [];
-        try {
-            const savedCart = sessionStorage.getItem('cart');
-            console.log('Сохраненная корзина:', savedCart);
-            if (savedCart) {
-                cart = JSON.parse(savedCart);
+        function loadCart() {
+            console.log('Загрузка данных корзины из sessionStorage...');
+            try {
+                const savedCart = sessionStorage.getItem('cart');
+                console.log('Данные корзины из sessionStorage:', savedCart);
+                
+                if (savedCart) {
+                    cart = JSON.parse(savedCart);
+                    console.log('Распарсенные данные корзины:', cart);
+                    
+                    if (!Array.isArray(cart)) {
+                        console.error('Данные корзины не являются массивом');
+                        cart = [];
+                    }
+                } else {
+                    console.log('Корзина пуста');
+                    cart = [];
+                }
+                
+                // Проверяем рекомендацию
+                const recommendation = localStorage.getItem('recommendation');
+                if (recommendation) {
+                    console.log('Найдена рекомендация:', recommendation);
+                    showRecommendation(recommendation);
+                    localStorage.removeItem('recommendation');
+                }
+                
+                // Отображаем корзину
+                displayCart();
+                
+            } catch (error) {
+                console.error('Ошибка при загрузке корзины:', error);
+                cart = [];
+                displayCart();
             }
-        } catch (error) {
-            console.error('Ошибка при загрузке корзины:', error);
-            cart = [];
         }
         
+        let cart = [];
         let showAll = false;
         
         function displayCart() {
@@ -186,13 +212,14 @@
             const cartItems = document.getElementById('cart_items');
             const showMoreContainer = document.getElementById('show_more_container');
             const showMoreButton = document.getElementById('show_more_button');
+            
+            if (!cartItems) {
+                console.error('Элемент cart_items не найден');
+                return;
+            }
+            
             cartItems.innerHTML = '';
             let total = 0;
-            
-            if (!Array.isArray(cart)) {
-                console.error('Корзина не является массивом:', cart);
-                cart = [];
-            }
             
             const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
             
@@ -228,7 +255,10 @@
                 cartItems.appendChild(itemElement);
             });
             
-            document.getElementById('total_amount').textContent = total;
+            const totalElement = document.getElementById('total_amount');
+            if (totalElement) {
+                totalElement.textContent = total;
+            }
             
             // Проверяем корзину для рекомендаций
             if (cart.length > 0) {
