@@ -522,39 +522,36 @@
                     }
                     
                     // Получаем текущую корзину или создаем новую
-                    let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+                    let cart = [];
                     
                     // Добавляем позиции из рекомендаций в корзину
                     if (responseData.positions && Array.isArray(responseData.positions)) {
-                        responseData.positions.forEach(position => {
-                            // Проверяем, есть ли такой товар уже в корзине
-                            const existingItem = cart.find(item => item.name === position.name);
-                            
-                            if (existingItem) {
-                                // Если товар уже есть, обновляем количество
-                                existingItem.quantity = position.quantity;
-                            } else {
-                                // Если товара нет, добавляем новый
-                                cart.push({
-                                    name: position.name,
-                                    quantity: position.quantity,
-                                    price: 0 // Временно установим цену 0
-                                });
-                            }
-                        });
-                        
-                        // Сохраняем обновленную корзину
-                        sessionStorage.setItem('cart', JSON.stringify(cart));
+                        cart = responseData.positions.map(position => ({
+                            name: position.name,
+                            quantity: position.quantity,
+                            price: 0 // Временно установим цену 0
+                        }));
                     }
+                    
+                    // Сохраняем новую корзину
+                    console.log('Сохраняем корзину:', cart);
+                    sessionStorage.setItem('cart', JSON.stringify(cart));
+                    
+                    // Очищаем remainders
+                    remainders.length = 0;
+                    
+                    // Скрываем лоадер
+                    hideRecommendationLoader();
                     
                     console.log('Корзина обновлена, выполняем перенаправление...');
                     
-                    // Принудительное перенаправление с небольшой задержкой
-                    setTimeout(() => {
-                        const redirectUrl = '/cart' + (userId ? `?user_id=${userId}` : '');
-                        console.log('Перенаправление на:', redirectUrl);
+                    // Используем Telegram WebApp для перенаправления
+                    const redirectUrl = '/cart' + (userId ? `?user_id=${userId}` : '');
+                    if (tg && tg.WebApp) {
+                        tg.WebApp.openLink(redirectUrl);
+                    } else {
                         window.location.href = redirectUrl;
-                    }, 100);
+                    }
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);

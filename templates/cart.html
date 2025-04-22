@@ -155,30 +155,44 @@
         }
 
         function checkAuthAndRedirect() {
+            console.log('Проверка авторизации...');
             if (!window.location.search.includes('user_id') && userId) {
+                console.log('Перенаправление с user_id...');
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
-                // Проверяем наличие рекомендации в localStorage
-                const recommendation = localStorage.getItem('recommendation');
-                if (recommendation) {
-                    showRecommendation(recommendation);
-                    // Удаляем рекомендацию после показа
-                    localStorage.removeItem('recommendation');
-                }
+                console.log('Загрузка корзины...');
+                displayCart();
                 // Показываем контент через небольшую задержку
                 setTimeout(showContent, 300);
             }
         }
         
-        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        let cart = [];
+        try {
+            const savedCart = sessionStorage.getItem('cart');
+            console.log('Сохраненная корзина:', savedCart);
+            if (savedCart) {
+                cart = JSON.parse(savedCart);
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке корзины:', error);
+            cart = [];
+        }
+        
         let showAll = false;
         
         function displayCart() {
+            console.log('Отображение корзины:', cart);
             const cartItems = document.getElementById('cart_items');
             const showMoreContainer = document.getElementById('show_more_container');
             const showMoreButton = document.getElementById('show_more_button');
             cartItems.innerHTML = '';
             let total = 0;
+            
+            if (!Array.isArray(cart)) {
+                console.error('Корзина не является массивом:', cart);
+                cart = [];
+            }
             
             const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
             
@@ -192,17 +206,17 @@
             cart.forEach((item, index) => {
                 if (index >= itemsToShow) return;
                 
-                const itemTotal = item.price * item.quantity;
+                const itemTotal = (item.price || 0) * (item.quantity || 0);
                 total += itemTotal;
                 
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
                     <div class="cart-item-info">
-                        <h3 class="cart-item-name">${item.name}</h3>
+                        <h3 class="cart-item-name">${item.name || 'Без названия'}</h3>
                         <div class="cart-item-details">
-                            <p>Количество: ${item.quantity}</p>
-                            <p>Цена: ${item.price}₽</p>
+                            <p>Количество: ${item.quantity || 0}</p>
+                            <p>Цена: ${item.price || 0}₽</p>
                             <p>Сумма: ${itemTotal}₽</p>
                         </div>
                     </div>
@@ -217,7 +231,9 @@
             document.getElementById('total_amount').textContent = total;
             
             // Проверяем корзину для рекомендаций
-            checkCartForRecommendations(cart);
+            if (cart.length > 0) {
+                checkCartForRecommendations(cart);
+            }
         }
         
         function toggleShowAll() {
@@ -299,7 +315,6 @@
         
         // Инициализация при загрузке страницы
         checkAuthAndRedirect();
-        displayCart();
     </script>
 </body>
 </html> 
