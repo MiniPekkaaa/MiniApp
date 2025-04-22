@@ -405,8 +405,6 @@
                 }))
             };
 
-            console.log("Отправляем данные:", data);
-
             // Отправляем данные на вебхук
             fetch('https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
                 method: 'POST',
@@ -414,36 +412,16 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(data)
-            })
-            .then(response => {
-                console.log("Получен ответ:", response);
-                // Проверяем статус ответа
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                // Пробуем распарсить JSON, но если не получится, просто вернем успех
-                return response.text().then(text => {
-                    try {
-                        return JSON.parse(text);
-                    } catch (e) {
-                        return { success: true };
-                    }
-                });
-            })
-            .then(result => {
-                console.log("Остатки отправлены успешно:", result);
-                tg.showAlert("Остатки успешно отправлены");
-                // Очищаем список остатков
-                remainders.length = 0;
-                // Перезагружаем список позиций
-                loadLastOrdersProducts();
-                // Закрываем WebApp
-                tg.close();
-            })
-            .catch(error => {
-                console.error("Ошибка при отправке остатков:", error);
-                tg.showAlert("Ошибка при отправке остатков. Попробуйте еще раз.");
             });
+
+            // Очищаем список остатков
+            remainders.length = 0;
+            // Перезагружаем список позиций
+            loadLastOrdersProducts();
+            // Показываем уведомление
+            tg.showAlert("Остатки отправлены");
+            // Закрываем WebApp
+            tg.close();
         }
 
         // Запускаем проверку авторизации
