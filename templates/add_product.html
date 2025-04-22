@@ -396,12 +396,12 @@
 
             // Подготавливаем данные для отправки
             const data = {
-                telegram_id: userId,
+                telegram_id: userId.toString(), // преобразуем в строку
                 remainders: remainders.map(item => ({
                     beer_id: item.id,
                     name: item.name,
                     legal_entity: item.legalEntity,
-                    quantity: item.quantity
+                    quantity: parseInt(item.quantity)
                 }))
             };
 
@@ -412,7 +412,10 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Origin': 'https://beerminiapp.stage.3r.agency'
                 },
+                mode: 'cors',
                 body: JSON.stringify(data)
             })
             .then(response => {
@@ -420,6 +423,11 @@
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
+                return response.text().then(text => {
+                    console.log('Тело ответа:', text);
+                });
+            })
+            .then(() => {
                 // Очищаем список остатков
                 remainders.length = 0;
                 // Перезагружаем список позиций
