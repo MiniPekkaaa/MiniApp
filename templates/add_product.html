@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Добавить остатки</title>
+    <title>Ввод остатков</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
@@ -14,31 +16,26 @@
 
         .container {
             padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
         }
 
         .product-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
+            margin-bottom: 20px;
         }
 
         .product-item {
             background-color: var(--tg-theme-secondary-bg-color, #2f2f2f);
-            margin-bottom: 10px;
             padding: 15px;
+            margin-bottom: 10px;
             border-radius: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
 
         .product-info {
-            flex-grow: 1;
-        }
-
-        .product-name {
-            font-size: 16px;
-            margin-bottom: 5px;
+            width: 100%;
+            margin-bottom: 12px;
+            color: var(--tg-theme-text-color, #ffffff);
+            font-size: 15px;
         }
 
         .product-details {
@@ -48,44 +45,58 @@
 
         .quantity-input {
             width: 60px;
-            padding: 5px;
-            margin: 0 10px;
-            background-color: var(--tg-theme-bg-color, #1f1f1f);
-            border: 1px solid var(--tg-theme-hint-color, #aaaaaa);
-            color: var(--tg-theme-text-color, #ffffff);
-            border-radius: 4px;
-        }
-
-        .add-button {
-            background-color: var(--tg-theme-button-color, #3498db);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .analyze-button {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: var(--tg-theme-button-color, #3498db);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border: none;
-            padding: 12px 24px;
+            text-align: center;
+            padding: 8px;
             border-radius: 8px;
-            font-size: 16px;
+            background-color: var(--tg-theme-bg-color, #1f1f1f);
+            color: var(--tg-theme-text-color, #ffffff);
+            border: 1px solid var(--tg-theme-hint-color, #aaaaaa);
+            font-size: 14px;
+        }
+
+        .button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            background-color: var(--tg-theme-button-color, #3498db);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
             cursor: pointer;
-            width: 90%;
-            max-width: 400px;
+            font-size: 16px;
+            margin-bottom: 10px;
         }
 
         #remainsContainer {
-            margin: 20px;
-            padding: 15px;
             background-color: var(--tg-theme-secondary-bg-color, #2f2f2f);
+            padding: 15px;
             border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        #remainsContainer h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: var(--tg-theme-text-color, #ffffff);
+        }
+
+        .remains-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .remains-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .delete-button {
+            background-color: var(--tg-theme-button-color, #3498db);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -93,29 +104,27 @@
     <div class="container">
         <div id="remainsContainer">
             <h3>Текущие остатки:</h3>
-            <p style="color: var(--tg-theme-hint-color, #aaaaaa);">Нет добавленных остатков</p>
         </div>
 
-        <ul class="product-list">
+        <div class="product-list">
             {% for product in products %}
-            <li class="product-item">
+            <div class="product-item">
                 <div class="product-info">
-                    <div class="product-name">{{ product.name }}</div>
+                    {{ product.name }}
                     <div class="product-details">{{ product.volume }} л.</div>
                 </div>
-                <div>
+                <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="number" class="quantity-input" id="quantity-{{ product.id }}" min="1" value="1">
-                    <button class="add-button" onclick='addToRemains({{ product|tojson }}, document.getElementById("quantity-{{ product.id }}").value)'>
+                    <button class="delete-button" onclick='addToRemains({{ product|tojson }}, document.getElementById("quantity-{{ product.id }}").value)'>
                         Добавить
                     </button>
                 </div>
-            </li>
+            </div>
             {% endfor %}
-        </ul>
+        </div>
 
-        <button class="analyze-button" onclick="analyzeRemains()">
-            Анализировать остатки
-        </button>
+        <button class="button" onclick="analyzeRemains()">Анализировать остатки</button>
+        <button class="button" onclick="window.location.href='/'">Назад</button>
     </div>
 
     <script>
@@ -145,38 +154,24 @@
             const remainsData = JSON.parse(localStorage.getItem('remainsData') || '[]');
             const container = document.getElementById('remainsContainer');
             
-            container.innerHTML = '<h3>Текущие остатки:</h3>';
+            let html = '<h3>Текущие остатки:</h3>';
             
             if (remainsData.length === 0) {
-                container.innerHTML += '<p style="color: var(--tg-theme-hint-color, #aaaaaa);">Нет добавленных остатков</p>';
-                return;
+                html += '<p style="color: var(--tg-theme-hint-color, #aaaaaa);">Нет добавленных остатков</p>';
+            } else {
+                remainsData.forEach(item => {
+                    html += `
+                        <div class="remains-item">
+                            <span>${item.name}: ${item.quantity} шт.</span>
+                            <button class="delete-button" onclick="removeFromRemains('${item.name}')">
+                                Удалить
+                            </button>
+                        </div>
+                    `;
+                });
             }
             
-            const list = document.createElement('ul');
-            list.style.listStyle = 'none';
-            list.style.padding = '0';
-            
-            remainsData.forEach(item => {
-                const li = document.createElement('li');
-                li.style.marginBottom = '10px';
-                li.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>${item.name}: ${item.quantity} шт.</span>
-                        <button onclick="removeFromRemains('${item.name}')" 
-                                style="background: var(--tg-theme-button-color, #3498db); 
-                                       color: var(--tg-theme-button-text-color, #ffffff);
-                                       border: none;
-                                       padding: 5px 10px;
-                                       border-radius: 4px;
-                                       cursor: pointer;">
-                            Удалить
-                        </button>
-                    </div>
-                `;
-                list.appendChild(li);
-            });
-            
-            container.appendChild(list);
+            container.innerHTML = html;
         }
 
         function removeFromRemains(productName) {
