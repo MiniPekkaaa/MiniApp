@@ -395,8 +395,8 @@
             }
 
             // Подготавливаем данные для отправки
-            const data = {
-                telegram_id: userId.toString(), // преобразуем в строку
+            const requestData = {
+                telegram_id: userId.toString(),
                 remainders: remainders.map(item => ({
                     beer_id: item.id,
                     name: item.name,
@@ -405,29 +405,29 @@
                 }))
             };
 
-            console.log('Отправляем данные:', data);
+            // Преобразуем данные в URL-encoded строку
+            const params = new URLSearchParams();
+            params.append('telegram_id', requestData.telegram_id);
+            params.append('remainders', JSON.stringify(requestData.remainders));
+
+            console.log('Отправляем данные:', Object.fromEntries(params));
 
             // Отправляем данные на вебхук
             fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Origin': 'https://beerminiapp.stage.3r.agency'
+                    'Content-Type': 'application/x-www-form-urlencoded'
                 },
-                mode: 'cors',
-                body: JSON.stringify(data)
+                body: params
             })
             .then(response => {
-                console.log('Ответ сервера:', response.status, response.statusText);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.text().then(text => {
-                    console.log('Тело ответа:', text);
-                });
+                console.log('Статус ответа:', response.status);
+                console.log('Заголовки ответа:', response.headers);
+                return response.text();
             })
-            .then(() => {
+            .then(text => {
+                console.log('Тело ответа:', text);
+                
                 // Очищаем список остатков
                 remainders.length = 0;
                 // Перезагружаем список позиций
