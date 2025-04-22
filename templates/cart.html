@@ -235,32 +235,19 @@
         
         function placeOrder() {
             if (cart.length === 0) {
-                tg.showAlert("Корзина пуста");
+                showNotification("Корзина пуста");
                 return;
             }
 
-            // Получаем идентификаторы и цены товаров из select
-            const selectElement = document.getElementById('product_select');
-            const productsMap = {};
-            Array.from(selectElement.options).forEach(option => {
-                if (option.dataset.name) {
-                    productsMap[option.dataset.name] = {
-                        id: option.value,
-                        price: parseFloat(option.dataset.price) || 0
-                    };
-                }
-            });
+            // Проверяем наличие всех необходимых данных
+            const orderItems = cart.map(item => ({
+                id: item.id,
+                name: item.name,
+                quantity: parseInt(item.quantity),
+                price: parseFloat(item.price)
+            }));
 
-            // Формируем items с id для каждой позиции
-            const orderItems = cart.map(item => {
-                const productInfo = productsMap[item.name] || {};
-                return {
-                    id: productInfo.id, // Добавляем id товара
-                    name: item.name,
-                    quantity: parseInt(item.quantity),
-                    price: parseFloat(item.price)
-                };
-            });
+            console.log('Отправляем заказ:', orderItems);
 
             // Отправляем запрос на создание заказа
             fetch('/api/create-order', {
@@ -273,7 +260,12 @@
                     items: orderItems
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(result => {
                 if (result.success) {
                     // Очищаем корзину

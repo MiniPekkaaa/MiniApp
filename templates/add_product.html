@@ -521,6 +521,7 @@
                                 .find(opt => opt.dataset.name === position.name);
                             
                             return {
+                                id: option ? option.value : '',
                                 name: position.name,
                                 quantity: parseInt(position.quantity) || 0,
                                 price: option ? parseFloat(option.dataset.price) || 0 : 0
