@@ -83,6 +83,18 @@
             if (!window.location.search.includes('user_id') && userId) {
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
+                // Проверяем рекомендацию
+                const recommendation = localStorage.getItem('recommendation');
+                if (recommendation) {
+                    tg.showPopup({
+                        title: 'Рекомендация',
+                        message: recommendation,
+                        buttons: [{
+                            type: 'ok'
+                        }]
+                    });
+                    localStorage.removeItem('recommendation');
+                }
                 // Показываем контент через небольшую задержку
                 setTimeout(showContent, 300);
             }
