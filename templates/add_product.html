@@ -389,6 +389,10 @@
         }
 
         function submitRemainders() {
+            // Показываем загрузочный экран
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').classList.add('hidden');
+
             // Собираем все позиции из списка
             const container = document.getElementById('last_orders_products');
             const items = container.querySelectorAll('.product-item');
@@ -470,80 +474,97 @@
                     if (!response.ok) {
                         if (response.status === 502) {
                             // В случае 502 ошибки просто переходим в корзину с текущими данными
-                            const cartItems = allRemainders.map(item => ({
-                                id: item.id,
-                                name: item.name,
-                                quantity: item.quantity,
-                                price: 0
-                            }));
-                            sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
-                            return;
+                            return processCartItems(allRemainders);
                         }
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
                     }
-                    return response.json();
+                    
+                    return response.text().then(text => {
+                        try {
+                            return text ? JSON.parse(text) : {};
+                        } catch (e) {
+                            console.warn('Не удалось распарсить ответ как JSON:', text);
+                            return {};
+                        }
+                    });
                 })
                 .then(responseData => {
+                    if (!responseData) {
+                        return processCartItems(allRemainders);
+                    }
+
                     // Обрабатываем ответ как массив
                     const recommendation = Array.isArray(responseData) ? responseData[0] : responseData;
 
                     if (!recommendation || !recommendation.positions) {
-                        // Если нет данных, используем текущие remainders
-                        const cartItems = allRemainders.map(item => ({
-                            id: item.id,
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: 0
-                        }));
-                        sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    } else {
-                        // Если есть данные от n8n, используем их
-                        if (recommendation.generalRecommendation) {
-                            localStorage.setItem('recommendation', recommendation.generalRecommendation);
-                        }
-
-                        const cartItems = recommendation.positions.map(position => {
-                            const option = Array.from(document.getElementById('product_select').options)
-                                .find(opt => opt.dataset.name === position.name);
-                            
-                            return {
-                                id: option ? option.value : '',
-                                name: position.name,
-                                quantity: parseInt(position.quantity) || 0,
-                                price: option ? parseFloat(option.dataset.price) || 0 : 0
-                            };
-                        });
-
-                        sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                        return processCartItems(allRemainders);
                     }
 
-                    // Очищаем remainders
-                    remainders.length = 0;
+                    // Сохраняем рекомендацию
+                    if (recommendation.generalRecommendation) {
+                        localStorage.setItem('recommendation', recommendation.generalRecommendation);
+                    }
 
-                    // Перенаправляем в корзину
+                    // Получаем цены из select элемента
+                    const selectElement = document.getElementById('product_select');
+                    const pricesMap = {};
+                    Array.from(selectElement.options).forEach(option => {
+                        if (option.dataset.name) {
+                            pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
+                        }
+                    });
+
+                    // Создаем массив для корзины с ценами из select
+                    const cartItems = recommendation.positions.map(position => {
+                        const price = pricesMap[position.name] || 0;
+                        const quantity = parseInt(position.quantity);
+                        
+                        console.log(`Добавляем позицию: ${position.name}, количество из n8n: ${quantity}, цена: ${price}`);
+                        
+                        return {
+                            name: position.name,
+                            quantity: quantity,
+                            price: price
+                        };
+                    });
+
+                    console.log('Итоговая корзина:', cartItems);
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    remainders.length = 0;
                     window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
-                    
-                    // В случае любой ошибки сохраняем текущие remainders и переходим в корзину
-                    const cartItems = allRemainders.map(item => ({
-                        id: item.id,
-                        name: item.name,
-                        quantity: item.quantity,
-                        price: 0
-                    }));
-                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    
-                    // Показываем ошибку
-                    tg.showAlert('Внимание: ' + error.message + '. Данные сохранены локально.');
-                    
-                    // Перенаправляем в корзину
-                    setTimeout(() => {
-                        window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
-                    }, 1000);
+                    return processCartItems(allRemainders);
+                })
+                .finally(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').classList.remove('hidden');
                 });
+        }
+
+        // Функция для обработки элементов корзины при ошибке
+        function processCartItems(items) {
+            // Получаем цены из select элемента
+            const selectElement = document.getElementById('product_select');
+            const pricesMap = {};
+            Array.from(selectElement.options).forEach(option => {
+                if (option.dataset.name) {
+                    pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
+                }
+            });
+
+            // Формируем элементы корзины
+            const cartItems = items.map(item => ({
+                name: item.name,
+                quantity: parseInt(item.quantity) || 0,
+                price: parseFloat(pricesMap[item.name] || 0)
+            }));
+
+            console.log('Сформированные элементы корзины (при ошибке):', cartItems);
+            sessionStorage.setItem('cart', JSON.stringify(cartItems));
+            remainders.length = 0;
+            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
         }
 
         // Запускаем проверку авторизации
