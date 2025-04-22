@@ -270,9 +270,16 @@ def get_last_orders():
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Получаем последние 3 заказа пользователя, отсортированные по дате
+        # Получаем данные пользователя из Redis для получения org_ID
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 400
+
+        # Получаем последние 3 заказа организации, отсортированные по дате
         orders = list(mongo.cx.Pivo.Orders.find(
-            {"userid": str(user_id)},
+            {"org_ID": org_id},
             {"Positions": 1, "_id": 0}
         ).sort("date", -1).limit(3))
 
@@ -292,7 +299,15 @@ def get_last_orders():
 
         # Преобразуем в список
         result = list(unique_positions.values())
-        return jsonify({"success": True, "positions": result})
+        
+        # Добавляем org_ID в ответ для n8n
+        response_data = {
+            "success": True,
+            "positions": result,
+            "org_ID": org_id  # Добавляем org_ID в ответ
+        }
+        
+        return jsonify(response_data)
 
     except Exception as e:
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
