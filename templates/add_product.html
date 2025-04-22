@@ -174,11 +174,11 @@
                     <input type="number" id="quantity" value="1" min="1" class="quantity-input">
                     <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
                 </div>
-                <button onclick="addToRemainders()" class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); margin-top: 10px;">Добавить остаток</button>
+                <button onclick="addToRemainders()" class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color);">Добавить остаток</button>
             </div>
 
-            <button onclick="submitRemainders()" class="button" style="background-color: #4CAF50; color: white; margin-top: 20px;">Далее</button>
-            <button onclick="window.location.href='/'" class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color);">Назад</button>
+            <button onclick="submitRemainders()" class="button submit-button">Далее</button>
+            <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
     </div>
 
@@ -233,31 +233,12 @@
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="number" value="1" min="1" class="quantity-input" 
-                                           onchange="updateRemainderQuantity(${position.Beer_ID}, ${position.Legal_Entity}, this.value)">
-                                    <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
-                                            class="delete-button">
-                                        Удалить
+                                    <input type="number" value="1" min="1" class="quantity-input">
+                                    <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value, this)" 
+                                            class="button" style="background-color: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); margin: 0 5px;">
+                                        Добавить остаток
                                     </button>
-                                </div>
-                            `;
-                            
-                            container.appendChild(productDiv);
-                        });
-
-                        // Добавляем остатки, которые уже были добавлены
-                        remainders.forEach(remainder => {
-                            const productDiv = document.createElement('div');
-                            productDiv.className = 'product-item';
-                            
-                            productDiv.innerHTML = `
-                                <div class="product-info">
-                                    ${remainder.name}
-                                </div>
-                                <div class="product-controls">
-                                    <input type="number" value="${remainder.quantity}" min="1" class="quantity-input" 
-                                           onchange="updateRemainderQuantity('${remainder.id}', ${remainder.legalEntity}, this.value)">
-                                    <button onclick="deleteRemainder('${remainder.id}', ${remainder.legalEntity}, this.closest('.product-item'))"
+                                    <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
                                     </button>
@@ -320,7 +301,7 @@
             }
         }
 
-        function addLastOrderProduct(beerId, beerName, legalEntity, quantity, parentElement) {
+        function addLastOrderProduct(beerId, beerName, legalEntity, quantity, buttonElement) {
             const product = {
                 id: beerId.toString(),
                 name: beerName,
@@ -341,8 +322,9 @@
             
             // Показываем уведомление о добавлении остатка
             tg.showAlert("Остаток добавлен");
-            // Перезагружаем список
-            loadLastOrdersProducts();
+            // Делаем кнопку серой
+            buttonElement.classList.add('button-disabled');
+            buttonElement.disabled = true;
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
