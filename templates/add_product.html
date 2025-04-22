@@ -405,23 +405,34 @@
                 }))
             };
 
+            console.log('Отправляем данные:', data);
+
             // Отправляем данные на вебхук
-            fetch('https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
+            fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(data)
+            })
+            .then(response => {
+                console.log('Ответ сервера:', response.status, response.statusText);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                // Очищаем список остатков
+                remainders.length = 0;
+                // Перезагружаем список позиций
+                loadLastOrdersProducts();
+                // Показываем уведомление
+                tg.showAlert("Остатки отправлены");
+                // Закрываем WebApp
+                tg.close();
+            })
+            .catch(error => {
+                console.error('Ошибка при отправке:', error);
+                tg.showAlert("Ошибка при отправке остатков: " + error.message);
             });
-
-            // Очищаем список остатков
-            remainders.length = 0;
-            // Перезагружаем список позиций
-            loadLastOrdersProducts();
-            // Показываем уведомление
-            tg.showAlert("Остатки отправлены");
-            // Закрываем WebApp
-            tg.close();
         }
 
         // Запускаем проверку авторизации
