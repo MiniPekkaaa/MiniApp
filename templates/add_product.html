@@ -138,12 +138,43 @@
             color: white;
             font-weight: bold;
         }
+
+        .recommendation-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--tg-theme-bg-color);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .recommendation-loader .loader {
+            margin-bottom: 20px;
+        }
+
+        .recommendation-text {
+            color: var(--tg-theme-text-color);
+            font-size: 16px;
+            text-align: center;
+            padding: 0 20px;
+        }
     </style>
 </head>
 <body>
     <!-- Экран загрузки -->
     <div id="loading" class="container" style="text-align: center; padding: 20px;">
         <div class="loader"></div>
+    </div>
+
+    <!-- Добавляем экран загрузки рекомендации -->
+    <div id="recommendation-loader" class="recommendation-loader">
+        <div class="loader"></div>
+        <div class="recommendation-text">Ваша персональная рекомендация создается...</div>
     </div>
 
     <!-- Основной контент -->
@@ -388,6 +419,14 @@
             }
         }
 
+        function showRecommendationLoader() {
+            document.getElementById('recommendation-loader').style.display = 'flex';
+        }
+
+        function hideRecommendationLoader() {
+            document.getElementById('recommendation-loader').style.display = 'none';
+        }
+
         function submitRemainders() {
             // Собираем все позиции из списка
             const container = document.getElementById('last_orders_products');
@@ -399,7 +438,6 @@
                 const name = item.querySelector('.product-info').textContent.trim();
                 const quantity = parseInt(item.querySelector('.quantity-input').value);
                 const deleteButton = item.querySelector('.delete-button');
-                // Получаем beer_id и legal_entity из атрибутов кнопки удаления
                 const onclick = deleteButton.getAttribute('onclick');
                 const matches = onclick.match(/deleteRemainder\((\d+),\s*(\d+)/);
                 if (matches) {
@@ -436,6 +474,9 @@
 
             console.log('Отправляем остатки:', allRemainders);
 
+            // Показываем экран загрузки
+            showRecommendationLoader();
+
             // Сначала получаем данные пользователя
             fetch(`/api/get-last-orders?user_id=${userId}`)
                 .then(response => {
@@ -449,7 +490,6 @@
                         throw new Error('org_ID не найден');
                     }
 
-                    // Подготавливаем данные для отправки в нужном порядке
                     const data_to_send = {
                         telegram_id: userId,
                         org_ID: data.org_ID,
@@ -458,7 +498,6 @@
 
                     console.log('Отправляем данные в n8n:', data_to_send);
 
-                    // Отправляем данные на вебхук
                     return fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
                         method: 'POST',
                         headers: {
@@ -472,20 +511,23 @@
                     if (!response.ok) {
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
                     }
-                    return response.text();
+                    return response.json(); // Теперь ожидаем JSON ответ
                 })
-                .then(() => {
+                .then(responseData => {
+                    // Сохраняем рекомендацию в localStorage
+                    if (responseData.generalRecommendation) {
+                        localStorage.setItem('recommendation', responseData.generalRecommendation);
+                    }
+                    
                     // Очищаем список остатков
                     remainders.length = 0;
-                    // Перезагружаем список позиций
-                    loadLastOrdersProducts();
-                    // Показываем уведомление
-                    tg.showAlert("Остатки отправлены");
-                    // Закрываем WebApp
-                    tg.close();
+                    
+                    // Перенаправляем в корзину
+                    window.location.href = '/cart';
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
+                    hideRecommendationLoader();
                     tg.showAlert('Ошибка при отправке остатков: ' + error.message);
                 });
         }
