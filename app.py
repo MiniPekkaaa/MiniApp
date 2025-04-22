@@ -45,6 +45,9 @@ def analyze_remains_api():
         user_id = data.get('userId')
         remains = data.get('remains')
 
+        logger.debug(f"Получен запрос на анализ остатков. User ID: {user_id}")
+        logger.debug(f"Данные остатков: {remains}")
+
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
 
@@ -52,7 +55,7 @@ def analyze_remains_api():
             return jsonify({"error": "Отсутствуют данные об остатках"}), 400
 
         # Отправляем данные на вебхук n8n
-        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
+        webhook_url = "https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa"
         
         webhook_data = {
             "user_id": user_id,
@@ -60,8 +63,13 @@ def analyze_remains_api():
             "timestamp": datetime.utcnow().isoformat()
         }
 
+        logger.debug(f"Отправляем данные на вебхук: {webhook_data}")
+
         try:
             response = requests.post(webhook_url, json=webhook_data)
+            logger.debug(f"Ответ от вебхука: {response.status_code}")
+            logger.debug(f"Тело ответа: {response.text}")
+            
             if response.ok:
                 return jsonify({"success": True, "message": "Данные успешно отправлены"})
             else:
@@ -354,23 +362,24 @@ def analyze():
         if not user_id or not remains:
             return jsonify({'error': 'Отсутствуют необходимые данные'}), 400
 
-        # Получаем рекомендации от AI
-        analysis_result = analyze_remains(user_id, remains)
+        # Отправляем данные на вебхук
+        webhook_url = "https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa"
         
-        if not analysis_result['success']:
-            return jsonify({'error': analysis_result['error']}), 500
+        webhook_data = {
+            "user_id": user_id,
+            "remains": remains,
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
-        # Обрабатываем рекомендации и добавляем товары в корзину
-        process_result = process_recommendations(user_id, analysis_result['recommendations'])
-        
-        if not process_result['success']:
-            return jsonify({'error': process_result['error']}), 500
-
-        return jsonify({
-            'success': True,
-            'recommendations': analysis_result['recommendations'],
-            'message': process_result['message']
-        })
+        try:
+            response = requests.post(webhook_url, json=webhook_data)
+            if response.ok:
+                return jsonify({"success": True, "message": "Данные успешно отправлены"})
+            else:
+                return jsonify({"error": "Ошибка при отправке данных"}), 500
+        except Exception as e:
+            logger.error(f"Ошибка при отправке на вебхук: {str(e)}")
+            return jsonify({"error": "Ошибка при отправке данных"}), 500
 
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса: {str(e)}")
