@@ -26,6 +26,26 @@
             display: none;
         }
 
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .notification.show {
+            opacity: 1;
+        }
+
         .button-delete {
             background-color: #ff4444 !important;
             color: white !important;
@@ -44,6 +64,11 @@
     </style>
 </head>
 <body>
+    <!-- Уведомление -->
+    <div id="notification" class="notification hidden">
+        <span id="notification-text"></span>
+    </div>
+
     <!-- Экран загрузки -->
     <div id="loading" class="container" style="text-align: center; padding: 20px;">
         <div class="loader"></div>
@@ -74,6 +99,23 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
+        function showNotification(message, duration = 3000) {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notification-text');
+            notificationText.textContent = message;
+            notification.classList.remove('hidden');
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    notification.classList.add('hidden');
+                }, 300);
+            }, duration);
+        }
+
         function showContent() {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
@@ -86,13 +128,7 @@
                 // Проверяем рекомендацию
                 const recommendation = localStorage.getItem('recommendation');
                 if (recommendation) {
-                    tg.showPopup({
-                        title: 'Рекомендация',
-                        message: recommendation,
-                        buttons: [{
-                            type: 'ok'
-                        }]
-                    });
+                    showNotification(recommendation);
                     localStorage.removeItem('recommendation');
                 }
                 // Показываем контент через небольшую задержку
@@ -100,7 +136,23 @@
             }
         }
         
-        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        let cart = [];
+        try {
+            const savedCart = sessionStorage.getItem('cart');
+            if (savedCart) {
+                cart = JSON.parse(savedCart);
+                // Проверяем и форматируем цены
+                cart = cart.map(item => ({
+                    ...item,
+                    price: parseFloat(item.price) || 0,
+                    quantity: parseInt(item.quantity) || 0
+                }));
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке корзины:', error);
+            cart = [];
+        }
+        
         let showAll = false;
         
         function displayCart() {
@@ -109,6 +161,13 @@
             const showMoreButton = document.getElementById('show_more_button');
             cartItems.innerHTML = '';
             let total = 0;
+            
+            if (!Array.isArray(cart) || cart.length === 0) {
+                cartItems.innerHTML = '<p>Корзина пуста</p>';
+                showMoreContainer.style.display = 'none';
+                document.getElementById('total_amount').textContent = '0';
+                return;
+            }
             
             const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
             
@@ -122,7 +181,7 @@
             cart.forEach((item, index) => {
                 if (index >= itemsToShow) return;
                 
-                const itemTotal = item.price * item.quantity;
+                const itemTotal = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 0);
                 total += itemTotal;
                 
                 const itemElement = document.createElement('div');

@@ -512,14 +512,26 @@
                     .then(pricesData => {
                         // Создаем массив для корзины с ценами из MongoDB
                         const cartItems = responseData.positions.map(position => {
-                            const productPrice = pricesData[position.name] || 0;
+                            // Получаем цену из select элемента, если не найдена в MongoDB
+                            let productPrice = pricesData[position.name];
+                            if (productPrice === undefined) {
+                                const option = Array.from(document.getElementById('product_select').options)
+                                    .find(opt => opt.dataset.name === position.name);
+                                if (option) {
+                                    productPrice = parseFloat(option.dataset.price) || 0;
+                                } else {
+                                    productPrice = 0;
+                                }
+                            }
+                            
                             return {
                                 name: position.name,
-                                quantity: position.quantity || 0,
-                                price: productPrice
+                                quantity: parseInt(position.quantity) || 0,
+                                price: parseFloat(productPrice) || 0
                             };
                         });
 
+                        console.log('Сформированные элементы корзины:', cartItems);
                         sessionStorage.setItem('cart', JSON.stringify(cartItems));
                         remainders.length = 0;
                         window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
@@ -538,38 +550,26 @@
 
         // Функция для обработки элементов корзины
         function processCartItems(items) {
-            // Получаем цены для всех позиций из MongoDB
-            return fetch('/api/get-products-prices', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    positions: items.map(item => item.name)
-                })
-            })
-            .then(response => response.json())
-            .then(pricesData => {
-                const cartItems = items.map(item => ({
-                    name: item.name,
-                    quantity: item.quantity || 0,
-                    price: pricesData[item.name] || 0
-                }));
-
-                sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                remainders.length = 0;
-                window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
-            })
-            .catch(error => {
-                console.error('Ошибка при получении цен:', error);
-                const cartItems = items.map(item => ({
-                    name: item.name,
-                    quantity: item.quantity || 0,
-                    price: 0
-                }));
-                sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+            // Получаем цены из select элемента
+            const selectElement = document.getElementById('product_select');
+            const pricesMap = {};
+            Array.from(selectElement.options).forEach(option => {
+                if (option.dataset.name) {
+                    pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
+                }
             });
+
+            // Формируем элементы корзины
+            const cartItems = items.map(item => ({
+                name: item.name,
+                quantity: parseInt(item.quantity) || 0,
+                price: parseFloat(pricesMap[item.name] || 0)
+            }));
+
+            console.log('Сформированные элементы корзины:', cartItems);
+            sessionStorage.setItem('cart', JSON.stringify(cartItems));
+            remainders.length = 0;
+            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
         }
 
         // Запускаем проверку авторизации
