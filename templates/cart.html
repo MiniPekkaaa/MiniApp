@@ -173,23 +173,29 @@
         }
         
         function loadCartData() {
+            console.log('Начало загрузки корзины...');
             try {
                 // Загружаем данные корзины
                 const savedCart = sessionStorage.getItem('cart');
-                console.log('Загруженные данные корзины:', savedCart);
+                console.log('Данные корзины из sessionStorage:', savedCart);
                 
                 if (savedCart) {
                     cart = JSON.parse(savedCart);
+                    console.log('Распарсенные данные корзины:', cart);
+                    
                     if (!Array.isArray(cart)) {
                         console.error('Данные корзины не являются массивом');
                         cart = [];
                     }
                 } else {
+                    console.log('Корзина пуста');
                     cart = [];
                 }
                 
-                // Отображаем контент и корзину
+                // Отображаем корзину
                 displayCart();
+                
+                // После успешной загрузки показываем контент
                 showContent();
                 
             } catch (error) {
@@ -206,8 +212,13 @@
         function displayCart() {
             console.log('Отображение корзины:', cart);
             const cartItems = document.getElementById('cart_items');
+            
+            if (!cartItems) {
+                console.error('Элемент cart_items не найден');
+                return;
+            }
+            
             cartItems.innerHTML = '';
-            let total = 0;
             
             if (cart.length === 0) {
                 cartItems.innerHTML = '<div class="cart-empty">Корзина пуста</div>';
@@ -215,11 +226,7 @@
                 return;
             }
             
-            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
-            
             cart.forEach((item, index) => {
-                if (index >= itemsToShow) return;
-                
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
@@ -237,7 +244,11 @@
                 cartItems.appendChild(itemElement);
             });
             
-            // Показываем/скрываем кнопку "Показать все"
+            // Обновляем отображение кнопки "Показать все"
+            updateShowMoreButton();
+        }
+        
+        function updateShowMoreButton() {
             const showMoreContainer = document.getElementById('show_more_container');
             const showMoreButton = document.getElementById('show_more_button');
             

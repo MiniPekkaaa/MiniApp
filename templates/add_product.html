@@ -516,34 +516,55 @@
                 .then(responseData => {
                     console.log('Получен ответ от n8n:', responseData);
                     
+                    // Проверяем структуру ответа
+                    if (!responseData || !responseData.positions) {
+                        throw new Error('Некорректный формат ответа от n8n');
+                    }
+
+                    // Сначала сохраняем все данные
                     try {
-                        // Сохраняем рекомендацию для показа в корзине
+                        // Сохраняем рекомендацию
                         if (responseData.generalRecommendation) {
                             localStorage.setItem('recommendation', responseData.generalRecommendation);
                         }
-                        
-                        // Сохраняем позиции в корзину
-                        if (responseData.positions && Array.isArray(responseData.positions)) {
-                            sessionStorage.setItem('cart', JSON.stringify(responseData.positions));
-                        }
-                        
+
+                        // Преобразуем позиции в формат корзины
+                        const cartItems = responseData.positions.map(position => ({
+                            name: position.name,
+                            quantity: position.quantity
+                        }));
+
+                        // Сохраняем корзину
+                        sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                        console.log('Сохранены данные корзины:', cartItems);
+
                         // Очищаем remainders
                         remainders.length = 0;
                         
                         // Скрываем лоадер
                         hideRecommendationLoader();
-                        
-                        // Перенаправляем на страницу корзины
-                        window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+
+                        // Делаем небольшую задержку перед перенаправлением
+                        setTimeout(() => {
+                            // Формируем полный URL для перенаправления
+                            const baseUrl = window.location.origin;
+                            const cartUrl = baseUrl + '/cart' + (userId ? `?user_id=${userId}` : '');
+                            
+                            console.log('Перенаправление на:', cartUrl);
+                            
+                            // Используем replace вместо href для предотвращения возврата на предыдущую страницу
+                            window.location.replace(cartUrl);
+                        }, 500);
+
                     } catch (error) {
-                        console.error('Ошибка при обработке ответа:', error);
+                        console.error('Ошибка при сохранении данных:', error);
                         throw error;
                     }
                 })
                 .catch(error => {
-                    console.error('Ошибка при отправке остатков:', error);
+                    console.error('Ошибка:', error);
                     hideRecommendationLoader();
-                    tg.showAlert('Ошибка при отправке остатков: ' + error.message);
+                    tg.showAlert('Произошла ошибка: ' + error.message);
                 });
         }
 
