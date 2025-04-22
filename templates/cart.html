@@ -149,84 +149,45 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
-        function showContent() {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').classList.remove('hidden');
-            
-            // Проверяем наличие рекомендации после загрузки контента
-            const recommendation = localStorage.getItem('recommendation');
-            if (recommendation) {
-                showRecommendation(recommendation);
-                localStorage.removeItem('recommendation');
-            }
-        }
-
-        function checkAuthAndRedirect() {
-            console.log('Проверка авторизации...');
-            if (!window.location.search.includes('user_id') && userId) {
-                console.log('Перенаправление с user_id...');
-                window.location.href = `${window.location.pathname}?user_id=${userId}`;
-            } else {
-                console.log('Загрузка корзины...');
-                loadCartData();
-            }
-        }
-        
-        function loadCartData() {
-            console.log('Начало загрузки корзины...');
-            try {
-                // Загружаем данные корзины
-                const savedCart = sessionStorage.getItem('cart');
-                console.log('Данные корзины из sessionStorage:', savedCart);
-                
-                if (savedCart) {
-                    cart = JSON.parse(savedCart);
-                    console.log('Распарсенные данные корзины:', cart);
-                    
-                    if (!Array.isArray(cart)) {
-                        console.error('Данные корзины не являются массивом');
-                        cart = [];
-                    }
-                } else {
-                    console.log('Корзина пуста');
-                    cart = [];
-                }
-                
-                // Отображаем корзину
-                displayCart();
-                
-                // После успешной загрузки показываем контент
-                showContent();
-                
-            } catch (error) {
-                console.error('Ошибка при загрузке корзины:', error);
-                cart = [];
-                displayCart();
-                showContent();
-            }
-        }
-        
         let cart = [];
+        try {
+            const savedCart = sessionStorage.getItem('cart');
+            if (savedCart) {
+                cart = JSON.parse(savedCart);
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке корзины:', error);
+            cart = [];
+        }
+        
         let showAll = false;
         
         function displayCart() {
             console.log('Отображение корзины:', cart);
             const cartItems = document.getElementById('cart_items');
+            cartItems.innerHTML = '';
+            let total = 0;
             
-            if (!cartItems) {
-                console.error('Элемент cart_items не найден');
-                return;
+            if (!Array.isArray(cart)) {
+                console.error('Корзина не является массивом:', cart);
+                cart = [];
             }
             
-            cartItems.innerHTML = '';
+            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
             
-            if (cart.length === 0) {
-                cartItems.innerHTML = '<div class="cart-empty">Корзина пуста</div>';
-                document.getElementById('total_amount').textContent = '0';
-                return;
+            if (cart.length > 5) {
+                document.getElementById('show_more_container').style.display = 'block';
+                document.getElementById('show_more_button').textContent = showAll ? 'Свернуть' : 'Показать все';
+            } else {
+                document.getElementById('show_more_container').style.display = 'none';
             }
             
             cart.forEach((item, index) => {
+                if (index >= itemsToShow) return;
+                
+                const itemTotal = (item.price || 0) * (item.quantity || 0);
+                total += itemTotal;
+                
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
@@ -234,6 +195,8 @@
                         <h3 class="cart-item-name">${item.name || 'Без названия'}</h3>
                         <div class="cart-item-details">
                             <p>Количество: ${item.quantity || 0}</p>
+                            <p>Цена: ${item.price || 0}₽</p>
+                            <p>Сумма: ${itemTotal}₽</p>
                         </div>
                     </div>
                     <div class="cart-item-controls">
@@ -244,25 +207,33 @@
                 cartItems.appendChild(itemElement);
             });
             
-            // Обновляем отображение кнопки "Показать все"
-            updateShowMoreButton();
-        }
-        
-        function updateShowMoreButton() {
-            const showMoreContainer = document.getElementById('show_more_container');
-            const showMoreButton = document.getElementById('show_more_button');
+            document.getElementById('total_amount').textContent = total;
             
-            if (cart.length > 5) {
-                showMoreContainer.style.display = 'block';
-                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
-            } else {
-                showMoreContainer.style.display = 'none';
+            // Проверяем корзину для рекомендаций
+            if (cart.length > 0) {
+                checkCartForRecommendations(cart);
             }
         }
-        
-        function toggleShowAll() {
-            showAll = !showAll;
-            displayCart();
+
+        function showContent() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').classList.remove('hidden');
+            
+            // Проверяем рекомендацию после загрузки контента
+            const recommendation = localStorage.getItem('recommendation');
+            if (recommendation) {
+                showRecommendation(recommendation);
+                localStorage.removeItem('recommendation');
+            }
+        }
+
+        function checkAuthAndRedirect() {
+            if (!window.location.search.includes('user_id') && userId) {
+                window.location.href = `${window.location.pathname}?user_id=${userId}`;
+            } else {
+                displayCart();
+                setTimeout(showContent, 300);
+            }
         }
         
         function editQuantity(index) {
