@@ -6,7 +6,6 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
-import requests
 
 # Настройка логирования
 logging.basicConfig(
@@ -31,69 +30,14 @@ redis_client = redis.Redis(
 
 def check_user_registration(user_id):
     try:
+        # Проверяем существование пользователя в Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
+        # Проверяем что есть данные и UserChatID совпадает
         return bool(user_data) and user_data.get('UserChatID') == str(user_id)
     except Exception as e:
         logger.error(f"Error checking Redis: {str(e)}")
         return False
-
-@app.route('/api/analyze-remains', methods=['POST'])
-def analyze_remains_api():
-    try:
-        data = request.json
-        user_id = data.get('userId')
-        remains = data.get('remains')
-
-        logger.debug(f"Получен запрос на анализ остатков. User ID: {user_id}")
-        logger.debug(f"Данные остатков: {remains}")
-
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        if not remains:
-            return jsonify({"error": "Отсутствуют данные об остатках"}), 400
-
-        # Отправляем данные на вебхук n8n
-        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
-        
-        # Преобразуем данные в query параметры для GET запроса
-        params = {
-            "user_id": user_id,
-            "remains": json.dumps(remains),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-        logger.debug(f"Отправляем данные на вебхук: {params}")
-
-        try:
-            response = requests.get(webhook_url, params=params)
-            logger.debug(f"Ответ от вебхука: {response.status_code}")
-            logger.debug(f"Тело ответа: {response.text}")
-            
-            if response.ok:
-                return jsonify({"success": True, "message": "Данные успешно отправлены"})
-            else:
-                logger.error(f"Ошибка при отправке на вебхук: {response.status_code}")
-                return jsonify({"error": "Ошибка при отправке данных"}), 500
-        except Exception as e:
-            logger.error(f"Ошибка при отправке на вебхук: {str(e)}")
-            return jsonify({"error": "Ошибка при отправке данных"}), 500
-
-    except Exception as e:
-        logger.error(f"Ошибка в analyze-remains-api: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/loading')
-def loading():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-        return render_template('loading.html', user_id=user_id)
-    except Exception as e:
-        logger.error(f"Error in loading route: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
 
 @app.route('/check-auth')
 def check_auth():
@@ -352,101 +296,6 @@ def get_last_orders():
     except Exception as e:
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        remains = data.get('remains')
-
-        if not user_id or not remains:
-            return jsonify({'error': 'Отсутствуют необходимые данные'}), 400
-
-        # Отправляем данные на вебхук
-        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
-        
-        # Преобразуем данные в query параметры для GET запроса
-        params = {
-            "user_id": user_id,
-            "remains": json.dumps(remains),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-        try:
-            response = requests.get(webhook_url, params=params)
-            if response.ok:
-                return jsonify({"success": True, "message": "Данные успешно отправлены"})
-            else:
-                return jsonify({"error": "Ошибка при отправке данных"}), 500
-        except Exception as e:
-            logger.error(f"Ошибка при отправке на вебхук: {str(e)}")
-            return jsonify({"error": "Ошибка при отправке данных"}), 500
-
-    except Exception as e:
-        logger.error(f"Ошибка при обработке запроса: {str(e)}")
-        return jsonify({'error': 'Внутренняя ошибка сервера'}), 500
-
-def get_user_cart(user_id):
-    """Получение корзины пользователя"""
-    try:
-        cart = mongo.cx.Pivo.carts.find_one({'user_id': user_id})
-        return cart
-    except Exception as e:
-        logger.error(f"Ошибка при получении корзины: {str(e)}")
-        return None
-
-def create_user_cart(user_id):
-    """Создание новой корзины для пользователя"""
-    try:
-        cart = {
-            'user_id': user_id,
-            'items': [],
-            'created_at': datetime.utcnow()
-        }
-        result = mongo.cx.Pivo.carts.insert_one(cart)
-        return cart if result.inserted_id else None
-    except Exception as e:
-        logger.error(f"Ошибка при создании корзины: {str(e)}")
-        return None
-
-def add_to_cart(user_id, item):
-    """Добавление товара в корзину"""
-    try:
-        result = mongo.cx.Pivo.carts.update_one(
-            {'user_id': user_id},
-            {'$push': {'items': item}}
-        )
-        return result.modified_count > 0
-    except Exception as e:
-        logger.error(f"Ошибка при добавлении в корзину: {str(e)}")
-        return False
-
-def process_recommendations(user_id, recommendations):
-    try:
-        # Проверяем существование корзины пользователя
-        cart = get_user_cart(user_id)
-        if not cart:
-            cart = create_user_cart(user_id)
-
-        # Добавляем рекомендованные товары в корзину
-        for rec in recommendations:
-            add_to_cart(user_id, {
-                'name': rec['name'],
-                'quantity': rec['quantity']
-            })
-
-        return {
-            'success': True,
-            'message': 'Рекомендованные товары добавлены в корзину'
-        }
-
-    except Exception as e:
-        logger.error(f"Ошибка при обработке рекомендаций: {str(e)}")
-        return {
-            'success': False,
-            'error': 'Не удалось добавить товары в корзину'
-        }
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
