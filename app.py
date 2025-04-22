@@ -55,18 +55,19 @@ def analyze_remains_api():
             return jsonify({"error": "Отсутствуют данные об остатках"}), 400
 
         # Отправляем данные на вебхук n8n
-        webhook_url = "https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa"
+        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
         
-        webhook_data = {
+        # Преобразуем данные в query параметры для GET запроса
+        params = {
             "user_id": user_id,
-            "remains": remains,
+            "remains": json.dumps(remains),
             "timestamp": datetime.utcnow().isoformat()
         }
 
-        logger.debug(f"Отправляем данные на вебхук: {webhook_data}")
+        logger.debug(f"Отправляем данные на вебхук: {params}")
 
         try:
-            response = requests.post(webhook_url, json=webhook_data)
+            response = requests.get(webhook_url, params=params)
             logger.debug(f"Ответ от вебхука: {response.status_code}")
             logger.debug(f"Тело ответа: {response.text}")
             
@@ -363,16 +364,17 @@ def analyze():
             return jsonify({'error': 'Отсутствуют необходимые данные'}), 400
 
         # Отправляем данные на вебхук
-        webhook_url = "https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa"
+        webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
         
-        webhook_data = {
+        # Преобразуем данные в query параметры для GET запроса
+        params = {
             "user_id": user_id,
-            "remains": remains,
+            "remains": json.dumps(remains),
             "timestamp": datetime.utcnow().isoformat()
         }
 
         try:
-            response = requests.post(webhook_url, json=webhook_data)
+            response = requests.get(webhook_url, params=params)
             if response.ok:
                 return jsonify({"success": True, "message": "Данные успешно отправлены"})
             else:
