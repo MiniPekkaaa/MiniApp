@@ -395,39 +395,29 @@
             }
 
             // Подготавливаем данные для отправки
-            const requestData = {
-                telegram_id: userId.toString(),
-                remainders: remainders.map(item => ({
-                    beer_id: item.id,
-                    name: item.name,
-                    legal_entity: item.legalEntity,
-                    quantity: parseInt(item.quantity)
-                }))
+            const data = {
+                data: {
+                    telegram_id: userId.toString(),
+                    remainders: remainders.map(item => ({
+                        beer_id: item.id,
+                        name: item.name,
+                        legal_entity: item.legalEntity,
+                        quantity: parseInt(item.quantity)
+                    }))
+                }
             };
 
-            // Преобразуем данные в URL-encoded строку
-            const params = new URLSearchParams();
-            params.append('telegram_id', requestData.telegram_id);
-            params.append('remainders', JSON.stringify(requestData.remainders));
-
-            console.log('Отправляем данные:', Object.fromEntries(params));
+            console.log('Отправляем данные:', data);
 
             // Отправляем данные на вебхук
             fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/json'
                 },
-                body: params
+                body: JSON.stringify(data)
             })
-            .then(response => {
-                console.log('Статус ответа:', response.status);
-                console.log('Заголовки ответа:', response.headers);
-                return response.text();
-            })
-            .then(text => {
-                console.log('Тело ответа:', text);
-                
+            .then(() => {
                 // Очищаем список остатков
                 remainders.length = 0;
                 // Перезагружаем список позиций
