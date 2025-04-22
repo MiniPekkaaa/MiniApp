@@ -41,87 +41,12 @@
             color: white !important;
             margin-bottom: 10px !important;
         }
-
-        .recommendation-notification {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #5288c1;
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            max-width: 90%;
-            text-align: center;
-            animation: slideDown 0.5s ease-out;
-            display: none;
-        }
-
-        @keyframes slideDown {
-            from {
-                transform: translate(-50%, -100%);
-                opacity: 0;
-            }
-            to {
-                transform: translate(-50%, 0);
-                opacity: 1;
-            }
-        }
-
-        .loading-screen {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.8);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        #recommendationNotification {
-            display: none;
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #4CAF50;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            z-index: 1000;
-            text-align: center;
-            font-size: 14px;
-            max-width: 90%;
-            animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-            from {
-                top: -100px;
-                opacity: 0;
-            }
-            to {
-                top: 20px;
-                opacity: 1;
-            }
-        }
-
-        .button {
-            background-color: #5288c1 !important;
-            color: white !important;
-        }
     </style>
 </head>
 <body>
-    <div id="recommendationNotification"></div>
-    <div class="loading-screen">
-        <div class="spinner"></div>
+    <!-- Экран загрузки -->
+    <div id="loading" class="container" style="text-align: center; padding: 20px;">
+        <div class="loader"></div>
     </div>
 
     <!-- Основной контент -->
@@ -158,13 +83,6 @@
             if (!window.location.search.includes('user_id') && userId) {
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
-                // Проверяем наличие рекомендации в localStorage
-                const recommendation = localStorage.getItem('recommendation');
-                if (recommendation) {
-                    showRecommendation(recommendation);
-                    // Удаляем рекомендацию после показа
-                    localStorage.removeItem('recommendation');
-                }
                 // Показываем контент через небольшую задержку
                 setTimeout(showContent, 300);
             }
@@ -215,9 +133,6 @@
             });
             
             document.getElementById('total_amount').textContent = total;
-            
-            // Проверяем корзину для рекомендаций
-            checkCartForRecommendations(cart);
         }
         
         function toggleShowAll() {
@@ -249,55 +164,52 @@
         
         function placeOrder() {
             if (cart.length === 0) {
-                tg.showAlert('Корзина пуста');
+                tg.showAlert("Корзина пуста");
                 return;
             }
-            // Здесь будет логика оформления заказа
-        }
-        
-        function checkCartForRecommendations(cart) {
-            // Проверяем наличие определенных товаров в корзине
-            const hasWine = cart.some(item => item.name.toLowerCase().includes('вино'));
-            const hasCheese = cart.some(item => item.name.toLowerCase().includes('сыр'));
-            
-            // Если есть вино, но нет сыра
-            if (hasWine && !hasCheese) {
-                showRecommendation('К вину отлично подойдет сыр! Хотите добавить?');
-            }
-            // Если есть сыр, но нет вина
-            else if (hasCheese && !hasWine) {
-                showRecommendation('К сыру отлично подойдет вино! Хотите добавить?');
-            }
-        }
 
-        function showRecommendation(message) {
-            const notification = document.getElementById('recommendationNotification');
-            notification.textContent = message;
-            notification.style.display = 'block';
-            
-            // Скрыть уведомление через 5 секунд
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
+            // Отправляем запрос на создание заказа
+            fetch('/api/create-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    items: cart
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // Очищаем корзину
+                    cart = [];
+                    sessionStorage.setItem('cart', JSON.stringify(cart));
+                    displayCart();
+                    tg.showAlert("Заказ успешно создан!");
+                    // Перенаправляем на главное меню
+                    setTimeout(() => {
+                        window.location.href = `/?user_id=${userId}`;
+                    }, 1000);
+                } else {
+                    throw new Error(result.error || 'Ошибка при создании заказа');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при создании заказа:', error);
+                tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
+            });
         }
         
         function addMore() {
-            window.location.href = '/catalog' + (userId ? `?user_id=${userId}` : '');
+            window.location.href = `/products?user_id=${userId}&show_product_selection=true`;
         }
-
+        
         function goBack() {
-            window.location.href = '/catalog' + (userId ? `?user_id=${userId}` : '');
+            window.location.href = `/order_menu?user_id=${userId}`;
         }
         
-        function showLoadingScreen() {
-            document.querySelector('.loading-screen').style.display = 'flex';
-        }
-
-        function hideLoadingScreen() {
-            document.querySelector('.loading-screen').style.display = 'none';
-        }
-        
-        // Инициализация при загрузке страницы
+        // Запускаем проверку авторизации и отображаем корзину
         checkAuthAndRedirect();
         displayCart();
     </script>
