@@ -55,7 +55,7 @@
             text-align: center;
             padding: 8px;
             border-radius: 8px;
-            background-color: rgba(255, 255, 255, 0.1);
+            background-color: var(--tg-theme-bg-color);
             color: var(--tg-theme-text-color);
             border: none;
             font-size: 14px;
@@ -85,20 +85,23 @@
             padding: 15px;
             margin-bottom: 10px;
             border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .product-info {
             width: 100%;
-            margin-bottom: 12px;
             color: var(--tg-theme-text-color);
             font-size: 15px;
+            margin-bottom: 0;
         }
 
         .product-controls {
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: 8px;
+            justify-content: flex-start;
         }
 
         .add-button {
@@ -109,23 +112,16 @@
             border: none;
             cursor: pointer;
             font-size: 14px;
-            min-width: 90px;
         }
 
         .delete-button {
             padding: 8px 15px;
             border-radius: 8px;
             background-color: transparent;
-            border: 1px solid #FF3B30;
+            border: none;
             color: #FF3B30;
             cursor: pointer;
             font-size: 14px;
-            min-width: 80px;
-            transition: all 0.2s ease;
-        }
-
-        .delete-button:hover {
-            background-color: rgba(255, 59, 48, 0.1);
         }
 
         .button-disabled {
@@ -137,6 +133,18 @@
             background-color: #4CAF50 !important;
             color: white;
             font-weight: bold;
+        }
+
+        .select-container {
+            margin-top: 20px;
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .select-container h3 {
+            color: var(--tg-theme-text-color);
+            margin: 0 0 10px 0;
         }
     </style>
 </head>
@@ -154,25 +162,28 @@
                 <!-- Сюда будут добавляться позиции из последних заказов -->
             </div>
 
-            <h2 style="margin: 20px 0; color: var(--tg-theme-text-color);">Добавить новый остаток</h2>
-            <select id="product_select" class="select">
-                <option value="">Выберите товар</option>
-                {% for product in products %}
-                <option value="{{ product.id }}" 
-                        data-name="{{ product.name }}"
-                        data-fullname="{{ product.fullName }}"
-                        data-volume="{{ product.volume }}"
-                        data-price="{{ product.price }}"
-                        data-legal-entity="{{ product.legalEntity }}">
-                    {{ product.name }} ({{ product.volume }}л)
-                </option>
-                {% endfor %}
-            </select>
-            <div class="quantity-controls">
-                <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
-                <input type="number" id="quantity" value="1" min="1" class="quantity-input" onchange="addToRemainders()">
-                <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
+            <div class="select-container">
+                <h3>Добавить новый остаток</h3>
+                <select id="product_select" class="select">
+                    <option value="">Выберите товар</option>
+                    {% for product in products %}
+                    <option value="{{ product.id }}" 
+                            data-name="{{ product.name }}"
+                            data-fullname="{{ product.fullName }}"
+                            data-volume="{{ product.volume }}"
+                            data-price="{{ product.price }}"
+                            data-legal-entity="{{ product.legalEntity }}">
+                        {{ product.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="quantity-controls">
+                    <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
+                    <input type="number" id="quantity" value="1" min="1" class="quantity-input" onchange="addToRemainders()">
+                    <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
+                </div>
             </div>
+
             <button onclick="submitRemainders()" class="button submit-button">Далее</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
