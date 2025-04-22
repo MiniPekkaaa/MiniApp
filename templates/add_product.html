@@ -154,14 +154,9 @@
                 <!-- Сюда будут добавляться позиции из последних заказов -->
             </div>
 
-            <div id="current_remainders" class="product-list">
-                <h3 style="margin-bottom: 15px;">Текущие остатки</h3>
-                <!-- Сюда будут добавляться текущие остатки -->
-            </div>
-
             <div class="select-container">
                 <h3>Добавить новый остаток</h3>
-                <select id="product_select" class="select" onchange="addToRemainders()">
+                <select id="product_select" class="select">
                     <option value="">Выберите товар</option>
                     {% for product in products %}
                     <option value="{{ product.id }}" 
@@ -176,9 +171,10 @@
                 </select>
                 <div class="quantity-controls">
                     <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
-                    <input type="number" id="quantity" value="1" min="1" class="quantity-input" onchange="addToRemainders()">
+                    <input type="number" id="quantity" value="1" min="1" class="quantity-input">
                     <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
                 </div>
+                <button onclick="addToRemainders()" class="button add-button" style="margin-top: 10px;">Добавить остаток</button>
             </div>
 
             <button onclick="submitRemainders()" class="button submit-button">Далее</button>
@@ -232,14 +228,46 @@
                             const productDiv = document.createElement('div');
                             productDiv.className = 'product-item';
                             
+                            const isInRemainders = remainders.some(item => 
+                                item.id === position.Beer_ID.toString() && 
+                                item.legalEntity === position.Legal_Entity
+                            );
+
                             productDiv.innerHTML = `
                                 <div class="product-info">
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="number" value="1" min="1" class="quantity-input" 
-                                           onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value, this.parentElement)">
+                                    <input type="number" value="1" min="1" class="quantity-input">
+                                    ${!isInRemainders ? `
+                                        <button onclick="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.parentElement.querySelector('input').value, this.parentElement)"
+                                                class="add-button">
+                                            Добавить остаток
+                                        </button>
+                                    ` : ''}
                                     <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
+                                            class="delete-button">
+                                        Удалить
+                                    </button>
+                                </div>
+                            `;
+                            
+                            container.appendChild(productDiv);
+                        });
+
+                        // Добавляем остатки, которые уже были добавлены
+                        remainders.forEach(remainder => {
+                            const productDiv = document.createElement('div');
+                            productDiv.className = 'product-item';
+                            
+                            productDiv.innerHTML = `
+                                <div class="product-info">
+                                    ${remainder.name}
+                                </div>
+                                <div class="product-controls">
+                                    <input type="number" value="${remainder.quantity}" min="1" class="quantity-input" 
+                                           onchange="updateRemainderQuantity('${remainder.id}', ${remainder.legalEntity}, this.value)">
+                                    <button onclick="deleteRemainder('${remainder.id}', ${remainder.legalEntity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
                                     </button>
@@ -323,14 +351,11 @@
             
             // Показываем уведомление о добавлении остатка
             tg.showAlert("Остаток добавлен");
-            // Обновляем отображение остатков
-            displayRemainders();
+            // Перезагружаем список
+            loadLastOrdersProducts();
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
-            // Удаляем карточку товара
-            productItem.remove();
-
             // Если позиция была в remainders, удаляем её оттуда
             const index = remainders.findIndex(item => 
                 item.id === beerId.toString() && 
@@ -339,8 +364,8 @@
             
             if (index !== -1) {
                 remainders.splice(index, 1);
-                // Обновляем отображение остатков
-                displayRemainders();
+                // Перезагружаем список
+                loadLastOrdersProducts();
             }
         }
         
@@ -373,8 +398,8 @@
                 
                 // Показываем уведомление о добавлении остатка
                 tg.showAlert("Остаток добавлен");
-                // Обновляем отображение остатков
-                displayRemainders();
+                // Перезагружаем список
+                loadLastOrdersProducts();
             }
         }
 
