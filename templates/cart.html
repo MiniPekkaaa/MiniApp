@@ -152,6 +152,13 @@
         function showContent() {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
+            
+            // Проверяем наличие рекомендации после загрузки контента
+            const recommendation = localStorage.getItem('recommendation');
+            if (recommendation) {
+                showRecommendation(recommendation);
+                localStorage.removeItem('recommendation');
+            }
         }
 
         function checkAuthAndRedirect() {
@@ -161,46 +168,35 @@
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
                 console.log('Загрузка корзины...');
-                loadCart();
-                // Показываем контент через небольшую задержку
-                setTimeout(showContent, 300);
+                loadCartData();
             }
         }
         
-        function loadCart() {
-            console.log('Загрузка данных корзины из sessionStorage...');
+        function loadCartData() {
             try {
+                // Загружаем данные корзины
                 const savedCart = sessionStorage.getItem('cart');
-                console.log('Данные корзины из sessionStorage:', savedCart);
+                console.log('Загруженные данные корзины:', savedCart);
                 
                 if (savedCart) {
                     cart = JSON.parse(savedCart);
-                    console.log('Распарсенные данные корзины:', cart);
-                    
                     if (!Array.isArray(cart)) {
                         console.error('Данные корзины не являются массивом');
                         cart = [];
                     }
                 } else {
-                    console.log('Корзина пуста');
                     cart = [];
                 }
                 
-                // Проверяем рекомендацию
-                const recommendation = localStorage.getItem('recommendation');
-                if (recommendation) {
-                    console.log('Найдена рекомендация:', recommendation);
-                    showRecommendation(recommendation);
-                    localStorage.removeItem('recommendation');
-                }
-                
-                // Отображаем корзину
+                // Отображаем контент и корзину
                 displayCart();
+                showContent();
                 
             } catch (error) {
                 console.error('Ошибка при загрузке корзины:', error);
                 cart = [];
                 displayCart();
+                showContent();
             }
         }
         
@@ -210,31 +206,19 @@
         function displayCart() {
             console.log('Отображение корзины:', cart);
             const cartItems = document.getElementById('cart_items');
-            const showMoreContainer = document.getElementById('show_more_container');
-            const showMoreButton = document.getElementById('show_more_button');
-            
-            if (!cartItems) {
-                console.error('Элемент cart_items не найден');
-                return;
-            }
-            
             cartItems.innerHTML = '';
             let total = 0;
             
-            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
-            
-            if (cart.length > 5) {
-                showMoreContainer.style.display = 'block';
-                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
-            } else {
-                showMoreContainer.style.display = 'none';
+            if (cart.length === 0) {
+                cartItems.innerHTML = '<div class="cart-empty">Корзина пуста</div>';
+                document.getElementById('total_amount').textContent = '0';
+                return;
             }
+            
+            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
             
             cart.forEach((item, index) => {
                 if (index >= itemsToShow) return;
-                
-                const itemTotal = (item.price || 0) * (item.quantity || 0);
-                total += itemTotal;
                 
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
@@ -243,8 +227,6 @@
                         <h3 class="cart-item-name">${item.name || 'Без названия'}</h3>
                         <div class="cart-item-details">
                             <p>Количество: ${item.quantity || 0}</p>
-                            <p>Цена: ${item.price || 0}₽</p>
-                            <p>Сумма: ${itemTotal}₽</p>
                         </div>
                     </div>
                     <div class="cart-item-controls">
@@ -255,14 +237,15 @@
                 cartItems.appendChild(itemElement);
             });
             
-            const totalElement = document.getElementById('total_amount');
-            if (totalElement) {
-                totalElement.textContent = total;
-            }
+            // Показываем/скрываем кнопку "Показать все"
+            const showMoreContainer = document.getElementById('show_more_container');
+            const showMoreButton = document.getElementById('show_more_button');
             
-            // Проверяем корзину для рекомендаций
-            if (cart.length > 0) {
-                checkCartForRecommendations(cart);
+            if (cart.length > 5) {
+                showMoreContainer.style.display = 'block';
+                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
+            } else {
+                showMoreContainer.style.display = 'none';
             }
         }
         
@@ -318,13 +301,15 @@
 
         function showRecommendation(message) {
             const notification = document.getElementById('recommendationNotification');
-            notification.textContent = message;
-            notification.style.display = 'block';
-            
-            // Скрыть уведомление через 5 секунд
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
+            if (notification) {
+                notification.textContent = message;
+                notification.style.display = 'block';
+                
+                // Скрываем уведомление через 5 секунд
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, 5000);
+            }
         }
         
         function addMore() {

@@ -516,55 +516,29 @@
                 .then(responseData => {
                     console.log('Получен ответ от n8n:', responseData);
                     
-                    // Сохраняем рекомендацию в localStorage
-                    if (responseData.generalRecommendation) {
-                        localStorage.setItem('recommendation', responseData.generalRecommendation);
+                    try {
+                        // Сохраняем рекомендацию для показа в корзине
+                        if (responseData.generalRecommendation) {
+                            localStorage.setItem('recommendation', responseData.generalRecommendation);
+                        }
+                        
+                        // Сохраняем позиции в корзину
+                        if (responseData.positions && Array.isArray(responseData.positions)) {
+                            sessionStorage.setItem('cart', JSON.stringify(responseData.positions));
+                        }
+                        
+                        // Очищаем remainders
+                        remainders.length = 0;
+                        
+                        // Скрываем лоадер
+                        hideRecommendationLoader();
+                        
+                        // Перенаправляем на страницу корзины
+                        window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+                    } catch (error) {
+                        console.error('Ошибка при обработке ответа:', error);
+                        throw error;
                     }
-                    
-                    // Формируем данные для корзины
-                    let cart = [];
-                    
-                    // Добавляем позиции из рекомендаций в корзину
-                    if (responseData.positions && Array.isArray(responseData.positions)) {
-                        cart = responseData.positions.map(position => {
-                            // Находим информацию о товаре из select
-                            const productSelect = document.getElementById('product_select');
-                            const option = Array.from(productSelect.options).find(opt => 
-                                opt.dataset.name === position.name
-                            );
-                            
-                            return {
-                                name: position.name,
-                                quantity: position.quantity,
-                                price: option ? parseFloat(option.dataset.price) : 0,
-                                id: option ? option.value : null,
-                                legalEntity: option ? parseInt(option.dataset.legalEntity) : null
-                            };
-                        });
-                    }
-                    
-                    // Сохраняем новую корзину
-                    console.log('Сохраняем корзину:', cart);
-                    sessionStorage.setItem('cart', JSON.stringify(cart));
-                    
-                    // Очищаем remainders
-                    remainders.length = 0;
-                    
-                    // Скрываем лоадер
-                    hideRecommendationLoader();
-                    
-                    console.log('Корзина обновлена, выполняем перенаправление...');
-                    
-                    // Формируем URL для перенаправления
-                    const baseUrl = window.location.origin;
-                    const cartPath = '/cart';
-                    const userIdParam = userId ? `?user_id=${userId}` : '';
-                    const redirectUrl = baseUrl + cartPath + userIdParam;
-                    
-                    console.log('URL для перенаправления:', redirectUrl);
-                    
-                    // Перенаправляем на страницу корзины
-                    window.location.href = redirectUrl;
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
