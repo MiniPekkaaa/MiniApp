@@ -511,9 +511,11 @@
                     if (!response.ok) {
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
                     }
-                    return response.json(); // Теперь ожидаем JSON ответ
+                    return response.json();
                 })
                 .then(responseData => {
+                    console.log('Получен ответ от n8n:', responseData);
+                    
                     // Сохраняем рекомендацию в localStorage
                     if (responseData.generalRecommendation) {
                         localStorage.setItem('recommendation', responseData.generalRecommendation);
@@ -536,8 +538,7 @@
                                 cart.push({
                                     name: position.name,
                                     quantity: position.quantity,
-                                    // Здесь можно добавить дополнительные поля, если они нужны
-                                    price: 0 // Временно установим цену 0, её нужно будет получать из данных о товаре
+                                    price: 0 // Временно установим цену 0
                                 });
                             }
                         });
@@ -546,8 +547,14 @@
                         sessionStorage.setItem('cart', JSON.stringify(cart));
                     }
                     
-                    // Перенаправляем в корзину
-                    window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+                    console.log('Корзина обновлена, выполняем перенаправление...');
+                    
+                    // Принудительное перенаправление с небольшой задержкой
+                    setTimeout(() => {
+                        const redirectUrl = '/cart' + (userId ? `?user_id=${userId}` : '');
+                        console.log('Перенаправление на:', redirectUrl);
+                        window.location.href = redirectUrl;
+                    }, 100);
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
