@@ -394,11 +394,38 @@
                 return;
             }
 
-            // Здесь будет отправка остатков на анализ
-            console.log("Отправка остатков на анализ:", remainders);
-            tg.showAlert("Остатки отправлены на анализ");
-            // После отправки очищаем список
-            remainders = [];
+            // Подготавливаем данные для отправки
+            const data = {
+                telegram_id: userId,
+                remainders: remainders.map(item => ({
+                    beer_id: item.id,
+                    name: item.name,
+                    legal_entity: item.legalEntity,
+                    quantity: item.quantity
+                }))
+            };
+
+            // Отправляем данные на вебхук
+            fetch('https://n8n.stage.3r.agency/webhook-test/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                console.log("Остатки отправлены успешно:", result);
+                tg.showAlert("Остатки успешно отправлены");
+                // Очищаем список остатков
+                remainders.length = 0;
+                // Перезагружаем список позиций
+                loadLastOrdersProducts();
+            })
+            .catch(error => {
+                console.error("Ошибка при отправке остатков:", error);
+                tg.showAlert("Ошибка при отправке остатков. Попробуйте еще раз.");
+            });
         }
 
         // Запускаем проверку авторизации
