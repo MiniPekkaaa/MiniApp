@@ -394,6 +394,7 @@
             const items = container.querySelectorAll('.product-item');
             const allRemainders = [];
 
+            // Добавляем все позиции из DOM
             items.forEach(item => {
                 const name = item.querySelector('.product-info').textContent.trim();
                 const quantity = parseInt(item.querySelector('.quantity-input').value);
@@ -412,10 +413,28 @@
                 }
             });
 
+            // Добавляем все позиции из массива remainders, которых еще нет в списке
+            remainders.forEach(remainder => {
+                const exists = allRemainders.some(item => 
+                    item.id === remainder.id && 
+                    item.legalEntity === remainder.legalEntity
+                );
+                if (!exists) {
+                    allRemainders.push({
+                        id: remainder.id,
+                        name: remainder.name,
+                        legalEntity: remainder.legalEntity,
+                        quantity: remainder.quantity
+                    });
+                }
+            });
+
             if (allRemainders.length === 0) {
                 tg.showAlert("Добавьте хотя бы один остаток");
                 return;
             }
+
+            console.log('Отправляем остатки:', allRemainders);
 
             // Подготавливаем данные для отправки
             const data = {
