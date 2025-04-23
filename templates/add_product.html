@@ -168,6 +168,46 @@
             color: white;
             font-weight: bold;
         }
+
+        /* Стили для уведомлений */
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--tg-theme-secondary-bg-color, rgba(0, 0, 0, 0.8));
+            color: var(--tg-theme-text-color, #fff);
+            padding: 15px 40px 15px 20px;
+            border-radius: 8px;
+            z-index: 2000;
+            max-width: 90%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification .close-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--tg-theme-text-color, #fff);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translate(-50%, -100%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, 0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -509,7 +549,7 @@
                 .then(response => {
                     if (!response.ok) {
                         if (response.status === 502) {
-                            // В случае 502 ошибки просто переходим в корзину с текущими данными
+                            showNotification('Не удалось получить рекомендации. Используем стандартные настройки.');
                             return processCartItems(allRemainders);
                         }
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
@@ -526,6 +566,7 @@
                 })
                 .then(responseData => {
                     if (!responseData) {
+                        showNotification('Получен пустой ответ от сервера. Используем стандартные настройки.');
                         return processCartItems(allRemainders);
                     }
 
@@ -533,11 +574,13 @@
                     const recommendation = Array.isArray(responseData) ? responseData[0] : responseData;
 
                     if (!recommendation || !recommendation.positions) {
+                        showNotification('Не удалось получить рекомендации. Используем стандартные настройки.');
                         return processCartItems(allRemainders);
                     }
 
-                    // Сохраняем рекомендацию в sessionStorage
+                    // Показываем уведомление с рекомендацией
                     if (recommendation.generalRecommendation) {
+                        showNotification(recommendation.generalRecommendation);
                         sessionStorage.setItem('recommendation', recommendation.generalRecommendation);
                     }
 
@@ -575,6 +618,7 @@
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
+                    showNotification('Произошла ошибка при обработке данных. Используем стандартные настройки.');
                     return processCartItems(allRemainders);
                 })
                 .finally(() => {
@@ -617,6 +661,39 @@
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
             remainders.length = 0;
             window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+        }
+
+        // Функция для показа уведомления
+        function showNotification(message, duration = 20000) {
+            // Удаляем предыдущее уведомление, если оно есть
+            const existingNotification = document.querySelector('.notification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+
+            // Создаем новое уведомление
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                ${message}
+                <button class="close-btn">&times;</button>
+            `;
+
+            // Добавляем уведомление на страницу
+            document.body.appendChild(notification);
+
+            // Добавляем обработчик для кнопки закрытия
+            const closeBtn = notification.querySelector('.close-btn');
+            closeBtn.addEventListener('click', () => {
+                notification.remove();
+            });
+
+            // Автоматически скрываем через указанное время
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, duration);
         }
 
         // Запускаем проверку авторизации
