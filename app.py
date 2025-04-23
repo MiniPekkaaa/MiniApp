@@ -387,5 +387,42 @@ def repeat_order():
         logger.error(f"Error in repeat_order route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/get-cart-items')
+def get_cart_items():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Получаем содержимое корзины из Redis
+        cart_key = f'beer:cart:{user_id}'
+        cart_items = redis_client.hgetall(cart_key)
+        
+        # Получаем каталог пива для получения актуальных данных
+        catalog = {str(product['id']): product for product in mongo.cx.Pivo.catalog.find()}
+        
+        # Формируем список товаров
+        items = []
+        for beer_id, item_data in cart_items.items():
+            try:
+                item = json.loads(item_data)
+                if str(item['id']) in catalog:
+                    beer = catalog[str(item['id'])]
+                    items.append({
+                        'id': item['id'],
+                        'name': beer['name'],
+                        'count': item['count'],
+                        'price': beer['price'],
+                        'legalEntity': beer['legalEntity']
+                    })
+            except (json.JSONDecodeError, KeyError):
+                continue
+        
+        return jsonify({"items": items})
+    
+    except Exception as e:
+        logger.error(f"Error in get_cart_items route: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
