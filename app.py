@@ -313,5 +313,64 @@ def get_last_orders():
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/my_orders')
+def my_orders():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return 'User ID is required', 400
+    return render_template('my_orders.html', user_id=user_id)
+
+@app.route('/api/get-orders')
+def get_orders():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'User ID is required'}), 400
+
+    try:
+        # Получаем заказы из MongoDB
+        orders = list(mongo.db.orders.find({'user_id': user_id}).sort('created_at', -1))
+        
+        # Преобразуем ObjectId в строки для JSON
+        for order in orders:
+            order['_id'] = str(order['_id'])
+        
+        return jsonify({
+            'success': True,
+            'orders': orders
+        })
+    except Exception as e:
+        app.logger.error(f'Error getting orders: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to get orders'
+        }), 500
+
+@app.route('/api/get-order')
+def get_order():
+    order_id = request.args.get('order_id')
+    if not order_id:
+        return jsonify({'success': False, 'error': 'Order ID is required'}), 400
+
+    try:
+        # Получаем заказ из MongoDB по order_ID
+        order = mongo.db.orders.find_one({'order_ID': order_id})
+        
+        if not order:
+            return jsonify({'success': False, 'error': 'Order not found'}), 404
+
+        # Преобразуем ObjectId в строку для JSON
+        order['_id'] = str(order['_id'])
+        
+        return jsonify({
+            'success': True,
+            'order': order
+        })
+    except Exception as e:
+        app.logger.error(f'Error getting order: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to get order'
+        }), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
