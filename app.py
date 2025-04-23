@@ -365,5 +365,42 @@ def my_orders():
         logger.error(f"Error in my_orders route: {str(e)}", exc_info=True)
         return f"Error: {str(e)}", 500
 
+@app.route('/api/repeat-order')
+def repeat_order():
+    try:
+        user_id = request.args.get('user_id')
+        order_id = request.args.get('order_id')
+        
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Получаем заказ из базы данных
+        order = mongo.cx.Pivo.Orders.find_one({"_id": ObjectId(order_id)})
+        if not order:
+            return jsonify({"error": "Order not found"}), 404
+
+        # Создаем ключ для временного хранения заказа в Redis
+        cart_key = f'beer:cart:{user_id}'
+        
+        # Очищаем текущую корзину
+        redis_client.delete(cart_key)
+        
+        # Добавляем позиции из старого заказа в корзину
+        positions = order.get('Positions', {})
+        for position in positions.values():
+            item_data = {
+                'id': position['Beer_ID'],
+                'name': position['Beer_Name'],
+                'count': position['Beer_Count'],
+                'legalEntity': position.get('Legal_Entity', 1)
+            }
+            redis_client.hset(cart_key, str(position['Beer_ID']), json.dumps(item_data))
+        
+        return jsonify({"success": True})
+    
+    except Exception as e:
+        logger.error(f"Error in repeat_order route: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

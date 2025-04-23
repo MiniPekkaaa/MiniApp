@@ -9,28 +9,37 @@
     <style>
         .order-list {
             padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
         }
         .order-item {
             background: var(--tg-theme-bg-color, #ffffff);
             border: 1px solid var(--tg-theme-hint-color, #999999);
             border-radius: 8px;
             padding: 15px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             color: var(--tg-theme-text-color, #000000);
+            width: 90%;
+            margin-left: auto;
+            margin-right: auto;
         }
         .order-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--tg-theme-hint-color, #999999);
         }
         .order-status {
             color: var(--tg-theme-button-color, #2481cc);
+            font-weight: 500;
         }
         .order-details {
             display: flex;
             justify-content: space-between;
             font-size: 14px;
+            margin-bottom: 15px;
         }
         .title {
             text-align: center;
@@ -47,6 +56,23 @@
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
+        }
+        .repeat-order-button {
+            background: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            width: 100%;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+        .repeat-order-button:hover {
+            opacity: 0.9;
+        }
+        .container {
+            padding-bottom: 20px;
         }
     </style>
 </head>
@@ -68,6 +94,9 @@
                             <div>Количество позиций: {{ order.items_count }}</div>
                             <div>Сумма: {{ order.total_sum }} ₽</div>
                         </div>
+                        <button class="repeat-order-button" onclick="repeatOrder('{{ order._id }}')">
+                            Повторить заказ
+                        </button>
                     </div>
                 {% endfor %}
             {% else %}
@@ -81,6 +110,24 @@
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
+
+        function repeatOrder(orderId) {
+            // Отправляем запрос на сервер для повторения заказа
+            fetch(`/api/repeat-order?order_id=${orderId}&user_id={{ user_id }}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Перенаправляем на страницу корзины с повторенным заказом
+                        window.location.href = `/cart?user_id={{ user_id }}`;
+                    } else {
+                        alert('Ошибка при повторении заказа');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Ошибка при повторении заказа');
+                });
+        }
     </script>
 </body>
 </html> 
