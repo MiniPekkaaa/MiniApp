@@ -68,6 +68,39 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
 
+        // Получаем user_id из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user_id');
+
+        function updateCartCount() {
+            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            const cartCount = cart.length;
+            document.getElementById('cart_button').textContent = `Корзина ${cartCount}`;
+        }
+
+        // Обновляем счетчик при загрузке страницы
+        updateCartCount();
+
+        function goToCart() {
+            window.location.href = `/cart?user_id=${userId}`;
+        }
+
+        function goToProducts() {
+            window.location.href = `/products?user_id=${userId}`;
+        }
+
+        function goToAddProduct() {
+            window.location.href = `/add_product?user_id=${userId}`;
+        }
+
+        function goToMyOrders() {
+            window.location.href = `/my_orders?user_id=${userId}`;
+        }
+
+        function goToOrderType() {
+            window.location.href = `/order_type?user_id=${userId}`;
+        }
+
         function exitApp() {
             tg.close();
         }

@@ -7,141 +7,167 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        .loader {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 4px solid #5288c1;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            color: var(--tg-theme-text-color, #000);
+            background: var(--tg-theme-bg-color, #fff);
+        }
+
+        .cart-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: var(--tg-theme-bg-color, #fff);
+            border: 1px solid var(--tg-theme-hint-color, #ccc);
+            border-radius: 8px;
+        }
+
+        .item-info {
+            flex-grow: 1;
+        }
+
+        .item-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .item-price {
+            color: var(--tg-theme-hint-color, #999);
+            font-size: 14px;
+        }
+
+        .quantity-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quantity-btn {
+            background: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .quantity-input {
             width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
+            text-align: center;
+            border: 1px solid var(--tg-theme-hint-color, #ccc);
+            border-radius: 4px;
+            padding: 4px;
         }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+
+        .total {
+            margin-top: 16px;
+            font-weight: 500;
+            text-align: right;
         }
-        
-        .hidden {
-            display: none;
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .action-btn {
+            flex: 1;
+            background: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .recommendation {
+            margin: 16px 0;
+            padding: 12px;
+            background: rgba(36, 129, 204, 0.1);
+            border-radius: 8px;
+            font-style: italic;
         }
 
         .notification {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            width: 100%;
-            padding: 16px;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            padding: 15px;
             background: linear-gradient(135deg, #4CAF50, #45a049);
             color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             z-index: 1000;
             opacity: 0;
-            transform: translateY(-100%);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: opacity 0.3s ease;
         }
 
         .notification.show {
             opacity: 1;
-            transform: translateY(0);
         }
 
-        .notification-content {
-            display: flex;
-            align-items: center;
-            flex: 1;
-            margin-right: 15px;
-            padding: 0 16px;
-        }
-
-        .notification-text {
-            font-size: 15px;
-            line-height: 1.4;
-            font-weight: 500;
-        }
-
-        .notification .close-btn {
-            background: rgba(255, 255, 255, 0.2);
+        .close-btn {
+            background: none;
             border: none;
             color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-size: 20px;
             cursor: pointer;
-            font-size: 18px;
-            transition: background-color 0.2s ease;
-            padding: 0;
-            margin-right: 16px;
+            padding: 0 5px;
         }
 
-        .notification .close-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+        .empty-cart {
+            text-align: center;
+            margin-top: 40px;
+            color: var(--tg-theme-hint-color, #999);
         }
 
-        @media (max-width: 768px) {
-            .notification {
-                padding: 12px 0;
-            }
-            
-            .notification-text {
-                font-size: 14px;
-            }
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
 
-        .button-delete {
-            background-color: #ff4444 !important;
-            color: white !important;
-        }
-
-        .button-order {
-            background-color: #4CAF50 !important;
-            color: white !important;
-        }
-
-        .button-add-more {
-            background-color: #5288c1 !important;
-            color: white !important;
-            margin-bottom: 10px !important;
+        .hidden {
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <!-- Уведомление -->
+    <div id="loading" class="hidden">
+        Загрузка...
+    </div>
+
+    <div id="content">
+        <div id="cart-items"></div>
+        <div id="recommendation" class="recommendation hidden"></div>
+        <div class="total">Итого: <span id="total-amount">0</span> ₽</div>
+        <div class="action-buttons">
+            <button class="action-btn" onclick="addMore()">Добавить ещё</button>
+            <button class="action-btn" onclick="placeOrder()">Оформить заказ</button>
+        </div>
+    </div>
+
     <div id="notification" class="notification">
-        <div class="notification-content">
-            <div class="notification-text" id="notification-text"></div>
-        </div>
+        <span id="notification-text"></span>
         <button class="close-btn" onclick="hideNotification()">×</button>
-    </div>
-
-    <!-- Экран загрузки -->
-    <div id="loading" class="container" style="text-align: center; padding: 20px;">
-        <div class="loader"></div>
-    </div>
-
-    <!-- Основной контент -->
-    <div id="content" class="hidden">
-        <div class="container">
-            <div id="cart_items">
-                <!-- Здесь будут отображаться товары -->
-            </div>
-            <div id="show_more_container" style="display: none;">
-                <button onclick="toggleShowAll()" class="button" id="show_more_button">Показать все</button>
-            </div>
-            <div id="cart_total">
-                <h3>Итого: <span id="total_amount">0</span>₽</h3>
-            </div>
-            <button onclick="addMore()" class="button button-add-more">Добавить ещё</button>
-            <button onclick="placeOrder()" class="button button-order">Оформить заказ</button>
-            <button onclick="goBack()" class="button">Назад</button>
-        </div>
     </div>
 
     <script>
@@ -152,192 +178,161 @@
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user_id');
         
-        let cartItems = []; // Сохраняем все позиции
-        let showAll = false; // Флаг для отображения всех позиций
+        // Загружаем корзину при загрузке страницы
+        document.addEventListener('DOMContentLoaded', loadCart);
         
-        // Функции для работы с уведомлениями
-        let notificationTimeout;
-
-        // Загрузка корзины при открытии страницы
-        window.onload = function() {
-            loadCart();
-        };
-
-        function loadCart() {
-            const savedCart = JSON.parse(sessionStorage.getItem('cart') || '[]');
-            cartItems = savedCart;
-            displayCartItems();
-            updateTotal(savedCart);
-            showContent();
-
-            // Показываем рекомендацию, если она есть
-            const recommendation = sessionStorage.getItem('recommendation');
-            if (recommendation) {
-                showNotification(recommendation);
-                sessionStorage.removeItem('recommendation'); // Удаляем после показа
-            }
+        function showContent() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('content').classList.remove('hidden');
         }
 
-        function displayCartItems() {
-            const cartItemsContainer = document.getElementById('cart_items');
-            const showMoreContainer = document.getElementById('show_more_container');
-            cartItemsContainer.innerHTML = '';
+        function hideContent() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('content').classList.add('hidden');
+        }
+        
+        function loadCart() {
+            hideContent();
             
-            if (cartItems.length === 0) {
-                cartItemsContainer.innerHTML = '<p>Корзина пуста</p>';
-                showMoreContainer.style.display = 'none';
+            // Получаем данные корзины из sessionStorage
+            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            const cartContainer = document.getElementById('cart-items');
+            cartContainer.innerHTML = '';
+            
+            if (cart.length === 0) {
+                cartContainer.innerHTML = '<div class="empty-cart">Корзина пуста</div>';
+                showContent();
                 return;
             }
-
-            // Показываем кнопку "Показать все" только если есть больше 5 позиций
-            if (cartItems.length > 5) {
-                showMoreContainer.style.display = 'block';
-                document.getElementById('show_more_button').textContent = showAll ? 'Свернуть' : 'Показать все';
-            } else {
-                showMoreContainer.style.display = 'none';
-            }
-
-            // Отображаем нужное количество позиций
-            const itemsToShow = showAll ? cartItems.length : Math.min(5, cartItems.length);
             
-            for (let i = 0; i < itemsToShow; i++) {
-                const item = cartItems[i];
+            cart.forEach((item, index) => {
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
-                    <div class="cart-item-info">
-                        <h3 class="cart-item-name">${item.name}</h3>
-                        <div class="cart-item-details">
-                            <p>Количество: ${item.quantity}</p>
-                            <p>Цена: ${item.price}₽</p>
-                            <p>Сумма: ${item.price * item.quantity}₽</p>
-                        </div>
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-price">${item.price} ₽</div>
                     </div>
-                    <div class="cart-item-controls">
-                        <button onclick="editQuantity(${i})" class="button">Изменить объем</button>
-                        <button onclick="removeItem(${i})" class="button button-delete">Удалить</button>
+                    <div class="quantity-controls">
+                        <button class="quantity-btn" onclick="decrementQuantity(${index})">-</button>
+                        <input type="number" class="quantity-input" value="${item.quantity}" 
+                               onchange="updateQuantity(${index}, this.value)" min="1">
+                        <button class="quantity-btn" onclick="incrementQuantity(${index})">+</button>
                     </div>
                 `;
-                cartItemsContainer.appendChild(itemElement);
-            }
-        }
-
-        function toggleShowAll() {
-            showAll = !showAll;
-            displayCartItems();
-        }
-
-        function updateTotal(items) {
-            const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            document.getElementById('total_amount').textContent = total;
-        }
-
-        function editQuantity(index) {
-            const item = cartItems[index];
-            const newQuantity = prompt('Введите новое количество:', item.quantity);
+                cartContainer.appendChild(itemElement);
+            });
             
-            if (newQuantity !== null) {
-                const quantity = parseInt(newQuantity);
-                if (!isNaN(quantity) && quantity > 0) {
-                    cartItems[index].quantity = quantity;
-                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    displayCartItems();
-                    updateTotal(cartItems);
-                } else {
-                    tg.showAlert('Пожалуйста, введите корректное количество (больше 0)');
-                }
+            // Показываем рекомендацию, если она есть
+            const recommendation = sessionStorage.getItem('recommendation');
+            const recommendationElement = document.getElementById('recommendation');
+            if (recommendation) {
+                recommendationElement.textContent = recommendation;
+                recommendationElement.classList.remove('hidden');
+            } else {
+                recommendationElement.classList.add('hidden');
+            }
+            
+            updateTotal();
+            showContent();
+        }
+        
+        function updateTotal() {
+            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            document.getElementById('total-amount').textContent = total;
+        }
+        
+        function incrementQuantity(index) {
+            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            cart[index].quantity++;
+            sessionStorage.setItem('cart', JSON.stringify(cart));
+            loadCart();
+        }
+        
+        function decrementQuantity(index) {
+            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            if (cart[index].quantity > 1) {
+                cart[index].quantity--;
+                sessionStorage.setItem('cart', JSON.stringify(cart));
+                loadCart();
             }
         }
-
-        function removeItem(index) {
-            cartItems.splice(index, 1);
-            sessionStorage.setItem('cart', JSON.stringify(cartItems));
-            displayCartItems();
-            updateTotal(cartItems);
+        
+        function updateQuantity(index, value) {
+            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            cart[index].quantity = Math.max(1, parseInt(value) || 1);
+            sessionStorage.setItem('cart', JSON.stringify(cart));
+            loadCart();
         }
-
+        
         function addMore() {
             window.location.href = `/products?user_id=${userId}&show_product_selection=true`;
         }
 
-        function goBack() {
-            window.location.href = `/main_menu?user_id=${userId}`;
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notification-text');
+            notificationText.textContent = message;
+            notification.classList.add('show');
+            
+            // Автоматически скрыть через 15 секунд
+            setTimeout(() => {
+                hideNotification();
+            }, 15000);
         }
 
+        function hideNotification() {
+            const notification = document.getElementById('notification');
+            notification.classList.remove('show');
+        }
+        
         async function placeOrder() {
-            if (cartItems.length === 0) {
-                tg.showAlert('Корзина пуста');
-                return;
-            }
-
+            hideContent();
+            
             try {
-                const formattedItems = cartItems.map(item => ({
-                    id: item.id,
-                    name: item.name,
-                    legalEntity: item.legalEntity,
-                    quantity: parseInt(item.quantity)
-                }));
-
+                const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+                
+                if (cart.length === 0) {
+                    tg.showAlert('Корзина пуста');
+                    showContent();
+                    return;
+                }
+                
                 const response = await fetch('/api/create-order', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        userId: userId,
-                        items: formattedItems
+                        user_id: userId,
+                        positions: cart.map(item => ({
+                            id: item.id,
+                            name: item.name,
+                            quantity: item.quantity,
+                            price: item.price,
+                            legal_entity: item.legalEntity
+                        }))
                     })
                 });
-
-                const result = await response.json();
                 
-                if (result.success) {
-                    // Очищаем корзину после успешного создания заказа
-                    cartItems = [];
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Очищаем корзину
                     sessionStorage.removeItem('cart');
-                    displayCartItems();
-                    tg.showAlert('Заказ успешно создан!');
-                    window.location.href = '/main_menu?user_id=' + userId;
+                    sessionStorage.removeItem('recommendation');
+                    
+                    showNotification('Заказ успешно создан');
+                    loadCart();
                 } else {
-                    throw new Error(result.error || 'Ошибка при создании заказа');
+                    throw new Error(data.error || 'Ошибка при создании заказа');
                 }
             } catch (error) {
-                console.error('Ошибка при создании заказа:', error);
-                tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
-            }
-        }
-
-        function showContent() {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').classList.remove('hidden');
-        }
-
-        // Функции для работы с уведомлениями
-        function showNotification(message, duration = 15000) {
-            const notification = document.getElementById('notification');
-            const notificationText = document.getElementById('notification-text');
-            
-            // Очищаем предыдущий таймер, если он был
-            if (notificationTimeout) {
-                clearTimeout(notificationTimeout);
-            }
-            
-            notificationText.textContent = message;
-            notification.classList.add('show');
-            
-            // Устанавливаем новый таймер
-            notificationTimeout = setTimeout(() => {
-                hideNotification();
-            }, duration);
-        }
-
-        function hideNotification() {
-            const notification = document.getElementById('notification');
-            notification.classList.remove('show');
-            
-            // Очищаем таймер при ручном закрытии
-            if (notificationTimeout) {
-                clearTimeout(notificationTimeout);
+                console.error('Ошибка:', error);
+                tg.showAlert('Произошла ошибка: ' + error.message);
+            } finally {
+                showContent();
             }
         }
     </script>
