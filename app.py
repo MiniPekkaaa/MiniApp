@@ -313,5 +313,51 @@ def get_last_orders():
         logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/my_orders')
+def my_orders():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+
+        # Получаем org_ID из Redis для текущего пользователя
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('OrgID')
+
+        if not org_id:
+            return "Организация не найдена", 404
+
+        # Получаем последние 5 заказов для организации
+        pipeline = [
+            {"$match": {"org_id": org_id}},
+            {"$sort": {"date": -1}},
+            {"$limit": 5},
+            {"$project": {
+                "date": 1,
+                "status": 1,
+                "items_count": {"$size": "$items"},
+                "total_sum": 1
+            }}
+        ]
+
+        orders = list(mongo.cx.Pivo.orders.aggregate(pipeline))
+
+        # Форматируем даты и статусы для отображения
+        formatted_orders = []
+        for order in orders:
+            formatted_order = {
+                'date': order['date'].strftime('%d.%m.%Y %H:%M'),
+                'status': order.get('status', 'Новый'),
+                'items_count': order.get('items_count', 0),
+                'total_sum': order.get('total_sum', 0)
+            }
+            formatted_orders.append(formatted_order)
+
+        return render_template('my_orders.html', orders=formatted_orders, user_id=user_id)
+    
+    except Exception as e:
+        logger.error(f"Error in my_orders route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
