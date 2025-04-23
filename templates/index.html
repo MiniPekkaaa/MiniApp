@@ -51,19 +51,12 @@
         </div>
 
         <div id="product_selection" class="container" style="display: none;">
-            <select id="product_select" class="select">
-                <option value="">Выберите товар</option>
-                {% for product in products %}
-                <option value="{{ product.id }}" 
-                        data-name="{{ product.name }}"
-                        data-fullname="{{ product.fullName }}"
-                        data-volume="{{ product.volume }}"
-                        data-price="{{ product.price }}"
-                        data-legal-entity="{{ product.legalEntity }}">
-                    {{ product.name }} ({{ product.volume }}л) - {{ product.price }}₽
-                </option>
-                {% endfor %}
-            </select>
+            <div class="search-container">
+                <input type="text" id="product_search" class="search-input" placeholder="Поиск товара...">
+                <div id="product_dropdown" class="dropdown-list">
+                    <!-- Список товаров будет добавлен динамически -->
+                </div>
+            </div>
             <div class="quantity-controls">
                 <button onclick="decrementQuantity()" class="button">-</button>
                 <input type="number" id="quantity" value="1" min="1" class="quantity-input">
@@ -106,11 +99,62 @@
             }
         }
         
-        let products = {{ products|tojson|safe }};
-        console.log("Loaded products:", products);
+        const initialProducts = {{ products|tojson|safe }};
+        console.log("Loaded products:", initialProducts);
         
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+        let selectedProduct = null;
         updateCartCount();
+        
+        // Инициализация поиска
+        const searchInput = document.getElementById('product_search');
+        const dropdownList = document.getElementById('product_dropdown');
+
+        searchInput.addEventListener('input', function() {
+            const searchText = this.value.toLowerCase();
+            const filteredProducts = initialProducts.filter(product => 
+                product.name.toLowerCase().includes(searchText) ||
+                product.fullName.toLowerCase().includes(searchText)
+            );
+            
+            updateDropdownList(filteredProducts);
+        });
+
+        searchInput.addEventListener('focus', function() {
+            if (this.value) {
+                dropdownList.classList.add('active');
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !dropdownList.contains(e.target)) {
+                dropdownList.classList.remove('active');
+            }
+        });
+
+        function updateDropdownList(filteredProducts) {
+            dropdownList.innerHTML = '';
+            
+            if (filteredProducts.length > 0) {
+                filteredProducts.forEach(product => {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.innerHTML = `${product.name} (${product.volume}л - ${product.price}₽)`;
+                    
+                    item.addEventListener('click', () => {
+                        selectedProduct = product;
+                        searchInput.value = product.name;
+                        dropdownList.classList.remove('active');
+                    });
+                    
+                    dropdownList.appendChild(item);
+                });
+                
+                dropdownList.classList.add('active');
+            } else {
+                dropdownList.classList.remove('active');
+            }
+        }
         
         function closeApp() {
             window.location.href = `/?user_id=${userId}`;
@@ -139,40 +183,42 @@
         }
         
         function addToCart() {
-            let select = document.getElementById('product_select');
-            let quantity = parseInt(document.getElementById('quantity').value);
-            
-            if (select.value) {
-                let option = select.options[select.selectedIndex];
-                let product = {
-                    id: select.value,
-                    name: option.dataset.name,
-                    fullName: option.dataset.fullname,
-                    volume: parseFloat(option.dataset.volume),
-                    price: parseInt(option.dataset.price),
-                    legalEntity: parseInt(option.dataset.legalEntity),
-                    quantity: quantity
-                };
-                
-                const existingItemIndex = cart.findIndex(item => 
-                    item.id === product.id && 
-                    item.price === product.price
-                );
-                
-                if (existingItemIndex !== -1) {
-                    cart[existingItemIndex].quantity += quantity;
-                } else {
-                    cart.push(product);
-                }
-                
-                sessionStorage.setItem('cart', JSON.stringify(cart));
-                updateCartCount();
-                
-                tg.showAlert("Позиция добавлена успешно");
-                
-                select.value = "";
-                document.getElementById('quantity').value = "1";
+            if (!selectedProduct) {
+                tg.showAlert("Пожалуйста, выберите товар");
+                return;
             }
+            
+            const quantity = parseInt(document.getElementById('quantity').value);
+            
+            const product = {
+                id: selectedProduct.id,
+                name: selectedProduct.name,
+                fullName: selectedProduct.fullName,
+                volume: parseFloat(selectedProduct.volume),
+                price: parseInt(selectedProduct.price),
+                legalEntity: parseInt(selectedProduct.legalEntity),
+                quantity: quantity
+            };
+            
+            const existingItemIndex = cart.findIndex(item => 
+                item.id === product.id && 
+                item.price === product.price
+            );
+            
+            if (existingItemIndex !== -1) {
+                cart[existingItemIndex].quantity += quantity;
+            } else {
+                cart.push(product);
+            }
+            
+            sessionStorage.setItem('cart', JSON.stringify(cart));
+            updateCartCount();
+            
+            tg.showAlert("Позиция добавлена успешно");
+            
+            searchInput.value = "";
+            document.getElementById('quantity').value = "1";
+            selectedProduct = null;
         }
         
         function updateCartCount() {
