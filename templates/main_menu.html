@@ -5,105 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            color: var(--tg-theme-text-color, #000000);
-            background: var(--tg-theme-bg-color, #ffffff);
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            text-align: center;
-        }
-
-        h1 {
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-
-        .button {
-            display: block;
-            width: 100%;
-            padding: 12px 20px;
-            margin: 10px 0;
-            border: none;
-            border-radius: 8px;
-            background-color: var(--tg-theme-button-color, #50B7F5);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            font-size: 16px;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        .button:hover {
-            opacity: 0.8;
-        }
-
-        .button-exit {
-            background-color: #ff4444 !important;
-            color: white !important;
-            margin-top: 20px;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="container">
-        <h1>Главное меню</h1>
+        <h1 class="title">Главное меню</h1>
         <button onclick="window.location.href='/order_type?user_id={{ user_id }}'" class="button">
             Новый заказ
         </button>
         <button onclick="window.location.href='/my_orders?user_id={{ user_id }}'" class="button">
             Мои заказы
         </button>
-        <button onclick="exitApp()" class="button button-exit">
-            Выйти
-        </button>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
-
-        // Получаем user_id из URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('user_id');
-
-        function updateCartCount() {
-            const cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
-            const cartCount = cart.length;
-            document.getElementById('cart_button').textContent = `Корзина ${cartCount}`;
-        }
-
-        // Обновляем счетчик при загрузке страницы
-        updateCartCount();
-
-        function goToCart() {
-            window.location.href = `/cart?user_id=${userId}`;
-        }
-
-        function goToProducts() {
-            window.location.href = `/products?user_id=${userId}`;
-        }
-
-        function goToAddProduct() {
-            window.location.href = `/add_product?user_id=${userId}`;
-        }
-
-        function goToMyOrders() {
-            window.location.href = `/my_orders?user_id=${userId}`;
-        }
-
-        function goToOrderType() {
-            window.location.href = `/order_type?user_id=${userId}`;
-        }
-
-        function exitApp() {
-            tg.close();
-        }
     </script>
 </body>
 </html> 

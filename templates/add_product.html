@@ -203,7 +203,6 @@
         }
         
         const remainders = [];
-        let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
@@ -258,6 +257,47 @@
                 });
         }
 
+        function displayRemainders() {
+            const container = document.getElementById('current_remainders');
+            // Очищаем контейнер, сохраняя заголовок
+            const header = container.querySelector('h3');
+            container.innerHTML = '';
+            container.appendChild(header);
+
+            remainders.forEach(remainder => {
+                const remainderDiv = document.createElement('div');
+                remainderDiv.className = 'product-item';
+                
+                remainderDiv.innerHTML = `
+                    <div class="product-info">
+                        ${remainder.name}
+                    </div>
+                    <div class="product-controls">
+                        <input type="number" value="${remainder.quantity}" min="1" class="quantity-input" 
+                               onchange="updateRemainderQuantity('${remainder.id}', ${remainder.legalEntity}, this.value)">
+                        <button onclick="deleteRemainder('${remainder.id}', ${remainder.legalEntity}, this.closest('.product-item'))"
+                                class="delete-button">
+                            Удалить
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(remainderDiv);
+            });
+        }
+
+        function updateRemainderQuantity(beerId, legalEntity, newQuantity) {
+            const index = remainders.findIndex(item => 
+                item.id === beerId && 
+                item.legalEntity === legalEntity
+            );
+            
+            if (index !== -1) {
+                remainders[index].quantity = parseInt(newQuantity);
+                tg.showAlert("Количество обновлено");
+            }
+        }
+
         function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
             const product = {
                 id: beerId.toString(),
@@ -277,10 +317,12 @@
                 remainders.push(product);
             }
             
+            // Показываем уведомление о добавлении остатка
             tg.showAlert("Остаток добавлен");
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
+            // Если позиция была в remainders, удаляем её оттуда
             const index = remainders.findIndex(item => 
                 item.id === beerId.toString() && 
                 item.legalEntity === legalEntity
@@ -288,6 +330,7 @@
             
             if (index !== -1) {
                 remainders.splice(index, 1);
+                // Перезагружаем список
                 loadLastOrdersProducts();
             }
         }
@@ -301,7 +344,6 @@
                 let product = {
                     id: select.value,
                     name: option.dataset.name,
-                    price: parseInt(option.dataset.price),
                     legalEntity: parseInt(option.dataset.legalEntity),
                     quantity: quantity
                 };
@@ -317,6 +359,7 @@
                     remainders.push(product);
                 }
                 
+                // Добавляем новый остаток в список позиций
                 const container = document.getElementById('last_orders_products');
                 const productDiv = document.createElement('div');
                 productDiv.className = 'product-item';
@@ -340,6 +383,7 @@
                 select.value = "";
                 document.getElementById('quantity').value = "1";
                 
+                // Показываем уведомление о добавлении остатка
                 tg.showAlert("Остаток добавлен");
             }
         }
@@ -349,9 +393,61 @@
             document.getElementById('loading').style.display = 'block';
             document.getElementById('content').classList.add('hidden');
 
-            // Отправляем данные в n8n
+            // Собираем все позиции из списка
+            const container = document.getElementById('last_orders_products');
+            const items = container.querySelectorAll('.product-item');
+            const allRemainders = [];
+
+            // Добавляем все позиции из DOM
+            items.forEach(item => {
+                const name = item.querySelector('.product-info').textContent.trim();
+                const quantity = parseInt(item.querySelector('.quantity-input').value);
+                const deleteButton = item.querySelector('.delete-button');
+                // Получаем beer_id и legal_entity из атрибутов кнопки удаления
+                const onclick = deleteButton.getAttribute('onclick');
+                const matches = onclick.match(/deleteRemainder\((\d+),\s*(\d+)/);
+                if (matches) {
+                    const [_, beerId, legalEntity] = matches;
+                    allRemainders.push({
+                        id: beerId,
+                        name: name,
+                        legalEntity: parseInt(legalEntity),
+                        quantity: quantity
+                    });
+                }
+            });
+
+            // Добавляем все позиции из массива remainders, которых еще нет в списке
+            remainders.forEach(remainder => {
+                const exists = allRemainders.some(item => 
+                    item.id === remainder.id && 
+                    item.legalEntity === remainder.legalEntity
+                );
+                if (!exists) {
+                    allRemainders.push({
+                        id: remainder.id,
+                        name: remainder.name,
+                        legalEntity: remainder.legalEntity,
+                        quantity: remainder.quantity
+                    });
+                }
+            });
+
+            if (allRemainders.length === 0) {
+                tg.showAlert("Добавьте хотя бы один остаток");
+                return;
+            }
+
+            console.log('Отправляем остатки:', allRemainders);
+
+            // Сначала получаем данные пользователя
             fetch(`/api/get-last-orders?user_id=${userId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (!data.org_ID) {
                         throw new Error('org_ID не найден');
@@ -360,8 +456,10 @@
                     const data_to_send = {
                         telegram_id: userId,
                         org_ID: data.org_ID,
-                        remainders: remainders
+                        remainders: allRemainders
                     };
+
+                    console.log('Отправляем данные в n8n:', data_to_send);
 
                     return fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
                         method: 'POST',
@@ -374,77 +472,102 @@
                 })
                 .then(response => {
                     if (!response.ok) {
+                        if (response.status === 502) {
+                            // В случае 502 ошибки просто переходим в корзину с текущими данными
+                            return processCartItems(allRemainders);
+                        }
                         throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
                     }
+                    
                     return response.text().then(text => {
                         try {
-                            return text ? JSON.parse(text) : null;
+                            return text ? JSON.parse(text) : {};
                         } catch (e) {
                             console.warn('Не удалось распарсить ответ как JSON:', text);
-                            return null;
+                            return {};
                         }
                     });
                 })
                 .then(responseData => {
-                    if (responseData && Array.isArray(responseData) && responseData[0]) {
-                        const recommendation = responseData[0];
-                        
-                        // Сохраняем рекомендацию для отображения в корзине
-                        if (recommendation.generalRecommendation) {
-                            sessionStorage.setItem('recommendation', recommendation.generalRecommendation);
-                        }
-
-                        // Если есть рекомендованные позиции, используем их
-                        if (recommendation.positions && Array.isArray(recommendation.positions)) {
-                            cart = recommendation.positions.map(position => {
-                                const option = Array.from(document.getElementById('product_select').options)
-                                    .find(opt => opt.dataset.name === position.name);
-
-                                if (option) {
-                                    return {
-                                        id: option.value,
-                                        name: position.name,
-                                        price: parseInt(option.dataset.price),
-                                        legalEntity: parseInt(option.dataset.legalEntity),
-                                        quantity: parseInt(position.quantity) || 1
-                                    };
-                                }
-                                return null;
-                            }).filter(Boolean);
-                        }
-                    } else {
-                        // Если нет рекомендаций, используем текущие остатки
-                        cart = remainders.map(remainder => {
-                            const option = Array.from(document.getElementById('product_select').options)
-                                .find(opt => opt.value === remainder.id);
-
-                            if (option) {
-                                return {
-                                    id: remainder.id,
-                                    name: remainder.name,
-                                    price: parseInt(option.dataset.price),
-                                    legalEntity: remainder.legalEntity,
-                                    quantity: remainder.quantity
-                                };
-                            }
-                            return null;
-                        }).filter(Boolean);
+                    if (!responseData) {
+                        return processCartItems(allRemainders);
                     }
 
-                    // Сохраняем обновленную корзину
-                    sessionStorage.setItem('cart', JSON.stringify(cart));
-                    
-                    // Переходим в корзину
-                    window.location.href = '/cart?user_id=' + userId;
+                    // Обрабатываем ответ как массив
+                    const recommendation = Array.isArray(responseData) ? responseData[0] : responseData;
+
+                    if (!recommendation || !recommendation.positions) {
+                        return processCartItems(allRemainders);
+                    }
+
+                    // Сохраняем рекомендацию
+                    if (recommendation.generalRecommendation) {
+                        localStorage.setItem('recommendation', recommendation.generalRecommendation);
+                    }
+
+                    // Создаем массив для корзины
+                    const cartItems = recommendation.positions.map(position => {
+                        // Ищем соответствующую опцию в select по названию
+                        const option = Array.from(document.getElementById('product_select').options)
+                            .find(opt => opt.dataset.name === position.name);
+
+                        if (option) {
+                            // Если нашли соответствующий товар, берем все данные из него
+                            return {
+                                id: option.value,
+                                name: position.name,
+                                quantity: parseInt(position.quantity) || 0,
+                                price: parseFloat(option.dataset.price) || 0,
+                                legalEntity: parseInt(option.dataset.legalEntity) || 1
+                            };
+                        } else {
+                            console.warn(`Товар не найден: ${position.name}`);
+                            return {
+                                id: '',
+                                name: position.name,
+                                quantity: parseInt(position.quantity) || 0,
+                                price: 0,
+                                legalEntity: 1
+                            };
+                        }
+                    });
+
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    remainders.length = 0;
+                    window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
                 })
                 .catch(error => {
-                    console.error('Ошибка:', error);
-                    tg.showAlert('Произошла ошибка: ' + error.message);
+                    console.error('Ошибка при отправке остатков:', error);
+                    return processCartItems(allRemainders);
                 })
                 .finally(() => {
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('content').classList.remove('hidden');
                 });
+        }
+
+        // Функция для обработки элементов корзины при ошибке
+        function processCartItems(items) {
+            // Получаем цены из select элемента
+            const selectElement = document.getElementById('product_select');
+            const pricesMap = {};
+            Array.from(selectElement.options).forEach(option => {
+                if (option.dataset.name) {
+                    pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
+                }
+            });
+
+            // Формируем элементы корзины
+            const cartItems = items.map(item => ({
+                name: item.name,
+                quantity: parseInt(item.quantity) || 0,
+                price: parseFloat(pricesMap[item.name] || 0)
+            }));
+
+            console.log('Сформированные элементы корзины (при ошибке):', cartItems);
+            sessionStorage.setItem('cart', JSON.stringify(cartItems));
+            remainders.length = 0;
+            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
         }
 
         // Запускаем проверку авторизации

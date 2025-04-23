@@ -189,6 +189,80 @@ def get_products():
         logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/create-order', methods=['POST'])
+def create_order():
+    try:
+        logger.debug("Получен запрос на создание заказа")
+        data = request.json
+        user_id = data.get('userId')
+        
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        logger.debug(f"Данные заказа: {data}")
+
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        
+        # Формируем позиции заказа
+        positions = {}
+        for index, item in enumerate(data.get('items', []), 1):
+            position_key = f"Position_{index}"
+            positions[position_key] = {
+                'Beer_ID': int(item['id']),
+                'Beer_Name': item['name'],
+                'Legal_Entity': int(item['legalEntity']),
+                'Beer_Count': int(item['quantity'])
+            }
+
+        # Создаем заказ
+        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
+        current_time = datetime.now(timezone)
+        order_data = {
+            'status': "in work",
+            'date': current_time.strftime("%d.%m.%y %H:%M"),
+            'userid': str(user_id),
+            'username': user_data.get('organization', 'ООО Пивной мир'),
+            'org_ID': user_data.get('org_ID'),
+            'Positions': positions
+        }
+
+        logger.debug(f"Подготовленный заказ: {order_data}")
+        
+        result = mongo.cx.Pivo.Orders.insert_one(order_data)
+        logger.debug(f"Заказ создан, ID: {result.inserted_id}")
+
+        return jsonify({"success": True, "orderId": str(result.inserted_id)})
+    except Exception as e:
+        logger.error(f"Ошибка при создании заказа: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/order_menu')
+def order_menu():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+            
+        products = list(mongo.cx.Pivo.catalog.find())
+        formatted_products = []
+        for product in products:
+            formatted_product = {
+                'id': product.get('id', ''),
+                '_id': str(product.get('_id', '')),
+                'name': product.get('name', ''),
+                'fullName': product.get('fullName', ''),
+                'volume': float(product.get('volume', 0)),
+                'price': int(product.get('price', 0)),
+                'legalEntity': int(product.get('legalEntity', 1))
+            }
+            formatted_products.append(formatted_product)
+            
+        return render_template('index.html', products=formatted_products, user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
+
 @app.route('/api/get-last-orders')
 def get_last_orders():
     try:
@@ -234,259 +308,9 @@ def get_last_orders():
         }
         
         return jsonify(response_data)
-    except Exception as e:
-        logger.error(f"Error in get_last_orders route: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/create-order', methods=['POST'])
-def create_order():
-    try:
-        data = request.get_json()
-        user_id = data.get('userId')
-        items = data.get('items', [])
-
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        if not items:
-            return jsonify({"error": "No items provided"}), 400
-
-        # Получаем данные пользователя из Redis
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        org_id = user_data.get('org_ID')
-        
-        if not org_id:
-            return jsonify({"error": "Organization ID not found"}), 400
-
-        # Создаем новый заказ
-        order = {
-            "org_ID": org_id,
-            "date": datetime.now(pytz.timezone('Europe/Moscow')),
-            "Positions": {}
-        }
-
-        # Добавляем позиции в заказ
-        for i, item in enumerate(items, 1):
-            position = {
-                "Beer_ID": int(item['id']),
-                "Beer_Name": item['name'],
-                "Legal_Entity": item['legalEntity'],
-                "Beer_Count": item['quantity']
-            }
-            order["Positions"][str(i)] = position
-
-        # Сохраняем заказ в MongoDB
-        result = mongo.cx.Pivo.Orders.insert_one(order)
-        
-        if result.inserted_id:
-            # Логируем создание заказа
-            logger.info(f"Order created for org_ID {org_id}")
-            return jsonify({"success": True})
-        else:
-            raise Exception("Failed to create order")
 
     except Exception as e:
-        logger.error(f"Error in create_order route: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/order_menu')
-def order_menu():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-            
-        products = list(mongo.cx.Pivo.catalog.find())
-        formatted_products = []
-        for product in products:
-            formatted_product = {
-                'id': product.get('id', ''),
-                '_id': str(product.get('_id', '')),
-                'name': product.get('name', ''),
-                'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
-            }
-            formatted_products.append(formatted_product)
-            
-        return render_template('index.html', products=formatted_products, user_id=user_id)
-    except Exception as e:
-        logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
-
-@app.route('/my_orders')
-def my_orders():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-
-        # Получаем org_ID из Redis для текущего пользователя
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        org_id = user_data.get('org_ID')
-
-        if not org_id:
-            return "Организация не найдена", 404
-
-        # Получаем последние 5 заказов для организации
-        orders = list(mongo.cx.Pivo.Orders.find(
-            {"org_ID": org_id}
-        ).sort("date", -1).limit(5))
-
-        # Получаем каталог пива для подсчета сумм
-        catalog = {str(product['id']): product for product in mongo.cx.Pivo.catalog.find()}
-
-        # Форматируем заказы для отображения
-        formatted_orders = []
-        for order in orders:
-            positions = order.get('Positions', {})
-            
-            # Подсчитываем общую сумму заказа
-            total_sum = 0
-            for position in positions.values():
-                beer_id = str(position.get('Beer_ID'))
-                if beer_id in catalog:
-                    beer_price = catalog[beer_id].get('price', 0)
-                    total_sum += beer_price * position.get('Beer_Count', 0)
-
-            formatted_order = {
-                'date': order.get('date'),
-                'status': order.get('status', 'Новый'),
-                'items_count': len(positions),
-                'total_sum': total_sum,
-                'positions': positions,
-                '_id': str(order['_id'])
-            }
-            formatted_orders.append(formatted_order)
-
-        return render_template('my_orders.html', orders=formatted_orders, user_id=user_id)
-    
-    except Exception as e:
-        logger.error(f"Error in my_orders route: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
-
-@app.route('/api/repeat-order')
-def repeat_order():
-    try:
-        user_id = request.args.get('user_id')
-        order_id = request.args.get('order_id')
-        
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        # Получаем заказ из базы данных
-        order = mongo.cx.Pivo.Orders.find_one({"_id": ObjectId(order_id)})
-        if not order:
-            return jsonify({"error": "Order not found"}), 404
-
-        # Создаем ключ для временного хранения заказа в Redis
-        cart_key = f'beer:cart:{user_id}'
-        
-        # Очищаем текущую корзину
-        redis_client.delete(cart_key)
-        
-        # Добавляем позиции из старого заказа в корзину
-        positions = order.get('Positions', {})
-        for position in positions.values():
-            item_data = {
-                "id": position['Beer_ID'],
-                "count": position['Beer_Count']
-            }
-            redis_client.hset(cart_key, str(position['Beer_ID']), json.dumps(item_data))
-        
-        return jsonify({"success": True})
-    
-    except Exception as e:
-        logger.error(f"Error in repeat_order route: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/get-cart-items')
-def get_cart_items():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        # Получаем содержимое корзины из Redis
-        cart_key = f'beer:cart:{user_id}'
-        cart_items = redis_client.hgetall(cart_key)
-        
-        # Получаем каталог пива для получения актуальных данных
-        catalog = {str(product['id']): product for product in mongo.cx.Pivo.catalog.find()}
-        
-        # Формируем список товаров
-        items = []
-        for beer_id, item_data in cart_items.items():
-            try:
-                item = json.loads(item_data)
-                if str(item['id']) in catalog:
-                    beer = catalog[str(item['id'])]
-                    items.append({
-                        'id': item['id'],
-                        'name': beer['name'],
-                        'count': item['count'],
-                        'price': beer['price'],
-                        'legalEntity': beer['legalEntity']
-                    })
-            except (json.JSONDecodeError, KeyError):
-                continue
-        
-        return jsonify({"items": items})
-    
-    except Exception as e:
-        logger.error(f"Error in get_cart_items route: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/clear-cart', methods=['POST'])
-def clear_cart():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        # Удаляем корзину из Redis
-        cart_key = f'beer:cart:{user_id}'
-        redis_client.delete(cart_key)
-        
-        return jsonify({"success": True})
-    
-    except Exception as e:
-        logger.error(f"Error in clear_cart route: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/add-to-cart', methods=['POST'])
-def add_to_cart():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        data = request.json
-        if not data or 'id' not in data or 'count' not in data:
-            return jsonify({"error": "Missing required fields"}), 400
-
-        # Создаем ключ для корзины пользователя
-        cart_key = f'beer:cart:{user_id}'
-        
-        # Получаем текущие данные товара из корзины, если они есть
-        existing_item = redis_client.hget(cart_key, str(data['id']))
-        if existing_item:
-            try:
-                item_data = json.loads(existing_item)
-                item_data['count'] += int(data['count'])
-            except (json.JSONDecodeError, KeyError):
-                item_data = {'id': data['id'], 'count': int(data['count'])}
-        else:
-            item_data = {'id': data['id'], 'count': int(data['count'])}
-
-        # Сохраняем обновленные данные в Redis
-        redis_client.hset(cart_key, str(data['id']), json.dumps(item_data))
-        
-        return jsonify({"success": True})
-    
-    except Exception as e:
-        logger.error(f"Error in add_to_cart route: {str(e)}", exc_info=True)
+        logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
