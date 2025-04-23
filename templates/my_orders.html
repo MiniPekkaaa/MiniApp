@@ -288,9 +288,8 @@
             });
         }
 
-        function showDialog(orderId) {
-            console.log('Order ID для отмены:', orderId);
-            currentOrderId = orderId;
+        function showDialog(orderDate) {
+            currentOrderId = orderDate;
             document.getElementById('cancel-dialog').classList.add('visible');
         }
 
@@ -301,7 +300,7 @@
 
         async function confirmCancel() {
             if (!currentOrderId) {
-                tg.showAlert('Ошибка: ID заказа не найден');
+                tg.showAlert('Ошибка: дата заказа не найдена');
                 return;
             }
             
@@ -314,34 +313,27 @@
             hideContent();
             
             try {
-                console.log('Отправляем запрос на отмену заказа:', {
-                    order_id: currentOrderId,
-                    user_id: userId
-                });
-
                 const response = await fetch('/api/cancel-order', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        order_id: currentOrderId,
-                        user_id: userId
+                        user_id: userId,
+                        order_date: currentOrderId
                     })
                 });
                 
                 const data = await response.json();
-                console.log('Ответ сервера:', data);
                 
                 if (data.success) {
-                    loadOrders(); // Перезагружаем список заказов
+                    loadOrders();
                 } else {
-                    // Показываем пользователю понятное сообщение об ошибке
                     tg.showAlert(data.error || 'Не удалось отменить заказ');
                     showContent();
                 }
             } catch (error) {
-                console.error('Error cancelling order:', error);
+                console.error('Ошибка при отмене заказа:', error);
                 tg.showAlert('Ошибка при отмене заказа. Попробуйте позже.');
                 showContent();
             }
@@ -363,7 +355,6 @@
                     }
 
                     data.orders.forEach(order => {
-                        console.log('Order data:', order); // Добавляем лог для отладки
                         const orderCard = document.createElement('div');
                         orderCard.className = 'order-card';
 
@@ -376,11 +367,11 @@
                                 <span>Количество позиций: ${order.positions.length}</span>
                                 <span>Сумма: ${order.total_amount} ₽</span>
                             </div>
-                            <button class="toggle-details" id="toggle-button-${order.order_ID}" 
-                                    onclick="toggleOrderDetails('${order.order_ID}')">
+                            <button class="toggle-details" id="toggle-button-${order.created_at}" 
+                                    onclick="toggleOrderDetails('${order.created_at}')">
                                 Состав заказа ▼
                             </button>
-                            <div class="order-details" id="order-details-${order.order_ID}">
+                            <div class="order-details" id="order-details-${order.created_at}">
                                 ${order.positions.map(pos => `
                                     <div class="product-item">
                                         <span>${pos.name}</span>
@@ -388,11 +379,11 @@
                                     </div>
                                 `).join('')}
                             </div>
-                            <button class="repeat-order" onclick="repeatOrder('${order.order_ID}')">
+                            <button class="repeat-order" onclick="repeatOrder('${order.created_at}')">
                                 Повторить заказ
                             </button>
                             ${order.status === 'Новый' ? `
-                                <button class="cancel-order" onclick="showDialog('${order.order_ID}')">
+                                <button class="cancel-order" onclick="showDialog('${order.created_at}')">
                                     Отменить заказ
                                 </button>
                             ` : ''}

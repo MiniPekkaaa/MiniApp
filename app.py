@@ -490,65 +490,37 @@ def get_order():
 def cancel_order():
     try:
         data = request.json
-        order_id = data.get('order_id')
         user_id = data.get('user_id')
+        order_date = data.get('order_date')  # Получаем дату заказа
         
-        logger.debug(f"Получен запрос на отмену заказа: order_id={order_id}, user_id={user_id}")
-        
-        if not user_id:
-            return jsonify({"success": False, "error": "User ID is required"}), 400
-
-        if not order_id:
-            return jsonify({"success": False, "error": "Order ID is required"}), 400
-
-        try:
-            order_object_id = ObjectId(order_id)
-        except Exception as e:
-            logger.error(f"Неверный формат ID заказа: {order_id}")
-            return jsonify({"success": False, "error": "Неверный формат ID заказа"}), 400
+        if not user_id or not order_date:
+            return jsonify({"success": False, "error": "Необходимы ID пользователя и дата заказа"}), 400
 
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         if not user_data:
-            logger.error(f"Пользователь не найден: {user_id}")
-            return jsonify({"success": False, "error": "User not found"}), 404
+            return jsonify({"success": False, "error": "Пользователь не найден"}), 404
 
         org_id = user_data.get('org_ID')
         if not org_id:
-            logger.error(f"Organization ID не найден для пользователя: {user_id}")
-            return jsonify({"success": False, "error": "Organization ID not found"}), 404
+            return jsonify({"success": False, "error": "ID организации не найден"}), 404
 
-        # Сначала проверяем существование заказа
-        order = mongo.cx.Pivo.Orders.find_one({'_id': order_object_id})
-        if not order:
-            logger.error(f"Заказ не найден: {order_id}")
-            return jsonify({"success": False, "error": "Заказ не найден"}), 404
-
-        logger.debug(f"Найден заказ: {order}")
-
-        # Проверяем права на отмену заказа
-        if order.get('org_ID') != org_id or order.get('userid') != str(user_id):
-            logger.error(f"Нет прав на отмену заказа: order_org_ID={order.get('org_ID')}, user_org_ID={org_id}")
-            return jsonify({"success": False, "error": "У вас нет прав на отмену этого заказа"}), 403
-
-        if order.get('status') != 'Новый':
-            logger.error(f"Неверный статус заказа: {order.get('status')}")
-            return jsonify({"success": False, "error": "Можно отменять только новые заказы"}), 400
-
-        # Обновляем статус заказа
+        # Находим и отменяем заказ по org_ID, статусу и дате
         result = mongo.cx.Pivo.Orders.update_one(
-            {'_id': order_object_id},
+            {
+                'org_ID': org_id,
+                'status': 'Новый',
+                'date': order_date
+            },
             {'$set': {'status': 'Отменен'}}
         )
 
         if result.modified_count == 0:
-            logger.error("Не удалось обновить статус заказа")
-            return jsonify({"success": False, "error": "Не удалось отменить заказ"}), 500
+            return jsonify({"success": False, "error": "Заказ не найден или уже отменён"}), 404
 
-        logger.debug("Заказ успешно отменен")
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Error cancelling order: {str(e)}")
+        logger.error(f"Ошибка при отмене заказа: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
