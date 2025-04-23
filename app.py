@@ -322,31 +322,35 @@ def my_orders():
 
         # Получаем org_ID из Redis для текущего пользователя
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        org_id = user_data.get('OrgID')
+        org_id = user_data.get('org_ID')
 
         if not org_id:
             return "Организация не найдена", 404
 
         # Получаем последние 5 заказов для организации
         pipeline = [
-            {"$match": {"org_id": org_id}},
+            {"$match": {"org_ID": org_id}},
             {"$sort": {"date": -1}},
             {"$limit": 5},
             {"$project": {
                 "date": 1,
                 "status": 1,
-                "items_count": {"$size": "$items"},
-                "total_sum": 1
+                "items_count": {"$size": {"$objectToArray": "$Positions"}},
+                "total_sum": {"$sum": {"$map": {
+                    "input": {"$objectToArray": "$Positions"},
+                    "as": "position",
+                    "in": {"$multiply": ["$$position.v.Beer_Count", 1]}
+                }}}
             }}
         ]
 
-        orders = list(mongo.cx.Pivo.orders.aggregate(pipeline))
+        orders = list(mongo.cx.Pivo.Orders.aggregate(pipeline))
 
         # Форматируем даты и статусы для отображения
         formatted_orders = []
         for order in orders:
             formatted_order = {
-                'date': order['date'].strftime('%d.%m.%Y %H:%M'),
+                'date': order.get('date'),
                 'status': order.get('status', 'Новый'),
                 'items_count': order.get('items_count', 0),
                 'total_sum': order.get('total_sum', 0)
