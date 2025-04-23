@@ -392,30 +392,37 @@
                 });
         }
 
-        async function repeatOrder(orderId) {
+        async function repeatOrder(orderDate) {
             hideContent();
             
             try {
-                const response = await fetch(`/api/get-order?order_id=${orderId}`);
+                // Находим заказ по дате
+                const response = await fetch(`/api/get-orders?user_id=${userId}`);
                 const data = await response.json();
                 
-                if (data.success && data.order) {
-                    // Сохраняем позиции в корзину
-                    const cart = data.order.positions.map(pos => ({
-                        id: pos.id,
-                        name: pos.name,
-                        quantity: pos.quantity,
-                        price: pos.price,
-                        legalEntity: pos.legal_entity
-                    }));
-                    
-                    sessionStorage.setItem('cart', JSON.stringify(cart));
-                    
-                    // Переходим в корзину
-                    window.location.href = `/cart?user_id=${userId}`;
-                } else {
-                    throw new Error(data.error || 'Ошибка при получении данных заказа');
+                if (!data.success || !data.orders) {
+                    throw new Error('Не удалось получить список заказов');
                 }
+
+                // Ищем нужный заказ по дате
+                const order = data.orders.find(o => o.created_at === orderDate);
+                if (!order) {
+                    throw new Error('Заказ не найден');
+                }
+
+                // Сохраняем позиции в корзину
+                const cart = order.positions.map(pos => ({
+                    id: pos.id,
+                    name: pos.name,
+                    quantity: pos.quantity,
+                    price: pos.price,
+                    legalEntity: pos.legal_entity
+                }));
+                
+                sessionStorage.setItem('cart', JSON.stringify(cart));
+                
+                // Переходим в корзину
+                window.location.href = `/cart?user_id=${userId}`;
             } catch (error) {
                 console.error('Ошибка при повторении заказа:', error);
                 tg.showAlert('Ошибка при повторении заказа: ' + error.message);

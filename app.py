@@ -372,28 +372,8 @@ def get_orders():
                     'legal_entity': pos_data.get('Legal_Entity')
                 })
 
-            # Преобразуем дату из строки в правильный формат
-            date_str = order.get('date', '')
-            try:
-                # Парсим дату
-                date_parts = date_str.split(' ')
-                if len(date_parts) == 2:
-                    date_part = date_parts[0].split('.')
-                    time_part = date_parts[1].split(':')
-                    if len(date_part) == 3 and len(time_part) == 2:
-                        # Преобразуем в полный формат даты
-                        year = f"20{date_part[2]}"  # Добавляем "20" к году
-                        formatted_date = f"{date_part[0]}.{date_part[1]}.{year} {time_part[0]}:{time_part[1]}"
-                    else:
-                        formatted_date = date_str
-                else:
-                    formatted_date = date_str
-            except:
-                formatted_date = date_str
-
             formatted_order = {
-                'order_ID': str(order.get('_id')),
-                'created_at': formatted_date,
+                'created_at': order.get('date', ''),
                 'status': order.get('status', 'in work'),
                 'positions': positions,
                 'total_amount': total_amount
@@ -405,7 +385,7 @@ def get_orders():
             'orders': formatted_orders
         })
     except Exception as e:
-        app.logger.error(f'Error getting orders: {str(e)}')
+        logger.error(f'Error getting orders: {str(e)}')
         return jsonify({
             'success': False,
             'error': 'Failed to get orders'
