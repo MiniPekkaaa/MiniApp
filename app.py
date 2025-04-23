@@ -328,32 +328,34 @@ def my_orders():
             return "Организация не найдена", 404
 
         # Получаем последние 5 заказов для организации
-        pipeline = [
-            {"$match": {"org_ID": org_id}},
-            {"$sort": {"date": -1}},
-            {"$limit": 5},
-            {"$project": {
-                "date": 1,
-                "status": 1,
-                "items_count": {"$size": {"$objectToArray": "$Positions"}},
-                "total_sum": {"$sum": {"$map": {
-                    "input": {"$objectToArray": "$Positions"},
-                    "as": "position",
-                    "in": {"$multiply": ["$$position.v.Beer_Count", 1]}
-                }}}
-            }}
-        ]
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {"org_ID": org_id}
+        ).sort("date", -1).limit(5))
 
-        orders = list(mongo.cx.Pivo.Orders.aggregate(pipeline))
+        # Получаем все пиво из каталога для подсчета сумм
+        catalog = {str(product['id']): product for product in mongo.cx.Pivo.catalog.find()}
 
-        # Форматируем даты и статусы для отображения
+        # Форматируем заказы для отображения
         formatted_orders = []
         for order in orders:
+            # Подсчитываем общую сумму заказа
+            total_sum = 0
+            positions = order.get('Positions', {})
+            items_count = len(positions)
+            
+            # Считаем сумму заказа
+            for position in positions.values():
+                beer_id = str(position.get('Beer_ID'))
+                beer_count = position.get('Beer_Count', 0)
+                if beer_id in catalog:
+                    beer_price = catalog[beer_id].get('price', 0)
+                    total_sum += beer_price * beer_count
+
             formatted_order = {
                 'date': order.get('date'),
                 'status': order.get('status', 'Новый'),
-                'items_count': order.get('items_count', 0),
-                'total_sum': order.get('total_sum', 0)
+                'items_count': items_count,
+                'total_sum': total_sum
             }
             formatted_orders.append(formatted_order)
 
