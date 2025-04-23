@@ -505,36 +505,33 @@
                         localStorage.setItem('recommendation', recommendation.generalRecommendation);
                     }
 
-                    // Создаем массив для корзины
-                    const cartItems = recommendation.positions.map(position => {
+                    // Добавляем позиции в корзину через API
+                    const promises = recommendation.positions.map(position => {
                         // Ищем соответствующую опцию в select по названию
                         const option = Array.from(document.getElementById('product_select').options)
                             .find(opt => opt.dataset.name === position.name);
 
                         if (option) {
-                            // Если нашли соответствующий товар, берем все данные из него
-                            return {
-                                id: option.value,
-                                name: position.name,
-                                quantity: parseInt(position.quantity) || 0,
-                                price: parseFloat(option.dataset.price) || 0,
-                                legalEntity: parseInt(option.dataset.legalEntity) || 1
-                            };
+                            return fetch(`/api/add-to-cart?user_id=${userId}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    id: option.value,
+                                    count: parseInt(position.quantity) || 0
+                                })
+                            }).then(response => response.json());
                         } else {
                             console.warn(`Товар не найден: ${position.name}`);
-                            return {
-                                id: '',
-                                name: position.name,
-                                quantity: parseInt(position.quantity) || 0,
-                                price: 0,
-                                legalEntity: 1
-                            };
+                            return Promise.resolve();
                         }
                     });
 
-                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
-                    remainders.length = 0;
-                    window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+                    return Promise.all(promises).then(() => {
+                        remainders.length = 0;
+                        window.location.href = '/cart?user_id=' + userId;
+                    });
                 })
                 .catch(error => {
                     console.error('Ошибка при отправке остатков:', error);
@@ -548,26 +545,36 @@
 
         // Функция для обработки элементов корзины при ошибке
         function processCartItems(items) {
-            // Получаем цены из select элемента
-            const selectElement = document.getElementById('product_select');
-            const pricesMap = {};
-            Array.from(selectElement.options).forEach(option => {
-                if (option.dataset.name) {
-                    pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
-                }
-            });
+            // Показываем загрузочный экран
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').classList.add('hidden');
 
-            // Формируем элементы корзины
-            const cartItems = items.map(item => ({
-                name: item.name,
-                quantity: parseInt(item.quantity) || 0,
-                price: parseFloat(pricesMap[item.name] || 0)
-            }));
+            // Добавляем все позиции в корзину через API
+            const promises = items.map(item => 
+                fetch(`/api/add-to-cart?user_id=${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        id: item.id,
+                        count: item.quantity
+                    })
+                }).then(response => response.json())
+            );
 
-            console.log('Сформированные элементы корзины (при ошибке):', cartItems);
-            sessionStorage.setItem('cart', JSON.stringify(cartItems));
-            remainders.length = 0;
-            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+            Promise.all(promises)
+                .then(() => {
+                    window.location.href = '/cart?user_id=' + userId;
+                })
+                .catch(error => {
+                    console.error('Ошибка при добавлении товаров в корзину:', error);
+                    tg.showAlert('Произошла ошибка при добавлении товаров в корзину');
+                })
+                .finally(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').classList.remove('hidden');
+                });
         }
 
         // Запускаем проверку авторизации
