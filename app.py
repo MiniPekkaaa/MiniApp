@@ -219,7 +219,7 @@ def create_order():
         timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
         current_time = datetime.now(timezone)
         order_data = {
-            'status': "in work",
+            'status': "Новый",
             'date': current_time.strftime("%d.%m.%y %H:%M"),
             'userid': str(user_id),
             'username': user_data.get('organization', 'ООО Пивной мир'),
@@ -485,6 +485,32 @@ def get_order():
             'success': False,
             'error': 'Failed to get order'
         }), 500
+
+@app.route('/api/cancel-order', methods=['POST'])
+def cancel_order():
+    try:
+        data = request.json
+        order_id = data.get('order_id')
+        
+        if not order_id:
+            return jsonify({"success": False, "error": "Order ID is required"}), 400
+
+        # Обновляем статус заказа на "Отменен"
+        result = mongo.cx.Pivo.Orders.update_one(
+            {'_id': ObjectId(order_id), 'status': 'Новый'},
+            {'$set': {'status': 'Отменен'}}
+        )
+
+        if result.modified_count == 0:
+            return jsonify({
+                "success": False,
+                "error": "Order not found or cannot be cancelled"
+            }), 404
+
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Error cancelling order: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
