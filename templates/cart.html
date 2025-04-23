@@ -28,42 +28,83 @@
 
         .notification {
             position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 15px 40px 15px 20px;
-            background-color: #4CAF50;
+            top: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
             color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             z-index: 1000;
             opacity: 0;
-            transition: opacity 0.3s ease;
-            font-size: 14px;
-            max-width: 90%;
-            word-wrap: break-word;
+            transform: translateY(-100%);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         .notification.show {
             opacity: 1;
+            transform: translateY(0);
+        }
+
+        .notification-content {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            margin-right: 15px;
+        }
+
+        .notification-icon {
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+        }
+
+        .notification-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .notification-text {
+            font-size: 15px;
+            line-height: 1.4;
+            font-weight: 500;
+            flex: 1;
         }
 
         .notification .close-btn {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
+            background: rgba(255, 255, 255, 0.2);
             border: none;
             color: white;
-            font-size: 20px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
-            padding: 0 5px;
-            line-height: 1;
+            font-size: 18px;
+            transition: background-color 0.2s ease;
+            padding: 0;
+            flex-shrink: 0;
         }
 
         .notification .close-btn:hover {
-            opacity: 0.8;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .notification {
+                padding: 12px 16px;
+            }
+            
+            .notification-text {
+                font-size: 14px;
+            }
         }
 
         .button-delete {
@@ -86,7 +127,14 @@
 <body>
     <!-- Уведомление -->
     <div id="notification" class="notification">
-        <span id="notification-text"></span>
+        <div class="notification-content">
+            <div class="notification-icon">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+            </div>
+            <div class="notification-text" id="notification-text"></div>
+        </div>
         <button class="close-btn" onclick="hideNotification()">×</button>
     </div>
 
