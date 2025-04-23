@@ -490,25 +490,14 @@ def get_order():
 def cancel_order():
     try:
         data = request.json
-        user_id = data.get('user_id')
-        order_date = data.get('order_date')  # Получаем дату заказа
+        order_date = data.get('order_date')
         
-        if not user_id or not order_date:
-            return jsonify({"success": False, "error": "Необходимы ID пользователя и дата заказа"}), 400
+        if not order_date:
+            return jsonify({"success": False, "error": "Дата заказа не указана"}), 400
 
-        # Получаем данные пользователя из Redis
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        if not user_data:
-            return jsonify({"success": False, "error": "Пользователь не найден"}), 404
-
-        org_id = user_data.get('org_ID')
-        if not org_id:
-            return jsonify({"success": False, "error": "ID организации не найден"}), 404
-
-        # Находим и отменяем заказ по org_ID, статусу и дате
+        # Находим и отменяем заказ по статусу и дате
         result = mongo.cx.Pivo.Orders.update_one(
             {
-                'org_ID': org_id,
                 'status': 'Новый',
                 'date': order_date
             },

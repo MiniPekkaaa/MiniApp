@@ -299,16 +299,6 @@
         }
 
         async function confirmCancel() {
-            if (!currentOrderId) {
-                tg.showAlert('Ошибка: дата заказа не найдена');
-                return;
-            }
-            
-            if (!userId) {
-                tg.showAlert('Ошибка: ID пользователя не найден');
-                return;
-            }
-            
             hideDialog();
             hideContent();
             
@@ -319,7 +309,6 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        user_id: userId,
                         order_date: currentOrderId
                     })
                 });
