@@ -332,15 +332,27 @@ def my_orders():
             {"org_ID": org_id}
         ).sort("date", -1).limit(5))
 
+        # Получаем каталог пива для подсчета сумм
+        catalog = {str(product['id']): product for product in mongo.cx.Pivo.catalog.find()}
+
         # Форматируем заказы для отображения
         formatted_orders = []
         for order in orders:
             positions = order.get('Positions', {})
+            
+            # Подсчитываем общую сумму заказа
+            total_sum = 0
+            for position in positions.values():
+                beer_id = str(position.get('Beer_ID'))
+                if beer_id in catalog:
+                    beer_price = catalog[beer_id].get('price', 0)
+                    total_sum += beer_price * position.get('Beer_Count', 0)
+
             formatted_order = {
                 'date': order.get('date'),
                 'status': order.get('status', 'Новый'),
                 'items_count': len(positions),
-                'total_sum': sum(pos.get('Beer_Count', 0) * pos.get('price', 0) for pos in positions.values()),
+                'total_sum': total_sum,
                 'positions': positions,
                 '_id': str(order['_id'])
             }

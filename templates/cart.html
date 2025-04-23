@@ -100,6 +100,9 @@
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user_id');
         
+        let cartItems = []; // Сохраняем все позиции
+        let showAll = false; // Флаг для отображения всех позиций
+        
         // Загрузка корзины при открытии страницы
         window.onload = function() {
             loadCart();
@@ -111,7 +114,8 @@
                 .then(data => {
                     console.log('Получены данные корзины:', data);
                     if (data && Array.isArray(data.items)) {
-                        displayCartItems(data.items);
+                        cartItems = data.items; // Сохраняем все позиции
+                        displayCartItems();
                         updateTotal(data.items);
                     } else {
                         document.getElementById('cart_items').innerHTML = '<p>Корзина пуста</p>';
@@ -126,16 +130,30 @@
                 });
         }
 
-        function displayCartItems(items) {
-            const cartItems = document.getElementById('cart_items');
-            cartItems.innerHTML = '';
+        function displayCartItems() {
+            const cartItemsContainer = document.getElementById('cart_items');
+            const showMoreContainer = document.getElementById('show_more_container');
+            cartItemsContainer.innerHTML = '';
             
-            if (items.length === 0) {
-                cartItems.innerHTML = '<p>Корзина пуста</p>';
+            if (cartItems.length === 0) {
+                cartItemsContainer.innerHTML = '<p>Корзина пуста</p>';
+                showMoreContainer.style.display = 'none';
                 return;
             }
 
-            items.forEach((item, index) => {
+            // Показываем кнопку "Показать все" только если есть больше 5 позиций
+            if (cartItems.length > 5) {
+                showMoreContainer.style.display = 'block';
+                document.getElementById('show_more_button').textContent = showAll ? 'Свернуть' : 'Показать все';
+            } else {
+                showMoreContainer.style.display = 'none';
+            }
+
+            // Отображаем нужное количество позиций
+            const itemsToShow = showAll ? cartItems.length : Math.min(5, cartItems.length);
+            
+            for (let i = 0; i < itemsToShow; i++) {
+                const item = cartItems[i];
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
@@ -148,17 +166,76 @@
                         </div>
                     </div>
                     <div class="cart-item-controls">
-                        <button onclick="editQuantity(${index})" class="button">Изменить объем</button>
-                        <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
+                        <button onclick="editQuantity(${i})" class="button">Изменить объем</button>
+                        <button onclick="removeItem(${i})" class="button button-delete">Удалить</button>
                     </div>
                 `;
-                cartItems.appendChild(itemElement);
-            });
+                cartItemsContainer.appendChild(itemElement);
+            }
+        }
+
+        function toggleShowAll() {
+            showAll = !showAll;
+            displayCartItems();
         }
 
         function updateTotal(items) {
             const total = items.reduce((sum, item) => sum + (item.price * item.count), 0);
             document.getElementById('total_amount').textContent = total;
+        }
+
+        function editQuantity(index) {
+            const item = cartItems[index];
+            const newCount = prompt('Введите новое количество:', item.count);
+            
+            if (newCount !== null) {
+                const count = parseInt(newCount);
+                if (!isNaN(count) && count > 0) {
+                    // Обновляем количество в Redis
+                    fetch(`/api/update-cart-item?user_id=${userId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            id: item.id,
+                            count: count
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(() => {
+                        loadCart(); // Перезагружаем корзину
+                    })
+                    .catch(error => {
+                        console.error('Ошибка при обновлении количества:', error);
+                        alert('Ошибка при обновлении количества');
+                    });
+                } else {
+                    alert('Пожалуйста, введите корректное количество (больше 0)');
+                }
+            }
+        }
+
+        function removeItem(index) {
+            const item = cartItems[index];
+            // Удаляем позицию из Redis
+            fetch(`/api/remove-cart-item?user_id=${userId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: item.id
+                })
+            })
+            .then(response => response.json())
+            .then(() => {
+                loadCart(); // Перезагружаем корзину
+            })
+            .catch(error => {
+                console.error('Ошибка при удалении позиции:', error);
+                alert('Ошибка при удалении позиции');
+            });
         }
 
         function addMore() {
@@ -170,10 +247,37 @@
         }
 
         function placeOrder() {
-            // ... остальной код для оформления заказа ...
+            if (cartItems.length === 0) {
+                alert('Корзина пуста');
+                return;
+            }
+
+            fetch('/api/create-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    items: cartItems
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    alert('Заказ успешно создан!');
+                    // Перенаправляем на главное меню
+                    window.location.href = `/main_menu?user_id=${userId}`;
+                } else {
+                    throw new Error(result.error || 'Ошибка при создании заказа');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при создании заказа:', error);
+                alert('Произошла ошибка при создании заказа: ' + error.message);
+            });
         }
 
-        // Показываем контент после загрузки
         function showContent() {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
