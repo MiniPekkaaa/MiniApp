@@ -277,9 +277,12 @@ def get_last_orders():
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 400
 
-        # Получаем последние 3 заказа организации, отсортированные по дате
+        # Получаем последние 3 ВЫПОЛНЕННЫХ заказа организации, отсортированные по дате
         orders = list(mongo.cx.Pivo.Orders.find(
-            {"org_ID": org_id},
+            {
+                "org_ID": org_id,
+                "status": "Выполнен"  # Только выполненные заказы
+            },
             {"Positions": 1, "_id": 0}
         ).sort("date", -1).limit(3))
 
@@ -294,7 +297,7 @@ def get_last_orders():
                         'Beer_ID': position['Beer_ID'],
                         'Beer_Name': position['Beer_Name'],
                         'Legal_Entity': position['Legal_Entity'],
-                        'Beer_Count': 0  # Начальное значение для количества
+                        'Beer_Count': position['Beer_Count']  # Берем количество из последнего заказа
                     }
 
         # Преобразуем в список
@@ -304,13 +307,13 @@ def get_last_orders():
         response_data = {
             "success": True,
             "positions": result,
-            "org_ID": org_id  # Добавляем org_ID в ответ
+            "org_ID": org_id
         }
         
         return jsonify(response_data)
 
     except Exception as e:
-        logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
+        logger.error(f"Ошибка при получении последних заказов: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/my_orders')
