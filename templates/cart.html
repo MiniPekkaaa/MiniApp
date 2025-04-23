@@ -246,36 +246,47 @@
             window.location.href = `/main_menu?user_id=${userId}`;
         }
 
-        function placeOrder() {
+        async function placeOrder() {
             if (cartItems.length === 0) {
                 alert('Корзина пуста');
                 return;
             }
 
-            fetch('/api/create-order', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    userId: userId,
-                    items: cartItems
-                })
-            })
-            .then(response => response.json())
-            .then(result => {
+            try {
+                const formattedItems = cartItems.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    legalEntity: item.legalEntity,
+                    quantity: parseInt(item.count) // Преобразуем count в quantity
+                }));
+
+                const response = await fetch('/api/create-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        items: formattedItems
+                    })
+                });
+
+                const result = await response.json();
+                
                 if (result.success) {
+                    // Очищаем корзину после успешного создания заказа
+                    cartItems = [];
+                    await clearCart();
+                    displayCartItems();
                     alert('Заказ успешно создан!');
-                    // Перенаправляем на главное меню
-                    window.location.href = `/main_menu?user_id=${userId}`;
+                    window.location.href = '/main_menu?user_id=' + userId;
                 } else {
                     throw new Error(result.error || 'Ошибка при создании заказа');
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Ошибка при создании заказа:', error);
                 alert('Произошла ошибка при создании заказа: ' + error.message);
-            });
+            }
         }
 
         function showContent() {
