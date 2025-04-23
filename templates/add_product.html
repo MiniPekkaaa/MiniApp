@@ -13,20 +13,20 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: var(--tg-theme-bg-color, #fff);
+            background: var(--tg-theme-bg-color, #1f1f1f);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #loading.hidden {
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-
-        #loading.visible {
-            opacity: 1;
-            visibility: visible;
         }
 
         .loader {
@@ -40,11 +40,12 @@
         }
 
         .loading-text {
-            color: var(--tg-theme-text-color, #000);
+            color: var(--tg-theme-text-color, #fff);
             font-size: 16px;
             text-align: center;
             max-width: 80%;
             line-height: 1.4;
+            padding: 0 20px;
         }
 
         @keyframes spin {
@@ -212,7 +213,7 @@
 </head>
 <body>
     <!-- Экран загрузки -->
-    <div id="loading" class="hidden">
+    <div id="loading">
         <div class="loader"></div>
         <div class="loading-text">Обрабатываем ваши данные, это займет не более 20 секунд</div>
     </div>
@@ -261,12 +262,12 @@
         const userId = tg.initDataUnsafe?.user?.id;
         
         function showContent() {
-            document.getElementById('loading').classList.remove('visible');
+            document.getElementById('loading').classList.add('hidden');
             document.getElementById('content').classList.remove('hidden');
         }
 
         function hideContent() {
-            document.getElementById('loading').classList.add('visible');
+            document.getElementById('loading').classList.remove('hidden');
             document.getElementById('content').classList.add('hidden');
         }
 
@@ -274,6 +275,11 @@
             if (!window.location.search.includes('user_id') && userId) {
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
+                // Сначала показываем экран загрузки
+                document.getElementById('loading').classList.remove('hidden');
+                document.getElementById('content').classList.add('hidden');
+                
+                // Затем загружаем данные
                 loadLastOrdersProducts();
             }
         }
@@ -466,7 +472,8 @@
 
         function submitRemainders() {
             // Показываем загрузочный экран
-            hideContent();
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('content').classList.add('hidden');
 
             // Собираем все позиции из списка
             const container = document.getElementById('last_orders_products');
@@ -510,7 +517,8 @@
 
             if (allRemainders.length === 0) {
                 tg.showAlert("Добавьте хотя бы один остаток");
-                showContent();
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('content').classList.remove('hidden');
                 return;
             }
 
@@ -620,9 +628,6 @@
                     console.error('Ошибка при отправке остатков:', error);
                     showNotification('Произошла ошибка при обработке данных. Используем стандартные настройки.');
                     return processCartItems(allRemainders);
-                })
-                .finally(() => {
-                    showContent();
                 });
         }
 
