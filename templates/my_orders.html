@@ -289,6 +289,7 @@
         }
 
         function showDialog(orderId) {
+            console.log('Order ID для отмены:', orderId);
             currentOrderId = orderId;
             document.getElementById('cancel-dialog').classList.add('visible');
         }
@@ -313,6 +314,11 @@
             hideContent();
             
             try {
+                console.log('Отправляем запрос на отмену заказа:', {
+                    order_id: currentOrderId,
+                    user_id: userId
+                });
+
                 const response = await fetch('/api/cancel-order', {
                     method: 'POST',
                     headers: {
@@ -325,6 +331,7 @@
                 });
                 
                 const data = await response.json();
+                console.log('Ответ сервера:', data);
                 
                 if (data.success) {
                     loadOrders(); // Перезагружаем список заказов
@@ -356,6 +363,7 @@
                     }
 
                     data.orders.forEach(order => {
+                        console.log('Order data:', order); // Добавляем лог для отладки
                         const orderCard = document.createElement('div');
                         orderCard.className = 'order-card';
 
