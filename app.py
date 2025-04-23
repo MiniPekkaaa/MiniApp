@@ -327,16 +327,42 @@ def get_orders():
         return jsonify({'success': False, 'error': 'User ID is required'}), 400
 
     try:
-        # Получаем заказы из MongoDB
-        orders = list(mongo.db.orders.find({'user_id': user_id}).sort('created_at', -1))
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        if not user_data:
+            return jsonify({'success': False, 'error': 'User not found in Redis'}), 404
+
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
+
+        # Получаем заказы из MongoDB по org_ID
+        orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1))
         
-        # Преобразуем ObjectId в строки для JSON
+        # Преобразуем заказы в нужный формат
+        formatted_orders = []
         for order in orders:
-            order['_id'] = str(order['_id'])
-        
+            # Преобразуем позиции из словаря в список
+            positions = []
+            for pos_key, pos_data in order.get('Positions', {}).items():
+                positions.append({
+                    'name': pos_data.get('Beer_Name'),
+                    'quantity': pos_data.get('Beer_Count'),
+                    'id': pos_data.get('Beer_ID'),
+                    'legal_entity': pos_data.get('Legal_Entity')
+                })
+
+            formatted_order = {
+                'order_ID': str(order.get('_id')),
+                'created_at': order.get('date'),
+                'status': order.get('status', 'in work'),
+                'positions': positions
+            }
+            formatted_orders.append(formatted_order)
+
         return jsonify({
             'success': True,
-            'orders': orders
+            'orders': formatted_orders
         })
     except Exception as e:
         app.logger.error(f'Error getting orders: {str(e)}')
@@ -352,18 +378,32 @@ def get_order():
         return jsonify({'success': False, 'error': 'Order ID is required'}), 400
 
     try:
-        # Получаем заказ из MongoDB по order_ID
-        order = mongo.db.orders.find_one({'order_ID': order_id})
+        # Получаем заказ из MongoDB по _id
+        order = mongo.cx.Pivo.Orders.find_one({'_id': ObjectId(order_id)})
         
         if not order:
             return jsonify({'success': False, 'error': 'Order not found'}), 404
 
-        # Преобразуем ObjectId в строку для JSON
-        order['_id'] = str(order['_id'])
-        
+        # Преобразуем позиции из словаря в список
+        positions = []
+        for pos_key, pos_data in order.get('Positions', {}).items():
+            positions.append({
+                'name': pos_data.get('Beer_Name'),
+                'quantity': pos_data.get('Beer_Count'),
+                'id': pos_data.get('Beer_ID'),
+                'legal_entity': pos_data.get('Legal_Entity')
+            })
+
+        formatted_order = {
+            'order_ID': str(order.get('_id')),
+            'created_at': order.get('date'),
+            'status': order.get('status', 'in work'),
+            'positions': positions
+        }
+
         return jsonify({
             'success': True,
-            'order': order
+            'order': formatted_order
         })
     except Exception as e:
         app.logger.error(f'Error getting order: {str(e)}')
