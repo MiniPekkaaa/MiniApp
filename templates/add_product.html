@@ -470,6 +470,7 @@
 
             if (allRemainders.length === 0) {
                 tg.showAlert("Добавьте хотя бы один остаток");
+                showContent();
                 return;
             }
 
@@ -535,9 +536,9 @@
                         return processCartItems(allRemainders);
                     }
 
-                    // Сохраняем рекомендацию
+                    // Сохраняем рекомендацию в sessionStorage
                     if (recommendation.generalRecommendation) {
-                        localStorage.setItem('recommendation', recommendation.generalRecommendation);
+                        sessionStorage.setItem('recommendation', recommendation.generalRecommendation);
                     }
 
                     // Создаем массив для корзины
@@ -567,6 +568,7 @@
                         }
                     });
 
+                    // Сохраняем корзину в sessionStorage
                     sessionStorage.setItem('cart', JSON.stringify(cartItems));
                     remainders.length = 0;
                     window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
@@ -584,21 +586,34 @@
         function processCartItems(items) {
             // Получаем цены из select элемента
             const selectElement = document.getElementById('product_select');
-            const pricesMap = {};
-            Array.from(selectElement.options).forEach(option => {
-                if (option.dataset.name) {
-                    pricesMap[option.dataset.name] = parseFloat(option.dataset.price) || 0;
+            const cartItems = [];
+
+            items.forEach(item => {
+                // Ищем соответствующую опцию в select по названию
+                const option = Array.from(selectElement.options)
+                    .find(opt => opt.dataset.name === item.name);
+
+                if (option) {
+                    cartItems.push({
+                        id: option.value,
+                        name: item.name,
+                        quantity: parseInt(item.quantity) || 0,
+                        price: parseFloat(option.dataset.price) || 0,
+                        legalEntity: parseInt(option.dataset.legalEntity) || 1
+                    });
+                } else {
+                    console.warn(`Товар не найден: ${item.name}`);
+                    cartItems.push({
+                        id: item.id || '',
+                        name: item.name,
+                        quantity: parseInt(item.quantity) || 0,
+                        price: 0,
+                        legalEntity: item.legalEntity || 1
+                    });
                 }
             });
 
-            // Формируем элементы корзины
-            const cartItems = items.map(item => ({
-                name: item.name,
-                quantity: parseInt(item.quantity) || 0,
-                price: parseFloat(pricesMap[item.name] || 0)
-            }));
-
-            console.log('Сформированные элементы корзины (при ошибке):', cartItems);
+            console.log('Сохраняем в корзину:', cartItems);
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
             remainders.length = 0;
             window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
