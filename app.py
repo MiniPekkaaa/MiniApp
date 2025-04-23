@@ -489,15 +489,27 @@ def get_order():
 @app.route('/api/cancel-order', methods=['POST'])
 def cancel_order():
     try:
-        # Находим самый новый заказ со статусом "Новый" и меняем его статус
-        result = mongo.cx.Pivo.Orders.update_one(
+        # Получаем последний заказ со статусом "Новый"
+        latest_order = mongo.cx.Pivo.Orders.find_one(
             {'status': 'Новый'},
-            {'$set': {'status': 'Отменен'}},
-            sort=[('date', -1)]  # сортируем по дате по убыванию, чтобы взять самый новый
+            sort=[('date', -1)]  # сортируем по дате по убыванию
+        )
+
+        if not latest_order:
+            return jsonify({"success": False, "error": "Новый заказ не найден"}), 404
+
+        # Обновляем статус найденного заказа
+        result = mongo.cx.Pivo.Orders.update_one(
+            {
+                '_id': latest_order['_id'],
+                'status': 'Новый',
+                'org_ID': latest_order['org_ID']  # дополнительная проверка org_ID
+            },
+            {'$set': {'status': 'Отменен'}}
         )
 
         if result.modified_count == 0:
-            return jsonify({"success": False, "error": "Заказ не найден или уже отменён"}), 404
+            return jsonify({"success": False, "error": "Не удалось отменить заказ"}), 500
 
         return jsonify({"success": True})
     except Exception as e:
