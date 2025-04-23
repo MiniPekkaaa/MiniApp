@@ -306,12 +306,17 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({})  // пустой объект, так как данные не нужны
+                    body: JSON.stringify({})
                 });
                 
                 const data = await response.json();
                 
                 if (data.success) {
+                    tg.showPopup({
+                        title: 'Успешно',
+                        message: 'Ваш заказ отменен!',
+                        buttons: [{type: 'ok'}]
+                    });
                     loadOrders();
                 } else {
                     tg.showAlert(data.error || 'Не удалось отменить заказ');
