@@ -489,19 +489,11 @@ def get_order():
 @app.route('/api/cancel-order', methods=['POST'])
 def cancel_order():
     try:
-        data = request.json
-        order_date = data.get('order_date')
-        
-        if not order_date:
-            return jsonify({"success": False, "error": "Дата заказа не указана"}), 400
-
-        # Находим и отменяем заказ по статусу и дате
+        # Находим самый новый заказ со статусом "Новый" и меняем его статус
         result = mongo.cx.Pivo.Orders.update_one(
-            {
-                'status': 'Новый',
-                'date': order_date
-            },
-            {'$set': {'status': 'Отменен'}}
+            {'status': 'Новый'},
+            {'$set': {'status': 'Отменен'}},
+            sort=[('date', -1)]  # сортируем по дате по убыванию, чтобы взять самый новый
         )
 
         if result.modified_count == 0:

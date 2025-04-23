@@ -288,14 +288,12 @@
             });
         }
 
-        function showDialog(orderDate) {
-            currentOrderId = orderDate;
+        function showDialog() {
             document.getElementById('cancel-dialog').classList.add('visible');
         }
 
         function hideDialog() {
             document.getElementById('cancel-dialog').classList.remove('visible');
-            currentOrderId = null;
         }
 
         async function confirmCancel() {
@@ -308,9 +306,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        order_date: currentOrderId
-                    })
+                    body: JSON.stringify({})  // пустой объект, так как данные не нужны
                 });
                 
                 const data = await response.json();
@@ -372,7 +368,7 @@
                                 Повторить заказ
                             </button>
                             ${order.status === 'Новый' ? `
-                                <button class="cancel-order" onclick="showDialog('${order.created_at}')">
+                                <button class="cancel-order" onclick="showDialog()">
                                     Отменить заказ
                                 </button>
                             ` : ''}
