@@ -28,22 +28,43 @@
 
         .notification {
             position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 0;
+            left: 0;
+            width: 100%;
             background-color: #4CAF50;
             color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
+            padding: 15px;
             text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 2000;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
         }
 
         .notification.show {
-            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .notification .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+
+        .cart-container {
+            padding-top: 0;
+            transition: padding-top 0.3s ease;
+        }
+
+        .cart-container.with-notification {
+            padding-top: 50px;
         }
 
         .button-delete {
@@ -64,9 +85,10 @@
     </style>
 </head>
 <body>
-    <!-- Уведомление -->
-    <div id="notification" class="notification hidden">
+    <!-- Добавляем div для уведомления -->
+    <div id="notification" class="notification">
         <span id="notification-text"></span>
+        <button class="close-btn" onclick="hideNotification()">&times;</button>
     </div>
 
     <!-- Экран загрузки -->
@@ -99,21 +121,27 @@
         // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
         
-        function showNotification(message, duration = 3000) {
+        function showNotification(message, duration = 20000) {
             const notification = document.getElementById('notification');
             const notificationText = document.getElementById('notification-text');
-            notificationText.textContent = message;
-            notification.classList.remove('hidden');
-            setTimeout(() => {
-                notification.classList.add('show');
-            }, 100);
+            const cartContainer = document.getElementById('cartContainer');
             
+            notificationText.textContent = message;
+            notification.classList.add('show');
+            cartContainer.classList.add('with-notification');
+
+            // Автоматически скрываем через указанное время
             setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => {
-                    notification.classList.add('hidden');
-                }, 300);
+                hideNotification();
             }, duration);
+        }
+
+        function hideNotification() {
+            const notification = document.getElementById('notification');
+            const cartContainer = document.getElementById('cartContainer');
+            
+            notification.classList.remove('show');
+            cartContainer.classList.remove('with-notification');
         }
 
         function showContent() {
@@ -289,6 +317,16 @@
         // Запускаем проверку авторизации и отображаем корзину
         checkAuthAndRedirect();
         displayCart();
+
+        // Проверяем наличие рекомендации при загрузке страницы
+        window.addEventListener('DOMContentLoaded', function() {
+            const recommendation = sessionStorage.getItem('recommendation');
+            if (recommendation) {
+                showNotification(recommendation);
+                // Удаляем рекомендацию из sessionStorage после показа
+                sessionStorage.removeItem('recommendation');
+            }
+        });
     </script>
 </body>
 </html> 
