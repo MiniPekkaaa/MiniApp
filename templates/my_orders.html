@@ -246,6 +246,13 @@
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user_id');
         
+        if (!userId) {
+            console.error('User ID not found in URL parameters');
+            tg.showAlert('Ошибка: ID пользователя не найден в параметрах URL');
+        } else {
+            console.log('User ID loaded:', userId);
+        }
+
         let currentOrderId = null;
 
         function showContent() {
@@ -294,6 +301,16 @@
         async function confirmCancel() {
             if (!currentOrderId) return;
             
+            if (!userId) {
+                tg.showAlert('Ошибка: ID пользователя не найден');
+                return;
+            }
+
+            console.log('Отправляем запрос с параметрами:', {
+                order_id: currentOrderId,
+                user_id: userId
+            });
+            
             hideDialog();
             hideContent();
             
@@ -310,6 +327,7 @@
                 });
                 
                 const data = await response.json();
+                console.log('Ответ сервера:', data);
                 
                 if (data.success) {
                     loadOrders(); // Перезагружаем список заказов
