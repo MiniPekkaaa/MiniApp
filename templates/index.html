@@ -121,9 +121,8 @@
         });
 
         searchInput.addEventListener('focus', function() {
-            if (this.value) {
-                dropdownList.classList.add('active');
-            }
+            // Показываем все товары при фокусе
+            updateDropdownList(initialProducts);
         });
 
         document.addEventListener('click', function(e) {
