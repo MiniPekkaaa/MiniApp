@@ -339,24 +339,61 @@ def get_orders():
         # Получаем заказы из MongoDB по org_ID
         orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1))
         
+        # Получаем каталог продуктов для цен
+        products = {str(p['id']): p for p in mongo.cx.Pivo.catalog.find()}
+        
         # Преобразуем заказы в нужный формат
         formatted_orders = []
         for order in orders:
             # Преобразуем позиции из словаря в список
             positions = []
+            total_amount = 0
+            
             for pos_key, pos_data in order.get('Positions', {}).items():
+                beer_id = str(pos_data.get('Beer_ID'))
+                quantity = pos_data.get('Beer_Count', 0)
+                
+                # Получаем цену из каталога
+                product = products.get(beer_id, {})
+                price = product.get('price', 0)
+                
+                # Считаем сумму для позиции
+                position_total = price * quantity
+                total_amount += position_total
+
                 positions.append({
                     'name': pos_data.get('Beer_Name'),
-                    'quantity': pos_data.get('Beer_Count'),
-                    'id': pos_data.get('Beer_ID'),
+                    'quantity': quantity,
+                    'id': beer_id,
+                    'price': price,
                     'legal_entity': pos_data.get('Legal_Entity')
                 })
 
+            # Преобразуем дату из строки в правильный формат
+            date_str = order.get('date', '')
+            try:
+                # Парсим дату
+                date_parts = date_str.split(' ')
+                if len(date_parts) == 2:
+                    date_part = date_parts[0].split('.')
+                    time_part = date_parts[1].split(':')
+                    if len(date_part) == 3 and len(time_part) == 2:
+                        # Преобразуем в полный формат даты
+                        year = f"20{date_part[2]}"  # Добавляем "20" к году
+                        formatted_date = f"{date_part[0]}.{date_part[1]}.{year} {time_part[0]}:{time_part[1]}"
+                    else:
+                        formatted_date = date_str
+                else:
+                    formatted_date = date_str
+            except:
+                formatted_date = date_str
+
             formatted_order = {
                 'order_ID': str(order.get('_id')),
-                'created_at': order.get('date'),
+                'created_at': formatted_date,
                 'status': order.get('status', 'in work'),
-                'positions': positions
+                'positions': positions,
+                'total_amount': total_amount
             }
             formatted_orders.append(formatted_order)
 
@@ -384,21 +421,58 @@ def get_order():
         if not order:
             return jsonify({'success': False, 'error': 'Order not found'}), 404
 
+        # Получаем каталог продуктов для цен
+        products = {str(p['id']): p for p in mongo.cx.Pivo.catalog.find()}
+
         # Преобразуем позиции из словаря в список
         positions = []
+        total_amount = 0
+        
         for pos_key, pos_data in order.get('Positions', {}).items():
+            beer_id = str(pos_data.get('Beer_ID'))
+            quantity = pos_data.get('Beer_Count', 0)
+            
+            # Получаем цену из каталога
+            product = products.get(beer_id, {})
+            price = product.get('price', 0)
+            
+            # Считаем сумму для позиции
+            position_total = price * quantity
+            total_amount += position_total
+
             positions.append({
                 'name': pos_data.get('Beer_Name'),
-                'quantity': pos_data.get('Beer_Count'),
-                'id': pos_data.get('Beer_ID'),
+                'quantity': quantity,
+                'id': beer_id,
+                'price': price,
                 'legal_entity': pos_data.get('Legal_Entity')
             })
 
+        # Преобразуем дату из строки в правильный формат
+        date_str = order.get('date', '')
+        try:
+            # Парсим дату
+            date_parts = date_str.split(' ')
+            if len(date_parts) == 2:
+                date_part = date_parts[0].split('.')
+                time_part = date_parts[1].split(':')
+                if len(date_part) == 3 and len(time_part) == 2:
+                    # Преобразуем в полный формат даты
+                    year = f"20{date_part[2]}"  # Добавляем "20" к году
+                    formatted_date = f"{date_part[0]}.{date_part[1]}.{year} {time_part[0]}:{time_part[1]}"
+                else:
+                    formatted_date = date_str
+            else:
+                formatted_date = date_str
+        except:
+            formatted_date = date_str
+
         formatted_order = {
             'order_ID': str(order.get('_id')),
-            'created_at': order.get('date'),
+            'created_at': formatted_date,
             'status': order.get('status', 'in work'),
-            'positions': positions
+            'positions': positions,
+            'total_amount': total_amount
         }
 
         return jsonify({
