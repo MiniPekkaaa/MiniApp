@@ -189,80 +189,6 @@ def get_products():
         logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/create-order', methods=['POST'])
-def create_order():
-    try:
-        logger.debug("Получен запрос на создание заказа")
-        data = request.json
-        user_id = data.get('userId')
-        
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-
-        logger.debug(f"Данные заказа: {data}")
-
-        # Получаем данные пользователя из Redis
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        
-        # Формируем позиции заказа
-        positions = {}
-        for index, item in enumerate(data.get('items', []), 1):
-            position_key = f"Position_{index}"
-            positions[position_key] = {
-                'Beer_ID': int(item['id']),
-                'Beer_Name': item['name'],
-                'Legal_Entity': int(item['legalEntity']),
-                'Beer_Count': int(item['quantity'])
-            }
-
-        # Создаем заказ
-        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
-        current_time = datetime.now(timezone)
-        order_data = {
-            'status': "in work",
-            'date': current_time.strftime("%d.%m.%y %H:%M"),
-            'userid': str(user_id),
-            'username': user_data.get('organization', 'ООО Пивной мир'),
-            'org_ID': user_data.get('org_ID'),
-            'Positions': positions
-        }
-
-        logger.debug(f"Подготовленный заказ: {order_data}")
-        
-        result = mongo.cx.Pivo.Orders.insert_one(order_data)
-        logger.debug(f"Заказ создан, ID: {result.inserted_id}")
-
-        return jsonify({"success": True, "orderId": str(result.inserted_id)})
-    except Exception as e:
-        logger.error(f"Ошибка при создании заказа: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/order_menu')
-def order_menu():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-            
-        products = list(mongo.cx.Pivo.catalog.find())
-        formatted_products = []
-        for product in products:
-            formatted_product = {
-                'id': product.get('id', ''),
-                '_id': str(product.get('_id', '')),
-                'name': product.get('name', ''),
-                'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
-            }
-            formatted_products.append(formatted_product)
-            
-        return render_template('index.html', products=formatted_products, user_id=user_id)
-    except Exception as e:
-        logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}", 500
-
 @app.route('/api/get-last-orders')
 def get_last_orders():
     try:
@@ -308,10 +234,86 @@ def get_last_orders():
         }
         
         return jsonify(response_data)
+    except Exception as e:
+        logger.error(f"Error in get_last_orders route: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/create-order', methods=['POST'])
+def create_order():
+    try:
+        data = request.get_json()
+        user_id = data.get('userId')
+        items = data.get('items', [])
+
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        if not items:
+            return jsonify({"error": "No items provided"}), 400
+
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 400
+
+        # Создаем новый заказ
+        order = {
+            "org_ID": org_id,
+            "date": datetime.now(pytz.timezone('Europe/Moscow')),
+            "Positions": {}
+        }
+
+        # Добавляем позиции в заказ
+        for i, item in enumerate(items, 1):
+            position = {
+                "Beer_ID": int(item['id']),
+                "Beer_Name": item['name'],
+                "Legal_Entity": item['legalEntity'],
+                "Beer_Count": item['quantity']
+            }
+            order["Positions"][str(i)] = position
+
+        # Сохраняем заказ в MongoDB
+        result = mongo.cx.Pivo.Orders.insert_one(order)
+        
+        if result.inserted_id:
+            # Логируем создание заказа
+            logger.info(f"Order created for org_ID {org_id}")
+            return jsonify({"success": True})
+        else:
+            raise Exception("Failed to create order")
 
     except Exception as e:
-        logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
+        logger.error(f"Error in create_order route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+@app.route('/order_menu')
+def order_menu():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+            
+        products = list(mongo.cx.Pivo.catalog.find())
+        formatted_products = []
+        for product in products:
+            formatted_product = {
+                'id': product.get('id', ''),
+                '_id': str(product.get('_id', '')),
+                'name': product.get('name', ''),
+                'fullName': product.get('fullName', ''),
+                'volume': float(product.get('volume', 0)),
+                'price': int(product.get('price', 0)),
+                'legalEntity': int(product.get('legalEntity', 1))
+            }
+            formatted_products.append(formatted_product)
+            
+        return render_template('index.html', products=formatted_products, user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in order_menu route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
 
 @app.route('/my_orders')
 def my_orders():

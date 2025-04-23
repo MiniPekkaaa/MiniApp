@@ -164,32 +164,18 @@
         };
 
         function loadCart() {
-            fetch(`/api/get-cart-items?user_id=${userId}`)
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Получены данные корзины:', data);
-                    if (data && Array.isArray(data.items)) {
-                        cartItems = data.items;
-                        displayCartItems();
-                        updateTotal(data.items);
-                        
-                        // Показываем рекомендацию, если она есть
-                        const recommendation = localStorage.getItem('recommendation');
-                        if (recommendation) {
-                            showNotification(recommendation);
-                            localStorage.removeItem('recommendation'); // Удаляем после показа
-                        }
-                    } else {
-                        document.getElementById('cart_items').innerHTML = '<p>Корзина пуста</p>';
-                        document.getElementById('total_amount').textContent = '0';
-                    }
-                    showContent();
-                })
-                .catch(error => {
-                    console.error('Ошибка при загрузке корзины:', error);
-                    document.getElementById('cart_items').innerHTML = '<p>Ошибка при загрузке корзины</p>';
-                    showContent();
-                });
+            const savedCart = JSON.parse(sessionStorage.getItem('cart') || '[]');
+            cartItems = savedCart;
+            displayCartItems();
+            updateTotal(savedCart);
+            showContent();
+
+            // Показываем рекомендацию, если она есть
+            const recommendation = sessionStorage.getItem('recommendation');
+            if (recommendation) {
+                showNotification(recommendation);
+                sessionStorage.removeItem('recommendation'); // Удаляем после показа
+            }
         }
 
         function displayCartItems() {
@@ -222,9 +208,9 @@
                     <div class="cart-item-info">
                         <h3 class="cart-item-name">${item.name}</h3>
                         <div class="cart-item-details">
-                            <p>Количество: ${item.count}</p>
+                            <p>Количество: ${item.quantity}</p>
                             <p>Цена: ${item.price}₽</p>
-                            <p>Сумма: ${item.price * item.count}₽</p>
+                            <p>Сумма: ${item.price * item.quantity}₽</p>
                         </div>
                     </div>
                     <div class="cart-item-controls">
@@ -242,62 +228,32 @@
         }
 
         function updateTotal(items) {
-            const total = items.reduce((sum, item) => sum + (item.price * item.count), 0);
+            const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             document.getElementById('total_amount').textContent = total;
         }
 
         function editQuantity(index) {
             const item = cartItems[index];
-            const newCount = prompt('Введите новое количество:', item.count);
+            const newQuantity = prompt('Введите новое количество:', item.quantity);
             
-            if (newCount !== null) {
-                const count = parseInt(newCount);
-                if (!isNaN(count) && count > 0) {
-                    // Обновляем количество в Redis
-                    fetch(`/api/update-cart-item?user_id=${userId}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            id: item.id,
-                            count: count
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(() => {
-                        loadCart(); // Перезагружаем корзину
-                    })
-                    .catch(error => {
-                        console.error('Ошибка при обновлении количества:', error);
-                        alert('Ошибка при обновлении количества');
-                    });
+            if (newQuantity !== null) {
+                const quantity = parseInt(newQuantity);
+                if (!isNaN(quantity) && quantity > 0) {
+                    cartItems[index].quantity = quantity;
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    displayCartItems();
+                    updateTotal(cartItems);
                 } else {
-                    alert('Пожалуйста, введите корректное количество (больше 0)');
+                    tg.showAlert('Пожалуйста, введите корректное количество (больше 0)');
                 }
             }
         }
 
         function removeItem(index) {
-            const item = cartItems[index];
-            // Удаляем позицию из Redis
-            fetch(`/api/remove-cart-item?user_id=${userId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    id: item.id
-                })
-            })
-            .then(response => response.json())
-            .then(() => {
-                loadCart(); // Перезагружаем корзину
-            })
-            .catch(error => {
-                console.error('Ошибка при удалении позиции:', error);
-                alert('Ошибка при удалении позиции');
-            });
+            cartItems.splice(index, 1);
+            sessionStorage.setItem('cart', JSON.stringify(cartItems));
+            displayCartItems();
+            updateTotal(cartItems);
         }
 
         function addMore() {
@@ -310,7 +266,7 @@
 
         async function placeOrder() {
             if (cartItems.length === 0) {
-                alert('Корзина пуста');
+                tg.showAlert('Корзина пуста');
                 return;
             }
 
@@ -319,7 +275,7 @@
                     id: item.id,
                     name: item.name,
                     legalEntity: item.legalEntity,
-                    quantity: parseInt(item.count) // Преобразуем count в quantity
+                    quantity: parseInt(item.quantity)
                 }));
 
                 const response = await fetch('/api/create-order', {
@@ -338,40 +294,22 @@
                 if (result.success) {
                     // Очищаем корзину после успешного создания заказа
                     cartItems = [];
-                    await clearCart();
+                    sessionStorage.removeItem('cart');
                     displayCartItems();
-                    alert('Заказ успешно создан!');
+                    tg.showAlert('Заказ успешно создан!');
                     window.location.href = '/main_menu?user_id=' + userId;
                 } else {
                     throw new Error(result.error || 'Ошибка при создании заказа');
                 }
             } catch (error) {
                 console.error('Ошибка при создании заказа:', error);
-                alert('Произошла ошибка при создании заказа: ' + error.message);
+                tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
             }
         }
 
         function showContent() {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
-        }
-
-        async function clearCart() {
-            try {
-                const response = await fetch(`/api/clear-cart?user_id=${userId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.error || 'Ошибка при очистке корзины');
-                }
-            } catch (error) {
-                console.error('Ошибка при очистке корзины:', error);
-                throw error;
-            }
         }
 
         // Функции для работы с уведомлениями
