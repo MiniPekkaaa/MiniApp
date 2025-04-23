@@ -453,5 +453,39 @@ def clear_cart():
         logger.error(f"Error in clear_cart route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/add-to-cart', methods=['POST'])
+def add_to_cart():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.json
+        if not data or 'id' not in data or 'count' not in data:
+            return jsonify({"error": "Missing required fields"}), 400
+
+        # Создаем ключ для корзины пользователя
+        cart_key = f'beer:cart:{user_id}'
+        
+        # Получаем текущие данные товара из корзины, если они есть
+        existing_item = redis_client.hget(cart_key, str(data['id']))
+        if existing_item:
+            try:
+                item_data = json.loads(existing_item)
+                item_data['count'] += int(data['count'])
+            except (json.JSONDecodeError, KeyError):
+                item_data = {'id': data['id'], 'count': int(data['count'])}
+        else:
+            item_data = {'id': data['id'], 'count': int(data['count'])}
+
+        # Сохраняем обновленные данные в Redis
+        redis_client.hset(cart_key, str(data['id']), json.dumps(item_data))
+        
+        return jsonify({"success": True})
+    
+    except Exception as e:
+        logger.error(f"Error in add_to_cart route: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
