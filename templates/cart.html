@@ -293,6 +293,24 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').classList.remove('hidden');
         }
+
+        async function clearCart() {
+            try {
+                const response = await fetch(`/api/clear-cart?user_id=${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || 'Ошибка при очистке корзины');
+                }
+            } catch (error) {
+                console.error('Ошибка при очистке корзины:', error);
+                throw error;
+            }
+        }
     </script>
 </body>
 </html> 

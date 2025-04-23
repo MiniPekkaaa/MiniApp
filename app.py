@@ -436,5 +436,22 @@ def get_cart_items():
         logger.error(f"Error in get_cart_items route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/clear-cart', methods=['POST'])
+def clear_cart():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Удаляем корзину из Redis
+        cart_key = f'beer:cart:{user_id}'
+        redis_client.delete(cart_key)
+        
+        return jsonify({"success": True})
+    
+    except Exception as e:
+        logger.error(f"Error in clear_cart route: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
