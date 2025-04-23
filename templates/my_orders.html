@@ -299,17 +299,15 @@
         }
 
         async function confirmCancel() {
-            if (!currentOrderId) return;
+            if (!currentOrderId) {
+                tg.showAlert('Ошибка: ID заказа не найден');
+                return;
+            }
             
             if (!userId) {
                 tg.showAlert('Ошибка: ID пользователя не найден');
                 return;
             }
-
-            console.log('Отправляем запрос с параметрами:', {
-                order_id: currentOrderId,
-                user_id: userId
-            });
             
             hideDialog();
             hideContent();
@@ -327,16 +325,17 @@
                 });
                 
                 const data = await response.json();
-                console.log('Ответ сервера:', data);
                 
                 if (data.success) {
                     loadOrders(); // Перезагружаем список заказов
                 } else {
-                    throw new Error(data.error || 'Failed to cancel order');
+                    // Показываем пользователю понятное сообщение об ошибке
+                    tg.showAlert(data.error || 'Не удалось отменить заказ');
+                    showContent();
                 }
             } catch (error) {
                 console.error('Error cancelling order:', error);
-                tg.showAlert('Ошибка при отмене заказа: ' + error.message);
+                tg.showAlert('Ошибка при отмене заказа. Попробуйте позже.');
                 showContent();
             }
         }
