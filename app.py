@@ -336,8 +336,8 @@ def get_orders():
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
 
-        # Получаем заказы из MongoDB по org_ID
-        orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1))
+        # Получаем 5 последних заказов из MongoDB по org_ID, сортированных по дате
+        orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1).limit(5))
         
         # Получаем каталог продуктов для цен
         products = {str(p['id']): p for p in mongo.cx.Pivo.catalog.find()}
