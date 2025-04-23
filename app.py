@@ -491,13 +491,28 @@ def cancel_order():
     try:
         data = request.json
         order_id = data.get('order_id')
+        user_id = data.get('user_id')
         
-        if not order_id:
-            return jsonify({"success": False, "error": "Order ID is required"}), 400
+        if not order_id or not user_id:
+            return jsonify({"success": False, "error": "Order ID and User ID are required"}), 400
 
-        # Обновляем статус заказа на "Отменен"
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        if not user_data:
+            return jsonify({"success": False, "error": "User not found"}), 404
+
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({"success": False, "error": "Organization ID not found"}), 404
+
+        # Обновляем статус заказа на "Отменен" только если он соответствует всем критериям
         result = mongo.cx.Pivo.Orders.update_one(
-            {'_id': ObjectId(order_id), 'status': 'Новый'},
+            {
+                '_id': ObjectId(order_id),
+                'status': 'Новый',
+                'org_ID': org_id,
+                'userid': str(user_id)
+            },
             {'$set': {'status': 'Отменен'}}
         )
 
