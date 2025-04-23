@@ -31,19 +31,39 @@
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
+            padding: 15px 40px 15px 20px;
             background-color: #4CAF50;
             color: white;
-            padding: 15px 20px;
             border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             z-index: 1000;
             opacity: 0;
-            transition: opacity 0.3s ease-in-out;
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: opacity 0.3s ease;
+            font-size: 14px;
+            max-width: 90%;
+            word-wrap: break-word;
         }
 
         .notification.show {
             opacity: 1;
+        }
+
+        .notification .close-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+
+        .notification .close-btn:hover {
+            opacity: 0.8;
         }
 
         .button-delete {
@@ -65,8 +85,9 @@
 </head>
 <body>
     <!-- Уведомление -->
-    <div id="notification" class="notification hidden">
+    <div id="notification" class="notification">
         <span id="notification-text"></span>
+        <button class="close-btn" onclick="hideNotification()">×</button>
     </div>
 
     <!-- Экран загрузки -->
@@ -103,6 +124,9 @@
         let cartItems = []; // Сохраняем все позиции
         let showAll = false; // Флаг для отображения всех позиций
         
+        // Функции для работы с уведомлениями
+        let notificationTimeout;
+
         // Загрузка корзины при открытии страницы
         window.onload = function() {
             loadCart();
@@ -114,9 +138,16 @@
                 .then(data => {
                     console.log('Получены данные корзины:', data);
                     if (data && Array.isArray(data.items)) {
-                        cartItems = data.items; // Сохраняем все позиции
+                        cartItems = data.items;
                         displayCartItems();
                         updateTotal(data.items);
+                        
+                        // Показываем рекомендацию, если она есть
+                        const recommendation = localStorage.getItem('recommendation');
+                        if (recommendation) {
+                            showNotification(recommendation);
+                            localStorage.removeItem('recommendation'); // Удаляем после показа
+                        }
                     } else {
                         document.getElementById('cart_items').innerHTML = '<p>Корзина пуста</p>';
                         document.getElementById('total_amount').textContent = '0';
@@ -309,6 +340,35 @@
             } catch (error) {
                 console.error('Ошибка при очистке корзины:', error);
                 throw error;
+            }
+        }
+
+        // Функции для работы с уведомлениями
+        function showNotification(message, duration = 15000) {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notification-text');
+            
+            // Очищаем предыдущий таймер, если он был
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            notificationText.textContent = message;
+            notification.classList.add('show');
+            
+            // Устанавливаем новый таймер
+            notificationTimeout = setTimeout(() => {
+                hideNotification();
+            }, duration);
+        }
+
+        function hideNotification() {
+            const notification = document.getElementById('notification');
+            notification.classList.remove('show');
+            
+            // Очищаем таймер при ручном закрытии
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
             }
         }
     </script>
