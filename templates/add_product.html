@@ -228,19 +228,12 @@
 
             <div class="select-container">
                 <h3>Добавить новый остаток</h3>
-                <select id="product_select" class="select">
-                    <option value="">Выберите товар</option>
-                    {% for product in products %}
-                    <option value="{{ product.id }}" 
-                            data-name="{{ product.name }}"
-                            data-fullname="{{ product.fullName }}"
-                            data-volume="{{ product.volume }}"
-                            data-price="{{ product.price }}"
-                            data-legal-entity="{{ product.legalEntity }}">
-                        {{ product.name }}
-                    </option>
-                    {% endfor %}
-                </select>
+                <div class="search-container">
+                    <input type="text" id="product_search" class="search-input" placeholder="Поиск товара...">
+                    <div id="product_dropdown" class="dropdown-list">
+                        <!-- Список товаров будет добавлен динамически -->
+                    </div>
+                </div>
                 <div class="quantity-controls">
                     <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
                     <input type="number" id="quantity" value="1" min="1" class="quantity-input">
@@ -258,8 +251,11 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
         
-        // Получаем user_id из Telegram WebApp
         const userId = tg.initDataUnsafe?.user?.id;
+        
+        const initialProducts = {{ products|tojson|safe }};
+        let selectedProduct = null;
+        const remainders = [];
         
         function showContent() {
             document.getElementById('loading').classList.add('hidden');
@@ -284,7 +280,54 @@
             }
         }
         
-        const remainders = [];
+        // Инициализация поиска
+        const searchInput = document.getElementById('product_search');
+        const dropdownList = document.getElementById('product_dropdown');
+
+        searchInput.addEventListener('input', function() {
+            const searchText = this.value.toLowerCase();
+            const filteredProducts = initialProducts.filter(product => 
+                product.name.toLowerCase().includes(searchText) ||
+                product.fullName.toLowerCase().includes(searchText)
+            );
+            
+            updateDropdownList(filteredProducts);
+        });
+
+        searchInput.addEventListener('focus', function() {
+            // Показываем все товары при фокусе
+            updateDropdownList(initialProducts);
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !dropdownList.contains(e.target)) {
+                dropdownList.classList.remove('active');
+            }
+        });
+
+        function updateDropdownList(filteredProducts) {
+            dropdownList.innerHTML = '';
+            
+            if (filteredProducts.length > 0) {
+                filteredProducts.forEach(product => {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.innerHTML = `${product.name} (${product.volume}л - ${product.price}₽)`;
+                    
+                    item.addEventListener('click', () => {
+                        selectedProduct = product;
+                        searchInput.value = product.name;
+                        dropdownList.classList.remove('active');
+                    });
+                    
+                    dropdownList.appendChild(item);
+                });
+                
+                dropdownList.classList.add('active');
+            } else {
+                dropdownList.classList.remove('active');
+            }
+        }
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
@@ -418,56 +461,58 @@
         }
         
         function addToRemainders() {
-            let select = document.getElementById('product_select');
+            if (!selectedProduct) {
+                tg.showAlert("Пожалуйста, выберите товар");
+                return;
+            }
+            
             let quantity = parseInt(document.getElementById('quantity').value);
             
-            if (select.value) {
-                let option = select.options[select.selectedIndex];
-                let product = {
-                    id: select.value,
-                    name: option.dataset.name,
-                    legalEntity: parseInt(option.dataset.legalEntity),
-                    quantity: quantity
-                };
-                
-                const existingItemIndex = remainders.findIndex(item => 
-                    item.id === product.id && 
-                    item.legalEntity === product.legalEntity
-                );
-                
-                if (existingItemIndex !== -1) {
-                    remainders[existingItemIndex].quantity = quantity;
-                } else {
-                    remainders.push(product);
-                }
-                
-                // Добавляем новый остаток в список позиций
-                const container = document.getElementById('last_orders_products');
-                const productDiv = document.createElement('div');
-                productDiv.className = 'product-item';
-                
-                productDiv.innerHTML = `
-                    <div class="product-info">
-                        ${product.name}
-                    </div>
-                    <div class="product-controls">
-                        <input type="number" value="${quantity}" min="1" class="quantity-input" 
-                               onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
-                        <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
-                                class="delete-button">
-                            Удалить
-                        </button>
-                    </div>
-                `;
-                
-                container.appendChild(productDiv);
-                
-                select.value = "";
-                document.getElementById('quantity').value = "1";
-                
-                // Показываем уведомление о добавлении остатка
-                tg.showAlert("Остаток добавлен");
+            let product = {
+                id: selectedProduct.id,
+                name: selectedProduct.name,
+                legalEntity: parseInt(selectedProduct.legalEntity),
+                quantity: quantity
+            };
+            
+            const existingItemIndex = remainders.findIndex(item => 
+                item.id === product.id && 
+                item.legalEntity === product.legalEntity
+            );
+            
+            if (existingItemIndex !== -1) {
+                remainders[existingItemIndex].quantity = quantity;
+            } else {
+                remainders.push(product);
             }
+            
+            // Добавляем новый остаток в список позиций
+            const container = document.getElementById('last_orders_products');
+            const productDiv = document.createElement('div');
+            productDiv.className = 'product-item';
+            
+            productDiv.innerHTML = `
+                <div class="product-info">
+                    ${product.name}
+                </div>
+                <div class="product-controls">
+                    <input type="number" value="${quantity}" min="1" class="quantity-input" 
+                           onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
+                    <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
+                            class="delete-button">
+                        Удалить
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(productDiv);
+            
+            searchInput.value = "";
+            document.getElementById('quantity').value = "1";
+            selectedProduct = null;
+            
+            // Показываем уведомление о добавлении остатка
+            tg.showAlert("Остаток добавлен");
         }
 
         function submitRemainders() {
@@ -591,18 +636,16 @@
 
                     // Создаем массив для корзины
                     const cartItems = recommendation.positions.map(position => {
-                        // Ищем соответствующую опцию в select по названию
-                        const option = Array.from(document.getElementById('product_select').options)
-                            .find(opt => opt.dataset.name === position.name);
+                        // Ищем соответствующий товар в списке всех товаров
+                        const product = initialProducts.find(p => p.name === position.name);
 
-                        if (option) {
-                            // Если нашли соответствующий товар, берем все данные из него
+                        if (product) {
                             return {
-                                id: option.value,
-                                name: position.name,
+                                id: product.id,
+                                name: product.name,
                                 quantity: parseInt(position.quantity) || 0,
-                                price: parseFloat(option.dataset.price) || 0,
-                                legalEntity: parseInt(option.dataset.legalEntity) || 1
+                                price: parseFloat(product.price) || 0,
+                                legalEntity: parseInt(product.legalEntity) || 1
                             };
                         } else {
                             console.warn(`Товар не найден: ${position.name}`);
@@ -629,22 +672,19 @@
 
         // Функция для обработки элементов корзины при ошибке
         function processCartItems(items) {
-            // Получаем цены из select элемента
-            const selectElement = document.getElementById('product_select');
             const cartItems = [];
 
             items.forEach(item => {
-                // Ищем соответствующую опцию в select по названию
-                const option = Array.from(selectElement.options)
-                    .find(opt => opt.dataset.name === item.name);
+                // Ищем соответствующий товар в списке всех товаров
+                const product = initialProducts.find(p => p.name === item.name);
 
-                if (option) {
+                if (product) {
                     cartItems.push({
-                        id: option.value,
+                        id: product.id,
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
-                        price: parseFloat(option.dataset.price) || 0,
-                        legalEntity: parseInt(option.dataset.legalEntity) || 1
+                        price: parseFloat(product.price) || 0,
+                        legalEntity: parseInt(product.legalEntity) || 1
                     });
                 } else {
                     console.warn(`Товар не найден: ${item.name}`);
