@@ -90,9 +90,20 @@
             justify-content: space-between;
             padding: 5px 0;
             border-bottom: 1px solid var(--tg-theme-hint-color, #dddddd);
+            align-items: center;
         }
         .position-item:last-child {
             border-bottom: none;
+        }
+        .position-name {
+            flex: 1;
+            margin-right: 15px;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .position-count {
+            flex: 0 0 auto;
+            white-space: nowrap;
         }
         .show-positions-button {
             background: none;
@@ -140,8 +151,8 @@
                         <div id="positions-{{ order._id }}" class="positions-list">
                             {% for position in order.positions.values() %}
                             <div class="position-item">
-                                <div>{{ position.Beer_Name }}</div>
-                                <div>{{ position.Beer_Count }} шт.</div>
+                                <div class="position-name">{{ position.Beer_Name }}</div>
+                                <div class="position-count">{{ position.Beer_Count }} шт.</div>
                             </div>
                             {% endfor %}
                         </div>
