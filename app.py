@@ -372,26 +372,14 @@ def repeat_order():
         # Очищаем текущую корзину
         redis_client.delete(cart_key)
         
-        # Получаем актуальные данные о пиве из каталога
-        catalog = {str(product['id']): product for product in mongo.cx.Pivo.catalog.find()}
-        
         # Добавляем позиции из старого заказа в корзину
         positions = order.get('Positions', {})
         for position in positions.values():
-            beer_id = str(position['Beer_ID'])
-            if beer_id in catalog:
-                beer = catalog[beer_id]
-                item_data = {
-                    'id': beer_id,
-                    'name': beer['name'],  # Используем актуальное название из каталога
-                    'count': position['Beer_Count'],
-                    'price': beer['price'],  # Добавляем актуальную цену
-                    'legalEntity': beer['legalEntity']  # Добавляем актуальный legalEntity
-                }
-                redis_client.hset(cart_key, beer_id, json.dumps(item_data))
-        
-        # Устанавливаем время жизни корзины (например, 1 час)
-        redis_client.expire(cart_key, 3600)
+            item_data = {
+                "id": position['Beer_ID'],
+                "count": position['Beer_Count']
+            }
+            redis_client.hset(cart_key, str(position['Beer_ID']), json.dumps(item_data))
         
         return jsonify({"success": True})
     
