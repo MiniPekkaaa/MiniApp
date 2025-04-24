@@ -251,14 +251,8 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
         
-        let userId = null;
-        if (tg.initDataUnsafe?.user?.id) {
-            userId = tg.initDataUnsafe.user.id;
-        } else {
-            userId = new URLSearchParams(window.location.search).get('user_id');
-        }
-        
-        let initialProducts = JSON.parse('{{ products|tojson|safe }}');
+        const userId = tg.initDataUnsafe?.user?.id;
+        let initialProducts = {{ products|tojson|safe }};
         let selectedProduct = null;
         const remainders = [];
         
@@ -537,8 +531,6 @@
                 </div>
                 <div class="product-controls">
                     <input type="number" value="${quantity}" min="1" class="quantity-input" 
-                           data-beer-id="${product.id}" 
-                           data-legal-entity="${product.legalEntity}"
                            onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
                     <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
                             class="delete-button">
@@ -553,41 +545,208 @@
             document.getElementById('quantity').value = "1";
             selectedProduct = null;
             
+            // Показываем уведомление о добавлении остатка
             tg.showAlert("Остаток добавлен");
         }
 
-        async function submitRemainders() {
-            try {
-                if (!remainders || remainders.length === 0) {
-                    tg.showAlert("Добавьте хотя бы один остаток");
-                    return;
-                }
+        function submitRemainders() {
+            // Показываем загрузочный экран
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('content').classList.add('hidden');
 
-                hideContent();
-                const response = await fetch(`/api/submit-remainders?user_id=${userId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        remainders: remainders
-                    })
-                });
+            // Собираем все позиции из списка
+            const container = document.getElementById('last_orders_products');
+            const items = container.querySelectorAll('.product-item');
+            const allRemainders = [];
 
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Даем время на обработку данных в n8n
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    window.location.href = '/cart';
-                } else {
-                    throw new Error(data.error || 'Ошибка при отправке остатков');
+            // Добавляем все позиции из DOM
+            items.forEach(item => {
+                const name = item.querySelector('.product-info').textContent.trim();
+                const quantity = parseInt(item.querySelector('.quantity-input').value);
+                const deleteButton = item.querySelector('.delete-button');
+                // Получаем beer_id и legal_entity из атрибутов кнопки удаления
+                const onclick = deleteButton.getAttribute('onclick');
+                const matches = onclick.match(/deleteRemainder\((\d+),\s*(\d+)/);
+                if (matches) {
+                    const [_, beerId, legalEntity] = matches;
+                    allRemainders.push({
+                        id: beerId,
+                        name: name,
+                        legalEntity: parseInt(legalEntity),
+                        quantity: quantity
+                    });
                 }
-            } catch (error) {
-                console.error('Ошибка:', error);
-                tg.showAlert('Произошла ошибка: ' + error.message);
-                showContent();
+            });
+
+            // Добавляем все позиции из массива remainders, которых еще нет в списке
+            remainders.forEach(remainder => {
+                const exists = allRemainders.some(item => 
+                    item.id === remainder.id && 
+                    item.legalEntity === remainder.legalEntity
+                );
+                if (!exists) {
+                    allRemainders.push({
+                        id: remainder.id,
+                        name: remainder.name,
+                        legalEntity: remainder.legalEntity,
+                        quantity: remainder.quantity
+                    });
+                }
+            });
+
+            if (allRemainders.length === 0) {
+                tg.showAlert("Добавьте хотя бы один остаток");
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('content').classList.remove('hidden');
+                return;
             }
+
+            console.log('Отправляем остатки:', allRemainders);
+
+            // Сначала получаем данные пользователя
+            fetch(`/api/get-last-orders?user_id=${userId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data.org_ID) {
+                        throw new Error('org_ID не найден');
+                    }
+
+                    const data_to_send = {
+                        telegram_id: userId,
+                        org_ID: data.org_ID,
+                        remainders: allRemainders
+                    };
+
+                    console.log('Отправляем данные в n8n:', data_to_send);
+
+                    return fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(data_to_send)
+                    });
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        if (response.status === 502) {
+                            // В случае ошибки просто переходим к обработке остатков
+                            return processCartItems(allRemainders);
+                        }
+                        throw new Error(`Ошибка при отправке в n8n: ${response.status}`);
+                    }
+                    
+                    return response.text().then(text => {
+                        try {
+                            return text ? JSON.parse(text) : {};
+                        } catch (e) {
+                            console.warn('Не удалось распарсить ответ как JSON:', text);
+                            return {};
+                        }
+                    });
+                })
+                .then(responseData => {
+                    if (!responseData) {
+                        return processCartItems(allRemainders);
+                    }
+
+                    // Обрабатываем ответ как массив
+                    const recommendation = Array.isArray(responseData) ? responseData[0] : responseData;
+
+                    if (!recommendation || !recommendation.positions) {
+                        return processCartItems(allRemainders);
+                    }
+
+                    // Сохраняем рекомендацию в sessionStorage для показа в корзине
+                    if (recommendation.generalRecommendation) {
+                        // Сохраняем рекомендацию только если это ввод остатков
+                        const isManualInput = window.location.pathname === '/products';
+                        if (!isManualInput) {
+                            sessionStorage.setItem('recommendation', recommendation.generalRecommendation);
+                        }
+                    }
+
+                    // Создаем массив для корзины
+                    const cartItems = recommendation.positions.map(position => {
+                        // Ищем соответствующий товар в списке всех товаров
+                        const product = initialProducts.find(p => p.name === position.name);
+
+                        if (product) {
+                            return {
+                                id: product.id,
+                                name: product.name,
+                                quantity: parseInt(position.quantity) || 0,
+                                price: parseFloat(product.price) || 0,
+                                legalEntity: parseInt(product.legalEntity) || 1
+                            };
+                        } else {
+                            console.warn(`Товар не найден: ${position.name}`);
+                            return {
+                                id: '',
+                                name: position.name,
+                                quantity: parseInt(position.quantity) || 0,
+                                price: 0,
+                                legalEntity: 1
+                            };
+                        }
+                    });
+
+                    // Сохраняем корзину в sessionStorage
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    // Очищаем рекомендации если это ручное добавление
+                    const isManualInput = window.location.pathname === '/products';
+                    if (isManualInput) {
+                        sessionStorage.removeItem('recommendation');
+                    }
+                    remainders.length = 0;
+                    window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+                })
+                .catch(error => {
+                    console.error('Ошибка при отправке остатков:', error);
+                    return processCartItems(allRemainders);
+                });
+        }
+
+        // Функция для обработки элементов корзины при ошибке
+        function processCartItems(items) {
+            const cartItems = [];
+
+            items.forEach(item => {
+                // Ищем соответствующий товар в списке всех товаров
+                const product = initialProducts.find(p => p.name === item.name);
+
+                if (product) {
+                    cartItems.push({
+                        id: product.id,
+                        name: item.name,
+                        quantity: parseInt(item.quantity) || 0,
+                        price: parseFloat(product.price) || 0,
+                        legalEntity: parseInt(product.legalEntity) || 1
+                    });
+                } else {
+                    console.warn(`Товар не найден: ${item.name}`);
+                    cartItems.push({
+                        id: item.id || '',
+                        name: item.name,
+                        quantity: parseInt(item.quantity) || 0,
+                        price: 0,
+                        legalEntity: item.legalEntity || 1
+                    });
+                }
+            });
+
+            console.log('Сохраняем в корзину:', cartItems);
+            sessionStorage.setItem('cart', JSON.stringify(cartItems));
+            // Очищаем рекомендации, так как это ручное добавление
+            sessionStorage.removeItem('recommendation');
+            remainders.length = 0;
+            window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
         }
 
         // Запускаем проверку авторизации

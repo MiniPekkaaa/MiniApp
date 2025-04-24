@@ -6,7 +6,6 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
-import requests
 
 # Настройка логирования
 logging.basicConfig(
@@ -499,66 +498,6 @@ def cancel_order():
     except Exception as e:
         logger.error(f"Ошибка при отмене заказа: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/submit-remainders', methods=['POST'])
-def submit_remainders():
-    try:
-        data = request.json
-        remainders = data.get('remainders', [])
-        user_id = request.args.get('user_id')
-        
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-            
-        if not remainders:
-            return jsonify({"error": "Нет данных об остатках"}), 400
-
-        # Получаем данные пользователя из Redis
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        org_id = user_data.get('org_ID')
-        
-        if not org_id:
-            return jsonify({"error": "Organization ID not found"}), 400
-
-        # Преобразуем остатки в нужный формат
-        formatted_remainders = {}
-        for index, remainder in enumerate(remainders, 1):
-            position_key = f"Position_{index}"
-            formatted_remainders[position_key] = {
-                'Beer_ID': int(remainder['id']),
-                'Beer_Name': remainder['name'],
-                'Legal_Entity': int(remainder['legalEntity']),
-                'Beer_Count': int(remainder['quantity'])
-            }
-
-        # Создаем данные в том же формате, что и заказ
-        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
-        current_time = datetime.now(timezone)
-        remainder_data = {
-            'status': "Новый",
-            'date': current_time.strftime("%d.%m.%y %H:%M"),
-            'userid': str(user_id),
-            'username': user_data.get('organization', 'ООО Пивной мир'),
-            'org_ID': org_id,
-            'Positions': formatted_remainders
-        }
-
-        # Отправляем данные на вебхук n8n
-        n8n_webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
-        webhook_response = requests.post(
-            n8n_webhook_url,
-            json=remainder_data,
-            headers={'Content-Type': 'application/json'}
-        )
-
-        if webhook_response.status_code != 200:
-            logger.error(f"Ошибка при отправке в n8n: {webhook_response.text}")
-            return jsonify({"error": "Ошибка при отправке данных"}), 500
-
-        return jsonify({"success": True})
-    except Exception as e:
-        logger.error(f"Ошибка при обработке остатков: {str(e)}")
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
