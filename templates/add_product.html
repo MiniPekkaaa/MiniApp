@@ -665,7 +665,11 @@
 
                     // Сохраняем рекомендацию в sessionStorage для показа в корзине
                     if (recommendation.generalRecommendation) {
-                        sessionStorage.setItem('recommendation', recommendation.generalRecommendation);
+                        // Сохраняем рекомендацию только если это ввод остатков
+                        const isManualInput = window.location.pathname === '/products';
+                        if (!isManualInput) {
+                            sessionStorage.setItem('recommendation', recommendation.generalRecommendation);
+                        }
                     }
 
                     // Создаем массив для корзины
@@ -695,6 +699,11 @@
 
                     // Сохраняем корзину в sessionStorage
                     sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    // Очищаем рекомендации если это ручное добавление
+                    const isManualInput = window.location.pathname === '/products';
+                    if (isManualInput) {
+                        sessionStorage.removeItem('recommendation');
+                    }
                     remainders.length = 0;
                     window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
                 })
