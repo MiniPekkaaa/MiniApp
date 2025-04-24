@@ -75,6 +75,10 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
+        .cart-item-content {
+            width: 100%;
+        }
+
         .cart-item-info {
             margin-bottom: 15px;
         }
@@ -118,11 +122,10 @@
 
         .quantity-editor {
             display: none;
-            background-color: var(--tg-theme-bg-color);
-            margin: 15px -15px -15px -15px;
-            padding: 15px;
+            margin-top: 15px;
+            padding-top: 15px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 0 0 12px 12px;
+            width: 100%;
         }
 
         .quantity-editor.active {
@@ -133,42 +136,34 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background-color: var(--tg-theme-secondary-bg-color);
-            border-radius: 8px;
-            padding: 5px;
+            gap: 8px;
             margin-bottom: 15px;
         }
 
         .quantity-editor .quantity-input {
             flex: 1;
             text-align: center;
-            background: none;
-            border: none;
-            color: var(--tg-theme-text-color);
-            font-size: 16px;
-            font-weight: 500;
-            width: 60px;
             padding: 8px;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--tg-theme-text-color);
+            border: none;
+            font-size: 16px;
+            height: 40px;
+            max-width: 120px;
+            margin: 0 10px;
         }
 
         .quantity-editor .quantity-controls .button {
-            width: 36px;
-            height: 36px;
-            min-width: 36px;
-            border-radius: 8px;
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
             padding: 0;
             font-size: 18px;
-            font-weight: 500;
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
-            transition: opacity 0.2s;
-        }
-
-        .quantity-editor .quantity-controls .button:active {
-            opacity: 0.8;
+            border-radius: 8px;
         }
 
         .quantity-editor .action-buttons {
@@ -181,13 +176,6 @@
             width: 100%;
             height: 40px;
             border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            transition: opacity 0.2s;
-        }
-
-        .quantity-editor .action-buttons .button:active {
-            opacity: 0.8;
         }
 
         .button-delete {
@@ -347,17 +335,19 @@
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 itemElement.innerHTML = `
-                    <div class="cart-item-info">
-                        <h3 class="cart-item-name">${item.name}</h3>
-                        <div class="cart-item-details">
-                            <p>Количество: ${item.quantity}</p>
-                            <p>Цена: ${item.price}₽</p>
-                            <p>Сумма: ${itemTotal}₽</p>
+                    <div class="cart-item-content">
+                        <div class="cart-item-info">
+                            <h3 class="cart-item-name">${item.name}</h3>
+                            <div class="cart-item-details">
+                                <p>Количество: ${item.quantity}</p>
+                                <p>Цена: ${item.price}₽</p>
+                                <p>Сумма: ${itemTotal}₽</p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="cart-item-controls">
-                        <button onclick="toggleQuantityEditor(this, ${index})" class="button">Изменить объем</button>
-                        <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
+                        <div class="cart-item-controls">
+                            <button onclick="toggleQuantityEditor(this, ${index})" class="button">Изменить объем</button>
+                            <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
+                        </div>
                     </div>
                     <div class="quantity-editor">
                         <div class="quantity-controls">
