@@ -87,7 +87,6 @@
         .cart-item-details {
             font-size: 14px;
             color: var(--tg-theme-hint-color);
-            margin-bottom: 15px;
         }
 
         .cart-item-details p {
@@ -96,18 +95,20 @@
 
         .cart-item-controls {
             display: flex;
-            flex-direction: row;
+            flex-direction: column;
             gap: 8px;
-            margin-bottom: 10px;
         }
 
         .cart-item-controls .button {
-            flex: 1;
+            width: 100%;
+            margin: 0;
         }
 
         .quantity-editor {
             display: none;
-            width: 100%;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .quantity-editor.active {
@@ -117,13 +118,13 @@
         .quantity-editor .quantity-controls {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            gap: 8px;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
         }
 
         .quantity-editor .quantity-input {
-            flex: 1;
+            width: 80px;
             text-align: center;
             padding: 8px;
             border-radius: 8px;
@@ -131,26 +132,11 @@
             color: var(--tg-theme-text-color);
             border: none;
             font-size: 14px;
-            height: 40px;
         }
 
         .quantity-editor .button {
-            height: 40px;
-            min-width: 40px;
-            padding: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .quantity-editor .action-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .quantity-editor .action-buttons .button {
             width: 100%;
+            margin-bottom: 8px;
         }
 
         .button-delete {
@@ -328,10 +314,8 @@
                             <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
                             <button onclick="incrementEditorQuantity(this)" class="button">+</button>
                         </div>
-                        <div class="action-buttons">
-                            <button onclick="saveQuantity(this, ${index})" class="button">Сохранить</button>
-                            <button onclick="cancelEditing(this)" class="button">Отмена</button>
-                        </div>
+                        <button onclick="saveQuantity(this, ${index})" class="button">Сохранить</button>
+                        <button onclick="cancelEditing(this)" class="button">Отмена</button>
                     </div>
                 `;
                 cartItems.appendChild(itemElement);
