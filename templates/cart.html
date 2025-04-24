@@ -72,6 +72,7 @@
             padding: 15px;
             margin-bottom: 10px;
             border-radius: 8px;
+            position: relative;
         }
 
         .cart-item-info {
@@ -109,6 +110,13 @@
             margin-top: 10px;
             padding-top: 10px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
+            position: absolute;
+            left: 0;
+            right: 0;
+            padding-left: 15px;
+            padding-right: 15px;
+            background-color: var(--tg-theme-secondary-bg-color);
+            border-radius: 0 0 8px 8px;
         }
 
         .quantity-editor.active {
@@ -117,13 +125,14 @@
 
         .quantity-editor .quantity-controls {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
             gap: 8px;
             margin-bottom: 10px;
         }
 
         .quantity-editor .quantity-input {
-            width: 100%;
+            flex: 1;
             text-align: center;
             padding: 8px;
             border-radius: 8px;
@@ -132,12 +141,20 @@
             border: none;
             font-size: 14px;
             height: 40px;
+            min-width: 60px;
         }
 
         .quantity-editor .button {
-            width: 100%;
             height: 40px;
-            margin-bottom: 8px;
+            padding: 8px;
+            min-width: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quantity-editor .quantity-controls .button {
+            width: 40px;
         }
 
         .button-delete {
@@ -310,9 +327,11 @@
                         <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
                     </div>
                     <div class="quantity-editor">
-                        <button onclick="incrementEditorQuantity(this)" class="button">+</button>
-                        <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
-                        <button onclick="decrementEditorQuantity(this)" class="button">-</button>
+                        <div class="quantity-controls">
+                            <button onclick="decrementEditorQuantity(this)" class="button">-</button>
+                            <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
+                            <button onclick="incrementEditorQuantity(this)" class="button">+</button>
+                        </div>
                         <button onclick="saveQuantity(this, ${index})" class="button">Сохранить</button>
                         <button onclick="cancelEditing(this)" class="button">Отмена</button>
                     </div>
