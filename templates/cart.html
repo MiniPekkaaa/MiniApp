@@ -99,42 +99,44 @@
             gap: 8px;
         }
 
-        .cart-item-controls .button {
-            width: 100%;
+        .edit-volume-container {
+            position: relative;
+            flex: 1;
         }
 
         .quantity-editor {
             display: none;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .quantity-editor.active {
-            display: block;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 8px;
+            padding: 8px;
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 8px;
+            z-index: 1;
         }
 
         .quantity-controls {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             margin-bottom: 8px;
         }
 
-        .quantity-editor .quantity-input {
-            width: 50px;
+        .quantity-input {
+            width: 60px;
             text-align: center;
             padding: 4px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
         }
 
         .quantity-editor .button {
             padding: 4px 8px;
-            min-width: 30px;
-        }
-
-        .quantity-editor .quantity-controls .button {
-            width: 40px;
-            margin: 0;
         }
 
         .button-delete {
@@ -303,24 +305,25 @@
                     <div class="cart-item-info">
                         <h3 class="cart-item-name">${item.name}</h3>
                         <div class="cart-item-details">
+                            <p>Количество: ${item.quantity}</p>
                             <p>Цена: ${item.price}₽</p>
-                            <p class="quantity-line">
-                                Количество: 
-                                <span class="quantity-display">${item.quantity}</span>
-                                <span class="quantity-editor" style="display: none;">
-                                    <button onclick="decrementEditorQuantity(this)" class="button">−</button>
-                                    <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
-                                    <button onclick="incrementEditorQuantity(this)" class="button">+</button>
-                                    <button onclick="saveQuantity(this, ${index})" class="button">✓</button>
-                                    <button onclick="cancelEditing(this)" class="button">✕</button>
-                                </span>
-                            </p>
                             <p>Сумма: ${itemTotal}₽</p>
                         </div>
                     </div>
                     <div class="cart-item-controls">
                         <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
-                        <button onclick="toggleQuantityEditor(this, ${index})" class="button">Изменить объем</button>
+                        <div class="edit-volume-container">
+                            <button onclick="toggleQuantityEditor(this, ${index})" class="button">Изменить объем</button>
+                            <div class="quantity-editor">
+                                <div class="quantity-controls">
+                                    <button onclick="decrementEditorQuantity(this)" class="button">−</button>
+                                    <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
+                                    <button onclick="incrementEditorQuantity(this)" class="button">+</button>
+                                </div>
+                                <button onclick="saveQuantity(this, ${index})" class="button">✓</button>
+                                <button onclick="cancelEditing(this)" class="button">✕</button>
+                            </div>
+                        </div>
                     </div>
                 `;
                 cartItems.appendChild(itemElement);
@@ -335,22 +338,17 @@
         }
         
         function toggleQuantityEditor(button, index) {
-            const cartItem = button.closest('.cart-item');
-            const display = cartItem.querySelector('.quantity-display');
-            const editor = cartItem.querySelector('.quantity-editor');
-            const input = editor.querySelector('.editor-quantity');
+            const editor = button.nextElementSibling;
             
             // Закрываем все другие редакторы
             document.querySelectorAll('.quantity-editor').forEach(ed => {
                 if (ed !== editor) {
                     ed.style.display = 'none';
-                    ed.previousElementSibling.style.display = 'inline';
                 }
             });
             
-            display.style.display = 'none';
-            editor.style.display = 'inline-block';
-            input.value = display.textContent;
+            // Переключаем видимость редактора
+            editor.style.display = editor.style.display === 'none' ? 'block' : 'none';
         }
 
         function incrementEditorQuantity(button) {
