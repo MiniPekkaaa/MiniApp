@@ -554,12 +554,12 @@
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('content').classList.add('hidden');
 
-            // Собираем все позиции из списка
+            // Собираем все позиции только из DOM
             const container = document.getElementById('last_orders_products');
             const items = container.querySelectorAll('.product-item');
             const allRemainders = [];
 
-            // Добавляем все позиции из DOM
+            // Добавляем только видимые позиции из DOM
             items.forEach(item => {
                 const name = item.querySelector('.product-info').textContent.trim();
                 const quantity = parseInt(item.querySelector('.quantity-input').value);
@@ -574,22 +574,6 @@
                         name: name,
                         legalEntity: parseInt(legalEntity),
                         quantity: quantity
-                    });
-                }
-            });
-
-            // Добавляем все позиции из массива remainders, которых еще нет в списке
-            remainders.forEach(remainder => {
-                const exists = allRemainders.some(item => 
-                    item.id === remainder.id && 
-                    item.legalEntity === remainder.legalEntity
-                );
-                if (!exists) {
-                    allRemainders.push({
-                        id: remainder.id,
-                        name: remainder.name,
-                        legalEntity: remainder.legalEntity,
-                        quantity: remainder.quantity
                     });
                 }
             });
