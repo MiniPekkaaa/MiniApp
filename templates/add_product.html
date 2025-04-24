@@ -251,7 +251,7 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
         
-        const userId = tg.initDataUnsafe?.user?.id;
+        const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('user_id');
         let initialProducts = {{ products|tojson|safe }};
         let selectedProduct = null;
         const remainders = [];

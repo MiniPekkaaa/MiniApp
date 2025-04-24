@@ -499,5 +499,22 @@ def cancel_order():
         logger.error(f"Ошибка при отмене заказа: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/submit-remainders', methods=['POST'])
+def submit_remainders():
+    try:
+        data = request.json
+        remainders = data.get('remainders', [])
+        
+        if not remainders:
+            return jsonify({"success": False, "error": "Нет данных об остатках"}), 400
+
+        # Здесь можно добавить дополнительную логику обработки остатков
+        # Например, сохранение в базу данных или другие операции
+
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Ошибка при обработке остатков: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
