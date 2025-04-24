@@ -504,14 +504,29 @@ def submit_remainders():
     try:
         data = request.json
         remainders = data.get('remainders', [])
+        user_id = request.args.get('user_id')
         
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+            
         if not remainders:
             return jsonify({"success": False, "error": "Нет данных об остатках"}), 400
 
-        # Здесь можно добавить дополнительную логику обработки остатков
-        # Например, сохранение в базу данных или другие операции
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"success": False, "error": "Organization ID not found"}), 400
 
-        return jsonify({"success": True})
+        # Формируем данные для n8n
+        response_data = {
+            "success": True,
+            "remainders": remainders,
+            "org_ID": org_id
+        }
+        
+        return jsonify(response_data)
     except Exception as e:
         logger.error(f"Ошибка при обработке остатков: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500

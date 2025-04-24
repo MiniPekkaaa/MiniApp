@@ -564,7 +564,7 @@
                 }
 
                 hideContent();
-                const response = await fetch('/api/submit-remainders', {
+                const response = await fetch(`/api/submit-remainders?user_id=${userId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -577,6 +577,8 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Даем время на обработку данных в n8n
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     window.location.href = '/cart';
                 } else {
                     throw new Error(data.error || 'Ошибка при отправке остатков');
