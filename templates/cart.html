@@ -155,6 +155,16 @@
             align-items: center;
             gap: 8px;
         }
+
+        .button-confirm {
+            background-color: #4CAF50 !important;
+            color: white !important;
+        }
+
+        .button-cancel {
+            background-color: #ff4444 !important;
+            color: white !important;
+        }
     </style>
 </head>
 <body>
@@ -172,6 +182,7 @@
     <!-- Основной контент -->
     <div id="content" class="hidden">
         <div class="container cart-container" id="cartContainer">
+            <h2 style="color: var(--tg-theme-text-color); margin: 0 0 15px 0;">Корзина</h2>
             <div id="cart_items">
                 <!-- Здесь будут отображаться товары -->
             </div>
@@ -232,13 +243,9 @@
             } else {
                 // Проверяем рекомендацию
                 const recommendation = sessionStorage.getItem('recommendation');
-                const wasShown = localStorage.getItem('recommendationShown');
-                
-                if (recommendation && !wasShown) {
+                if (recommendation) {
                     showNotification(recommendation);
-                    // Отмечаем, что уведомление было показано
-                    localStorage.setItem('recommendationShown', 'true');
-                    // Удаляем рекомендацию из sessionStorage
+                    // Удаляем рекомендацию из sessionStorage после показа
                     sessionStorage.removeItem('recommendation');
                 }
                 // Показываем контент через небольшую задержку
@@ -316,8 +323,8 @@
                                     <button onclick="incrementEditorQuantity(this)" class="button">+</button>
                                 </div>
                                 <div style="display: flex; justify-content: center; gap: 8px;">
-                                    <button onclick="saveQuantity(this, ${index})" class="button">✓</button>
-                                    <button onclick="cancelEditing(this)" class="button">✕</button>
+                                    <button onclick="saveQuantity(this, ${index})" class="button button-confirm">✓</button>
+                                    <button onclick="cancelEditing(this)" class="button button-cancel">✕</button>
                                 </div>
                             </div>
                         </div>
