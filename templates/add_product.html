@@ -172,6 +172,7 @@
 
         .date-input-container {
             margin-bottom: 20px;
+            padding: 0 20px;
         }
 
         .date-input-container label {
@@ -182,7 +183,7 @@
         }
 
         .date-input {
-            width: 100%;
+            width: calc(100% - 24px);
             padding: 12px;
             border-radius: 8px;
             background-color: var(--tg-theme-secondary-bg-color);
@@ -190,6 +191,23 @@
             border: 1px solid var(--tg-theme-hint-color);
             font-size: 14px;
             margin-bottom: 8px;
+        }
+
+        /* Стилизация иконки календаря */
+        .date-input::-webkit-calendar-picker-indicator {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            filter: invert(0.7);
+            opacity: 0.8;
+            padding: 4px;
+            border-radius: 4px;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .date-input::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+            background-color: rgba(255, 255, 255, 0.2);
         }
 
         /* Стили для уведомлений */
