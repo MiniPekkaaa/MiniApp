@@ -183,6 +183,35 @@
     <div id="content" class="hidden">
         <div class="container cart-container" id="cartContainer">
             <h2 style="margin: 0 0 15px 0; text-align: center;">Корзина</h2>
+            
+            {% if recommendation %}
+            <div class="recommendation-container" style="margin-bottom: 20px; padding: 15px; background-color: var(--tg-theme-secondary-bg-color); border-radius: 12px;">
+                <p style="margin: 0; color: var(--tg-theme-text-color);">{{ recommendation }}</p>
+            </div>
+            {% endif %}
+
+            {% if positions %}
+            <div id="recommended_items" style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">Рекомендуемые позиции:</h3>
+                {% for position in positions %}
+                <div class="cart-item">
+                    <div class="cart-item-info">
+                        <h4 class="cart-item-name">{{ position.name }}</h4>
+                        <div class="cart-item-details">
+                            <p>Количество: {{ position.quantity }}</p>
+                        </div>
+                    </div>
+                    <div class="cart-item-controls">
+                        <button onclick="addToCart({{ position|tojson|safe }})" 
+                                class="button button-confirm">
+                            Добавить в корзину
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <div id="cart_items">
                 <!-- Здесь будут отображаться товары -->
             </div>
@@ -453,6 +482,24 @@
         
         function goBack() {
             window.location.href = `/order_menu?user_id=${userId}`;
+        }
+        
+        function addToCart(position) {
+            const item = {
+                name: position.name,
+                quantity: position.quantity,
+                id: position.id,
+                legalEntity: position.legal_entity
+            };
+            
+            // Добавляем товар в корзину
+            cart.push(item);
+            
+            // Обновляем отображение корзины
+            updateCartDisplay();
+            
+            // Показываем уведомление
+            showNotification('Товар добавлен в корзину');
         }
         
         // Запускаем проверку авторизации и отображаем корзину
