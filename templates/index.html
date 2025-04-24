@@ -315,9 +315,9 @@
                 .then(data => {
                     if (data.success) {
                         showNotification('Ваш заказ отменен');
-                cart = [];
-                sessionStorage.setItem('cart', JSON.stringify(cart));
-                updateCartCount();
+                        cart = [];
+                        sessionStorage.setItem('cart', JSON.stringify(cart));
+                        updateCartCount();
                         setTimeout(() => {
                             window.location.href = `/?user_id=${userId}`;
                         }, 2000);

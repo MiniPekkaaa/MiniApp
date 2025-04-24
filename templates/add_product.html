@@ -556,35 +556,38 @@
             tg.showAlert("Остаток добавлен");
         }
 
-        function submitRemainders() {
-            fetch(`/api/submit-remainders?user_id=${userId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ remainders: remainders })
-            })
-            .then(response => response.json())
-            .then(data => {
+        async function submitRemainders() {
+            try {
+                if (!remainders || remainders.length === 0) {
+                    tg.showAlert("Добавьте хотя бы один остаток");
+                    return;
+                }
+
+                hideContent();
+                const response = await fetch(`/api/submit-remainders?user_id=${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        remainders: remainders
+                    })
+                });
+
+                const data = await response.json();
+                
                 if (data.success) {
-                    if (data.redirect) {
-                        // Если есть редирект и данные, сохраняем их в sessionStorage
-                        if (data.data) {
-                            sessionStorage.setItem('cart_recommendations', JSON.stringify(data.data));
-                        }
-                        // Перенаправляем на указанный URL
-                        window.location.href = `${data.redirect}?user_id=${userId}`;
-                    } else {
-                        window.location.href = `/?user_id=${userId}`;
-                    }
+                    // Даем время на обработку данных в n8n
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    window.location.href = '/cart';
                 } else {
                     throw new Error(data.error || 'Ошибка при отправке остатков');
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Ошибка:', error);
                 tg.showAlert('Произошла ошибка: ' + error.message);
-            });
+                showContent();
+            }
         }
 
         // Запускаем проверку авторизации
