@@ -130,34 +130,10 @@ def products():
 
 @app.route('/cart')
 def cart():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-
-        # Пытаемся получить рекомендации из Redis
-        redis_key = f'beer:recommendations:{user_id}'
-        recommendations_data = redis_client.get(redis_key)
-        
-        data = {
-            'user_id': user_id,
-            'recommendation': None,
-            'positions': []
-        }
-        
-        if recommendations_data:
-            recommendations = json.loads(recommendations_data)
-            data['recommendation'] = recommendations.get('recommendation')
-            data['positions'] = recommendations.get('positions', [])
-            
-            # Удаляем данные из Redis после использования
-            redis_client.delete(redis_key)
-        
-        return render_template('cart.html', **data)
-        
-    except Exception as e:
-        logger.error(f"Error in cart route: {str(e)}", exc_info=True)
+    user_id = request.args.get('user_id')
+    if not user_id or not check_user_registration(user_id):
         return redirect('/')
+    return render_template('cart.html', user_id=user_id)
 
 @app.route('/add_product')
 def add_product():
@@ -579,95 +555,9 @@ def submit_remainders():
             logger.error(f"Ошибка при отправке в n8n: {webhook_response.text}")
             return jsonify({"error": "Ошибка при отправке данных"}), 500
 
-        # Получаем ответ от n8n
-        n8n_data = webhook_response.json()
-        
-        # Проверяем наличие рекомендаций и позиций в ответе
-        if 'generalRecommendation' in n8n_data and 'positions' in n8n_data:
-            # Сохраняем данные в Redis для использования в корзине
-            redis_key = f'beer:recommendations:{user_id}'
-            redis_client.setex(
-                redis_key,
-                3600,  # Время жизни 1 час
-                json.dumps({
-                    'recommendation': n8n_data['generalRecommendation'],
-                    'positions': n8n_data['positions']
-                })
-            )
-            
-            # Возвращаем успешный ответ с данными для редиректа
-            return jsonify({
-                "success": True,
-                "redirect": "/cart",
-                "data": {
-                    "recommendation": n8n_data['generalRecommendation'],
-                    "positions": n8n_data['positions']
-                }
-            })
-        
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"Ошибка при обработке остатков: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/delete-remainders', methods=['POST'])
-def delete_remainders():
-    try:
-        data = request.json
-        remainders = data.get('remainders', [])
-        user_id = request.args.get('user_id')
-        
-        if not user_id or not check_user_registration(user_id):
-            return jsonify({"error": "Unauthorized"}), 401
-            
-        if not remainders:
-            return jsonify({"error": "Нет данных об остатках для удаления"}), 400
-
-        # Получаем данные пользователя из Redis
-        user_data = redis_client.hgetall(f'beer:user:{user_id}')
-        org_id = user_data.get('org_ID')
-        
-        if not org_id:
-            return jsonify({"error": "Organization ID not found"}), 400
-
-        # Форматируем данные для удаления
-        timezone = pytz.timezone('Asia/Vladivostok')
-        current_time = datetime.now(timezone)
-        
-        delete_data = {
-            'status': "Удаление",
-            'date': current_time.strftime("%d.%m.%y %H:%M"),
-            'userid': str(user_id),
-            'username': user_data.get('organization', 'ООО Пивной мир'),
-            'org_ID': org_id,
-            'Positions': {}
-        }
-
-        # Форматируем позиции для удаления
-        for index, remainder in enumerate(remainders, 1):
-            position_key = f"Position_{index}"
-            delete_data['Positions'][position_key] = {
-                'Beer_ID': int(remainder['id']),
-                'Beer_Name': remainder['name'],
-                'Legal_Entity': int(remainder['legalEntity']),
-                'Beer_Count': -int(remainder['quantity'])  # Отрицательное значение для удаления
-            }
-
-        # Отправляем данные на вебхук n8n
-        n8n_webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
-        webhook_response = requests.post(
-            n8n_webhook_url,
-            json=delete_data,
-            headers={'Content-Type': 'application/json'}
-        )
-
-        if webhook_response.status_code != 200:
-            logger.error(f"Ошибка при отправке удаления в n8n: {webhook_response.text}")
-            return jsonify({"error": "Ошибка при отправке данных"}), 500
-
-        return jsonify({"success": True})
-    except Exception as e:
-        logger.error(f"Ошибка при обработке удаления остатков: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
