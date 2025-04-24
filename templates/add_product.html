@@ -676,7 +676,8 @@
                         telegram_id: userId,
                         org_ID: data.org_ID,
                         remainders: allRemainders,
-                        nextOrderDate: nextOrderDate
+                        nextOrderDate: nextOrderDate,
+                        currentDate: new Date().toISOString()
                     };
 
                     console.log('Отправляем данные в n8n:', data_to_send);
