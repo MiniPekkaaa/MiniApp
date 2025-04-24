@@ -560,5 +560,65 @@ def submit_remainders():
         logger.error(f"Ошибка при обработке остатков: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/delete-remainders', methods=['POST'])
+def delete_remainders():
+    try:
+        data = request.json
+        remainders = data.get('remainders', [])
+        user_id = request.args.get('user_id')
+        
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+            
+        if not remainders:
+            return jsonify({"error": "Нет данных об остатках для удаления"}), 400
+
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 400
+
+        # Форматируем данные для удаления
+        timezone = pytz.timezone('Asia/Vladivostok')
+        current_time = datetime.now(timezone)
+        
+        delete_data = {
+            'status': "Удаление",
+            'date': current_time.strftime("%d.%m.%y %H:%M"),
+            'userid': str(user_id),
+            'username': user_data.get('organization', 'ООО Пивной мир'),
+            'org_ID': org_id,
+            'Positions': {}
+        }
+
+        # Форматируем позиции для удаления
+        for index, remainder in enumerate(remainders, 1):
+            position_key = f"Position_{index}"
+            delete_data['Positions'][position_key] = {
+                'Beer_ID': int(remainder['id']),
+                'Beer_Name': remainder['name'],
+                'Legal_Entity': int(remainder['legalEntity']),
+                'Beer_Count': -int(remainder['quantity'])  # Отрицательное значение для удаления
+            }
+
+        # Отправляем данные на вебхук n8n
+        n8n_webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
+        webhook_response = requests.post(
+            n8n_webhook_url,
+            json=delete_data,
+            headers={'Content-Type': 'application/json'}
+        )
+
+        if webhook_response.status_code != 200:
+            logger.error(f"Ошибка при отправке удаления в n8n: {webhook_response.text}")
+            return jsonify({"error": "Ошибка при отправке данных"}), 500
+
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Ошибка при обработке удаления остатков: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
