@@ -520,20 +520,33 @@ def submit_remainders():
             return jsonify({"error": "Organization ID not found"}), 400
 
         # Преобразуем остатки в нужный формат
-        formatted_remainders = []
-        for remainder in remainders:
-            formatted_remainder = {
+        formatted_remainders = {}
+        for index, remainder in enumerate(remainders, 1):
+            position_key = f"Position_{index}"
+            formatted_remainders[position_key] = {
                 'Beer_ID': int(remainder['id']),
                 'Beer_Name': remainder['name'],
                 'Legal_Entity': int(remainder['legalEntity']),
                 'Beer_Count': int(remainder['quantity'])
             }
-            formatted_remainders.append(formatted_remainder)
 
-        # Формируем данные для n8n в том же формате, что и get-last-orders
+        # Создаем данные в том же формате, что и заказ
+        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
+        current_time = datetime.now(timezone)
+        remainder_data = {
+            'status': "Новый",
+            'date': current_time.strftime("%d.%m.%y %H:%M"),
+            'userid': str(user_id),
+            'username': user_data.get('organization', 'ООО Пивной мир'),
+            'org_ID': org_id,
+            'Positions': formatted_remainders
+        }
+
+        # Формируем ответ для n8n
         response_data = {
             "success": True,
-            "positions": formatted_remainders,
+            "remainders": remainder_data,
+            "positions": list(formatted_remainders.values()),
             "org_ID": org_id
         }
         
