@@ -270,13 +270,60 @@
             if (!window.location.search.includes('user_id') && userId) {
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
-                // Проверяем рекомендацию
-                const recommendation = sessionStorage.getItem('recommendation');
-                if (recommendation) {
-                    showNotification(recommendation);
-                    // Удаляем рекомендацию из sessionStorage после показа
-                    sessionStorage.removeItem('recommendation');
+                // Проверяем наличие рекомендаций в sessionStorage
+                const recommendationsData = sessionStorage.getItem('cart_recommendations');
+                if (recommendationsData) {
+                    const recommendations = JSON.parse(recommendationsData);
+                    
+                    // Показываем рекомендацию
+                    if (recommendations.recommendation) {
+                        showNotification(recommendations.recommendation);
+                    }
+                    
+                    // Добавляем рекомендуемые позиции
+                    if (recommendations.positions && recommendations.positions.length > 0) {
+                        const recommendedItems = document.getElementById('recommended_items');
+                        if (!recommendedItems) {
+                            // Создаем контейнер для рекомендаций если его нет
+                            const container = document.createElement('div');
+                            container.id = 'recommended_items';
+                            container.style.marginBottom = '20px';
+                            
+                            const title = document.createElement('h3');
+                            title.style.marginBottom = '15px';
+                            title.textContent = 'Рекомендуемые позиции:';
+                            container.appendChild(title);
+                            
+                            recommendations.positions.forEach(position => {
+                                const itemElement = document.createElement('div');
+                                itemElement.className = 'cart-item';
+                                itemElement.innerHTML = `
+                                    <div class="cart-item-info">
+                                        <h4 class="cart-item-name">${position.name}</h4>
+                                        <div class="cart-item-details">
+                                            <p>Количество: ${position.quantity}</p>
+                                        </div>
+                                    </div>
+                                    <div class="cart-item-controls">
+                                        <button onclick='addToCart(${JSON.stringify(position)})' 
+                                                class="button button-confirm">
+                                            Добавить в корзину
+                                        </button>
+                                    </div>
+                                `;
+                                container.appendChild(itemElement);
+                            });
+                            
+                            // Вставляем контейнер с рекомендациями перед списком товаров
+                            const cartItems = document.getElementById('cart_items');
+                            cartItems.parentNode.insertBefore(container, cartItems);
+                        }
+                    }
+                    
+                    // Удаляем данные из sessionStorage после использования
+                    sessionStorage.removeItem('cart_recommendations');
                 }
+                
                 // Показываем контент через небольшую задержку
                 setTimeout(showContent, 300);
             }
