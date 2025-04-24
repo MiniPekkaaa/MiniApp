@@ -224,7 +224,8 @@ def create_order():
             'userid': str(user_id),
             'username': user_data.get('organization', 'ООО Пивной мир'),
             'org_ID': user_data.get('org_ID'),
-            'Positions': positions
+            'Positions': positions,
+            'nextOrderDate': data.get('nextOrderDate')  # Добавляем дату следующего заказа
         }
 
         logger.debug(f"Подготовленный заказ: {order_data}")

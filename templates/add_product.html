@@ -170,6 +170,28 @@
             font-weight: bold;
         }
 
+        .date-input-container {
+            margin-bottom: 20px;
+        }
+
+        .date-input-container label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--tg-theme-text-color);
+            font-size: 14px;
+        }
+
+        .date-input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            background-color: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+            border: 1px solid var(--tg-theme-hint-color);
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
         /* Стили для уведомлений */
         .notification {
             position: fixed;
@@ -242,6 +264,11 @@
                 <button onclick="addToRemainders()" class="button" style="margin-bottom: 20px;">Добавить остаток</button>
             </div>
 
+            <div class="date-input-container">
+                <label for="next_order_date">Дата следующего заказа</label>
+                <input type="date" id="next_order_date" class="date-input" required>
+            </div>
+
             <button onclick="submitRemainders()" class="button submit-button">Далее</button>
             <button onclick="window.location.href='/'" class="button">Назад</button>
         </div>
@@ -255,6 +282,11 @@
         let initialProducts = {{ products|tojson|safe }};
         let selectedProduct = null;
         const remainders = [];
+        
+        // Устанавливаем минимальную дату для календаря (сегодня)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        document.getElementById('next_order_date').min = today.toISOString().split('T')[0];
         
         function showContent() {
             document.getElementById('loading').classList.add('hidden');
@@ -550,6 +582,12 @@
         }
 
         function submitRemainders() {
+            const nextOrderDate = document.getElementById('next_order_date').value;
+            if (!nextOrderDate) {
+                tg.showAlert("Пожалуйста, выберите дату следующего заказа");
+                return;
+            }
+
             // Показываем загрузочный экран
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('content').classList.add('hidden');
@@ -619,7 +657,8 @@
                     const data_to_send = {
                         telegram_id: userId,
                         org_ID: data.org_ID,
-                        remainders: allRemainders
+                        remainders: allRemainders,
+                        nextOrderDate: nextOrderDate
                     };
 
                     console.log('Отправляем данные в n8n:', data_to_send);
