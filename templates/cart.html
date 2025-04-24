@@ -71,27 +71,29 @@
             background-color: var(--tg-theme-secondary-bg-color);
             padding: 15px;
             margin-bottom: 10px;
-            border-radius: 8px;
-            position: relative;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .cart-item-info {
-            margin-bottom: 12px;
+            margin-bottom: 15px;
         }
 
         .cart-item-name {
             font-size: 16px;
-            margin: 0 0 8px 0;
+            font-weight: 500;
+            margin: 0 0 10px 0;
             color: var(--tg-theme-text-color);
         }
 
         .cart-item-details {
             font-size: 14px;
             color: var(--tg-theme-hint-color);
+            opacity: 0.9;
         }
 
         .cart-item-details p {
-            margin: 4px 0;
+            margin: 6px 0;
         }
 
         .cart-item-controls {
@@ -103,20 +105,24 @@
         .cart-item-controls .button {
             width: 100%;
             margin: 0;
+            height: 40px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+
+        .cart-item-controls .button:active {
+            opacity: 0.8;
         }
 
         .quantity-editor {
             display: none;
-            margin-top: 10px;
-            padding-top: 10px;
+            background-color: var(--tg-theme-bg-color);
+            margin: 15px -15px -15px -15px;
+            padding: 15px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
-            position: absolute;
-            left: 0;
-            right: 0;
-            padding-left: 15px;
-            padding-right: 15px;
-            background-color: var(--tg-theme-secondary-bg-color);
-            border-radius: 0 0 8px 8px;
+            border-radius: 0 0 12px 12px;
         }
 
         .quantity-editor.active {
@@ -127,34 +133,61 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 10px;
+            background-color: var(--tg-theme-secondary-bg-color);
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 15px;
         }
 
         .quantity-editor .quantity-input {
             flex: 1;
             text-align: center;
-            padding: 8px;
-            border-radius: 8px;
-            background-color: rgba(255, 255, 255, 0.1);
-            color: var(--tg-theme-text-color);
+            background: none;
             border: none;
-            font-size: 14px;
-            height: 40px;
-            min-width: 60px;
-        }
-
-        .quantity-editor .button {
-            height: 40px;
+            color: var(--tg-theme-text-color);
+            font-size: 16px;
+            font-weight: 500;
+            width: 60px;
             padding: 8px;
-            min-width: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
         .quantity-editor .quantity-controls .button {
-            width: 40px;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            border-radius: 8px;
+            padding: 0;
+            font-size: 18px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            transition: opacity 0.2s;
+        }
+
+        .quantity-editor .quantity-controls .button:active {
+            opacity: 0.8;
+        }
+
+        .quantity-editor .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .quantity-editor .action-buttons .button {
+            width: 100%;
+            height: 40px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+
+        .quantity-editor .action-buttons .button:active {
+            opacity: 0.8;
         }
 
         .button-delete {
@@ -328,12 +361,14 @@
                     </div>
                     <div class="quantity-editor">
                         <div class="quantity-controls">
-                            <button onclick="decrementEditorQuantity(this)" class="button">-</button>
+                            <button onclick="decrementEditorQuantity(this)" class="button">−</button>
                             <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
                             <button onclick="incrementEditorQuantity(this)" class="button">+</button>
                         </div>
-                        <button onclick="saveQuantity(this, ${index})" class="button">Сохранить</button>
-                        <button onclick="cancelEditing(this)" class="button">Отмена</button>
+                        <div class="action-buttons">
+                            <button onclick="saveQuantity(this, ${index})" class="button">Сохранить</button>
+                            <button onclick="cancelEditing(this)" class="button">Отмена</button>
+                        </div>
                     </div>
                 `;
                 cartItems.appendChild(itemElement);
