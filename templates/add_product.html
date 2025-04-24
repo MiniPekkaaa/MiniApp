@@ -133,6 +133,54 @@
             gap: 8px;
         }
 
+        .quantity-editor {
+            display: none;
+            padding-top: 15px;
+            margin-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .quantity-editor.active {
+            display: block;
+        }
+
+        .quantity-editor .quantity-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .quantity-editor .quantity-input {
+            width: 60px;
+            text-align: center;
+            padding: 8px;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--tg-theme-text-color);
+            border: none;
+            font-size: 14px;
+        }
+
+        .quantity-editor .button {
+            padding: 8px 15px;
+            margin: 0;
+            width: auto;
+        }
+
+        .quantity-editor .controls-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+
+        .quantity-editor .controls-row .button {
+            flex: 1;
+            max-width: 150px;
+        }
+
         .add-button {
             padding: 8px 15px;
             border-radius: 8px;
@@ -360,10 +408,30 @@
                                 <div class="product-controls">
                                     <input type="number" value="1" min="1" class="quantity-input" 
                                            onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
+                                    <button onclick="toggleQuantityEditor(this, ${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity})"
+                                            class="button">
+                                        Изменить объем
+                                    </button>
                                     <button onclick="deleteRemainder('${position.Beer_ID}', ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
                                     </button>
+                                </div>
+                                <div class="quantity-editor">
+                                    <div class="quantity-controls">
+                                        <button onclick="decrementEditorQuantity(this)" class="button">-</button>
+                                        <input type="number" value="1" min="1" class="quantity-input editor-quantity">
+                                        <button onclick="incrementEditorQuantity(this)" class="button">+</button>
+                                    </div>
+                                    <div class="controls-row">
+                                        <button onclick="saveQuantity(this, ${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity})" 
+                                                class="button">
+                                            Сохранить
+                                        </button>
+                                        <button onclick="cancelEditing(this)" class="button">
+                                            Отмена
+                                        </button>
+                                    </div>
                                 </div>
                             `;
                             
@@ -380,6 +448,57 @@
                     tg.showAlert('Ошибка при загрузке позиций: ' + error.message);
                     showContent();
                 });
+        }
+
+        function toggleQuantityEditor(button, beerId, beerName, legalEntity) {
+            const productItem = button.closest('.product-item');
+            const editor = productItem.querySelector('.quantity-editor');
+            const currentQuantity = productItem.querySelector('.quantity-input').value;
+            
+            // Закрываем все другие редакторы
+            document.querySelectorAll('.quantity-editor.active').forEach(activeEditor => {
+                if (activeEditor !== editor) {
+                    activeEditor.classList.remove('active');
+                }
+            });
+            
+            // Устанавливаем текущее количество в редакторе
+            editor.querySelector('.editor-quantity').value = currentQuantity;
+            
+            // Переключаем видимость редактора
+            editor.classList.toggle('active');
+        }
+
+        function incrementEditorQuantity(button) {
+            const input = button.parentElement.querySelector('.editor-quantity');
+            input.value = parseInt(input.value) + 1;
+        }
+
+        function decrementEditorQuantity(button) {
+            const input = button.parentElement.querySelector('.editor-quantity');
+            if (parseInt(input.value) > 1) {
+                input.value = parseInt(input.value) - 1;
+            }
+        }
+
+        function saveQuantity(button, beerId, beerName, legalEntity) {
+            const editor = button.closest('.quantity-editor');
+            const newQuantity = editor.querySelector('.editor-quantity').value;
+            const productItem = button.closest('.product-item');
+            
+            // Обновляем значение в основном инпуте
+            productItem.querySelector('.quantity-input').value = newQuantity;
+            
+            // Обновляем остаток
+            addLastOrderProduct(beerId, beerName, legalEntity, newQuantity);
+            
+            // Закрываем редактор
+            editor.classList.remove('active');
+        }
+
+        function cancelEditing(button) {
+            const editor = button.closest('.quantity-editor');
+            editor.classList.remove('active');
         }
 
         function displayRemainders() {
@@ -515,10 +634,30 @@
                 <div class="product-controls">
                     <input type="number" value="${quantity}" min="1" class="quantity-input" 
                            onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
+                    <button onclick="toggleQuantityEditor(this, '${product.id}', '${product.name}', ${product.legalEntity})"
+                            class="button">
+                        Изменить объем
+                    </button>
                     <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
                             class="delete-button">
                         Удалить
                     </button>
+                </div>
+                <div class="quantity-editor">
+                    <div class="quantity-controls">
+                        <button onclick="decrementEditorQuantity(this)" class="button">-</button>
+                        <input type="number" value="${quantity}" min="1" class="quantity-input editor-quantity">
+                        <button onclick="incrementEditorQuantity(this)" class="button">+</button>
+                    </div>
+                    <div class="controls-row">
+                        <button onclick="saveQuantity(this, '${product.id}', '${product.name}', ${product.legalEntity})" 
+                                class="button">
+                            Сохранить
+                        </button>
+                        <button onclick="cancelEditing(this)" class="button">
+                            Отмена
+                        </button>
+                    </div>
                 </div>
             `;
             
