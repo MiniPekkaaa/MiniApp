@@ -112,27 +112,32 @@
         }
 
         .quantity-editor.active {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            display: block;
         }
 
-        .quantity-editor .button {
-            width: 100%;
-            height: 40px;
-            margin: 0;
+        .quantity-editor .quantity-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
         }
 
         .quantity-editor .quantity-input {
             width: 100%;
             text-align: center;
             padding: 8px;
-            height: 40px;
             border-radius: 8px;
             background-color: rgba(255, 255, 255, 0.1);
             color: var(--tg-theme-text-color);
             border: none;
             font-size: 14px;
+            height: 40px;
+        }
+
+        .quantity-editor .button {
+            width: 100%;
+            height: 40px;
+            margin-bottom: 8px;
         }
 
         .button-delete {
