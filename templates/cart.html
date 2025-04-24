@@ -130,6 +130,101 @@
             flex: 1;
             max-width: 150px;
         }
+
+        .cart-item {
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+
+        .cart-item-info {
+            margin-bottom: 12px;
+        }
+
+        .cart-item-name {
+            font-size: 16px;
+            margin: 0 0 8px 0;
+            color: var(--tg-theme-text-color);
+        }
+
+        .cart-item-details {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color);
+        }
+
+        .cart-item-details p {
+            margin: 4px 0;
+        }
+
+        .cart-item-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .cart-item-controls .button {
+            width: 100%;
+            margin: 0;
+        }
+
+        .quantity-editor {
+            display: none;
+            padding-top: 15px;
+            margin-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .quantity-editor.active {
+            display: block;
+        }
+
+        .quantity-editor .quantity-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .quantity-editor .quantity-input {
+            width: 60px;
+            text-align: center;
+            padding: 8px;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--tg-theme-text-color);
+            border: none;
+            font-size: 14px;
+        }
+
+        .quantity-editor .controls-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .quantity-editor .controls-row .button {
+            width: 100%;
+        }
+
+        .button-delete {
+            background-color: #ff4444 !important;
+            color: white !important;
+        }
+
+        .button-order {
+            background-color: #4CAF50 !important;
+            color: white !important;
+        }
+
+        .button-add-more {
+            background-color: #5288c1 !important;
+            color: white !important;
+            margin-bottom: 10px !important;
+        }
     </style>
 </head>
 <body>
