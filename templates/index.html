@@ -54,9 +54,30 @@
             background-color: #4CAF50;
             color: white;
         }
+
+        .notification {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            z-index: 2000;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
+    <!-- Добавляем div для уведомления -->
+    <div id="notification" class="notification"></div>
+
     <!-- Экран загрузки -->
     <div id="loading" class="container" style="text-align: center; padding: 20px;">
         <div class="loader"></div>
@@ -266,6 +287,16 @@
             dialog.style.display = 'block';
         }
 
+        function showNotification(message, duration = 3000) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, duration);
+        }
+
         function confirmCancel(confirmed) {
             const dialog = document.getElementById('cancelConfirmation');
             dialog.style.display = 'none';
@@ -284,8 +315,11 @@
                 .then(data => {
                     if (data.success) {
                         showNotification('Ваш заказ отменен');
+                        cart = [];
+                        sessionStorage.setItem('cart', JSON.stringify(cart));
+                        updateCartCount();
                         setTimeout(() => {
-                            window.location.reload();
+                            window.location.href = `/?user_id=${userId}`;
                         }, 2000);
                     } else {
                         throw new Error(data.error || 'Не удалось отменить заказ');
