@@ -252,8 +252,7 @@
         tg.expand();
         
         const userId = tg.initDataUnsafe?.user?.id;
-        
-        const initialProducts = {{ products|tojson|safe }};
+        let initialProducts = {{ products|tojson|safe }};
         let selectedProduct = null;
         const remainders = [];
         
@@ -461,7 +460,7 @@
             }
             
             // Показываем уведомление о добавлении остатка
-            tg.showAlert("Остаток добавлен");
+            tg.showAlert("Остаток обновлен");
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
@@ -735,6 +734,8 @@
 
             console.log('Сохраняем в корзину:', cartItems);
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
+            // Очищаем рекомендации, так как это ручное добавление
+            sessionStorage.removeItem('recommendation');
             remainders.length = 0;
             window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
         }
