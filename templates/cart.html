@@ -72,6 +72,7 @@
             padding: 15px;
             margin-bottom: 10px;
             border-radius: 12px;
+            position: relative;
         }
 
         .cart-item-info {
@@ -106,15 +107,9 @@
 
         .quantity-editor {
             display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
             margin-top: 8px;
-            padding: 8px;
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 8px;
-            z-index: 1;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .quantity-controls {
@@ -320,8 +315,10 @@
                                     <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
                                     <button onclick="incrementEditorQuantity(this)" class="button">+</button>
                                 </div>
-                                <button onclick="saveQuantity(this, ${index})" class="button">✓</button>
-                                <button onclick="cancelEditing(this)" class="button">✕</button>
+                                <div style="display: flex; justify-content: center; gap: 8px;">
+                                    <button onclick="saveQuantity(this, ${index})" class="button">✓</button>
+                                    <button onclick="cancelEditing(this)" class="button">✕</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -338,17 +335,22 @@
         }
         
         function toggleQuantityEditor(button, index) {
-            const editor = button.nextElementSibling;
+            const editor = button.parentElement.querySelector('.quantity-editor');
+            const input = editor.querySelector('.editor-quantity');
             
             // Закрываем все другие редакторы
             document.querySelectorAll('.quantity-editor').forEach(ed => {
-                if (ed !== editor) {
+                if (ed !== editor && ed.style.display === 'block') {
                     ed.style.display = 'none';
                 }
             });
             
-            // Переключаем видимость редактора
-            editor.style.display = editor.style.display === 'none' ? 'block' : 'none';
+            if (editor.style.display === 'block') {
+                editor.style.display = 'none';
+            } else {
+                editor.style.display = 'block';
+                input.value = cart[index].quantity;
+            }
         }
 
         function incrementEditorQuantity(button) {
