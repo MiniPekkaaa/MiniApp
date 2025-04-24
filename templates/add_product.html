@@ -360,7 +360,7 @@
                                 <div class="product-controls">
                                     <input type="number" value="1" min="1" class="quantity-input" 
                                            onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
-                                    <button onclick="deleteRemainder(${position.Beer_ID}, ${position.Legal_Entity}, this.closest('.product-item'))"
+                                    <button onclick="deleteRemainder('${position.Beer_ID}', ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
                                     </button>
@@ -447,16 +447,33 @@
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
-            // Если позиция была в remainders, удаляем её оттуда
-            const index = remainders.findIndex(item => 
-                item.id === beerId.toString() && 
-                item.legalEntity === legalEntity
-            );
-            
-            if (index !== -1) {
-                remainders.splice(index, 1);
-                // Перезагружаем список
-                loadLastOrdersProducts();
+            try {
+                beerId = beerId.toString();
+                
+                // Удаляем из массива remainders
+                const index = remainders.findIndex(item => 
+                    item.id === beerId && 
+                    item.legalEntity === legalEntity
+                );
+                
+                if (index !== -1) {
+                    remainders.splice(index, 1);
+                }
+                
+                // Удаляем элемент из DOM
+                if (productItem instanceof Element) {
+                    productItem.remove();
+                } else if (typeof productItem === 'string') {
+                    const element = document.querySelector(productItem);
+                    if (element) {
+                        element.remove();
+                    }
+                }
+                
+                tg.showAlert("Позиция удалена");
+            } catch (error) {
+                console.error('Ошибка при удалении позиции:', error);
+                tg.showAlert("Ошибка при удалении позиции");
             }
         }
         
