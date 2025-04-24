@@ -130,10 +130,34 @@ def products():
 
 @app.route('/cart')
 def cart():
-    user_id = request.args.get('user_id')
-    if not user_id or not check_user_registration(user_id):
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id or not check_user_registration(user_id):
+            return redirect('/')
+
+        # Пытаемся получить рекомендации из Redis
+        redis_key = f'beer:recommendations:{user_id}'
+        recommendations_data = redis_client.get(redis_key)
+        
+        data = {
+            'user_id': user_id,
+            'recommendation': None,
+            'positions': []
+        }
+        
+        if recommendations_data:
+            recommendations = json.loads(recommendations_data)
+            data['recommendation'] = recommendations.get('recommendation')
+            data['positions'] = recommendations.get('positions', [])
+            
+            # Удаляем данные из Redis после использования
+            redis_client.delete(redis_key)
+        
+        return render_template('cart.html', **data)
+        
+    except Exception as e:
+        logger.error(f"Error in cart route: {str(e)}", exc_info=True)
         return redirect('/')
-    return render_template('cart.html', user_id=user_id)
 
 @app.route('/add_product')
 def add_product():
@@ -555,9 +579,61 @@ def submit_remainders():
             logger.error(f"Ошибка при отправке в n8n: {webhook_response.text}")
             return jsonify({"error": "Ошибка при отправке данных"}), 500
 
+        # Получаем ответ от n8n
+        n8n_data = webhook_response.json()
+        
+        # Проверяем наличие рекомендаций и позиций в ответе
+        if 'generalRecommendation' in n8n_data and 'positions' in n8n_data:
+            # Сохраняем данные в Redis для использования в корзине
+            redis_key = f'beer:recommendations:{user_id}'
+            redis_client.setex(
+                redis_key,
+                3600,  # Время жизни 1 час
+                json.dumps({
+                    'recommendation': n8n_data['generalRecommendation'],
+                    'positions': n8n_data['positions']
+                })
+            )
+            
+            # Возвращаем успешный ответ с данными для редиректа
+            return jsonify({
+                "success": True,
+                "redirect": "/cart",
+                "data": {
+                    "recommendation": n8n_data['generalRecommendation'],
+                    "positions": n8n_data['positions']
+                }
+            })
+        
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"Ошибка при обработке остатков: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/delete-remainders', methods=['POST'])
+def delete_remainders():
+    try:
+        data = request.json
+        remainders = data.get('remainders', [])
+        user_id = request.args.get('user_id')
+        
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+            
+        if not remainders:
+            return jsonify({"error": "Нет данных об остатках для удаления"}), 400
+
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 400
+
+        # Просто возвращаем успешный ответ, без отправки в n8n
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Ошибка при обработке удаления остатков: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
