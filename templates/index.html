@@ -25,6 +25,35 @@
         .hidden {
             display: none;
         }
+
+        .confirmation-dialog {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--tg-theme-secondary-bg-color);
+            padding: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .confirmation-dialog .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .confirmation-dialog .button-yes {
+            background-color: #ff4444;
+            color: white;
+        }
+
+        .confirmation-dialog .button-no {
+            background-color: #4CAF50;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -65,6 +94,14 @@
             <button onclick="addToCart()" class="button">Добавить в корзину</button>
             <button onclick="window.location.href='/cart?user_id=' + userId" class="button">Перейти в корзину</button>
             <button onclick="showMainMenu()" class="button">Назад</button>
+        </div>
+
+        <div class="confirmation-dialog" id="cancelConfirmation">
+            <div>Вы действительно хотите отменить заказ?</div>
+            <div class="buttons">
+                <button onclick="confirmCancel(true)" class="button button-yes">Да</button>
+                <button onclick="confirmCancel(false)" class="button button-no">Нет</button>
+            </div>
         </div>
     </div>
 
@@ -225,17 +262,39 @@
         }
         
         function cancelOrder() {
-            if (cart.length === 0) {
-                tg.showAlert("Нечего отменять - корзина пуста");
-                return;
-            }
+            const dialog = document.getElementById('cancelConfirmation');
+            dialog.style.display = 'block';
+        }
+
+        function confirmCancel(confirmed) {
+            const dialog = document.getElementById('cancelConfirmation');
+            dialog.style.display = 'none';
             
-            if (confirm("Вы уверены, что хотите отменить заказ?")) {
-                cart = [];
-                sessionStorage.setItem('cart', JSON.stringify(cart));
-                updateCartCount();
-                tg.MainButton.hide();
-                tg.showAlert("Заказ отменен");
+            if (confirmed) {
+                fetch('/api/cancel-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId: userId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Ваш заказ отменен');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        throw new Error(data.error || 'Не удалось отменить заказ');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при отмене заказа:', error);
+                    tg.showAlert(error.message);
+                });
             }
         }
 
