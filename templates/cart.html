@@ -117,14 +117,14 @@
 
         .quantity-editor .quantity-controls {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
             margin: 10px 0;
         }
 
         .quantity-editor .quantity-input {
-            width: 60px;
+            width: 100%;
             text-align: center;
             padding: 8px;
             border-radius: 8px;
@@ -132,6 +132,7 @@
             color: var(--tg-theme-text-color);
             border: none;
             font-size: 14px;
+            margin: 8px 0;
         }
 
         .quantity-editor .controls-row {
