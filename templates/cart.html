@@ -321,9 +321,13 @@
         // Проверяем наличие рекомендации при загрузке страницы
         window.addEventListener('DOMContentLoaded', function() {
             const recommendation = sessionStorage.getItem('recommendation');
-            if (recommendation) {
+            const wasShown = localStorage.getItem('recommendationShown');
+            
+            if (recommendation && !wasShown) {
                 showNotification(recommendation);
-                // Удаляем рекомендацию из sessionStorage после показа
+                // Отмечаем, что уведомление было показано
+                localStorage.setItem('recommendationShown', 'true');
+                // Удаляем рекомендацию из sessionStorage
                 sessionStorage.removeItem('recommendation');
             }
         });
