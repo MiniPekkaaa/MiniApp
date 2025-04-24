@@ -350,6 +350,24 @@
                         container.innerHTML = ''; // Очищаем контейнер
 
                         data.positions.forEach(position => {
+                            // Добавляем позицию в массив remainders
+                            const product = {
+                                id: position.Beer_ID.toString(),
+                                name: position.Beer_Name,
+                                legalEntity: position.Legal_Entity,
+                                quantity: 1
+                            };
+                            
+                            // Добавляем в remainders только если такой позиции еще нет
+                            const existingItemIndex = remainders.findIndex(item => 
+                                item.id === product.id && 
+                                item.legalEntity === product.legalEntity
+                            );
+                            
+                            if (existingItemIndex === -1) {
+                                remainders.push(product);
+                            }
+
                             const productDiv = document.createElement('div');
                             productDiv.className = 'product-item';
                             
