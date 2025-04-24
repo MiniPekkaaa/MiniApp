@@ -106,8 +106,8 @@
 
         .quantity-editor {
             display: none;
-            padding-top: 15px;
-            margin-top: 15px;
+            padding-top: 10px;
+            margin-top: 10px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
 
@@ -116,15 +116,14 @@
         }
 
         .quantity-editor .quantity-controls {
-            display: flex;
-            flex-direction: column;
-            align-items: stretch;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
             gap: 8px;
-            margin: 10px 0;
+            align-items: center;
+            margin-bottom: 10px;
         }
 
         .quantity-editor .quantity-input {
-            width: 100%;
             text-align: center;
             padding: 8px;
             border-radius: 8px;
@@ -132,18 +131,25 @@
             color: var(--tg-theme-text-color);
             border: none;
             font-size: 14px;
-            margin: 8px 0;
         }
 
         .quantity-editor .controls-row {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            margin-top: 15px;
         }
 
         .quantity-editor .controls-row .button {
             width: 100%;
+        }
+
+        .quantity-editor .button {
+            padding: 8px 16px;
+            min-width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .button-delete {
@@ -313,9 +319,9 @@
                     </div>
                     <div class="quantity-editor">
                         <div class="quantity-controls">
-                            <button onclick="incrementEditorQuantity(this)" class="button">+</button>
-                            <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
                             <button onclick="decrementEditorQuantity(this)" class="button">-</button>
+                            <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
+                            <button onclick="incrementEditorQuantity(this)" class="button">+</button>
                         </div>
                         <div class="controls-row">
                             <button onclick="saveQuantity(this, ${index})" class="button">Сохранить</button>
