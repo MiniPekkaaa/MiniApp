@@ -6,6 +6,7 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
+import requests
 
 # Настройка логирования
 logging.basicConfig(
@@ -542,15 +543,19 @@ def submit_remainders():
             'Positions': formatted_remainders
         }
 
-        # Формируем ответ для n8n
-        response_data = {
-            "success": True,
-            "remainders": remainder_data,
-            "positions": list(formatted_remainders.values()),
-            "org_ID": org_id
-        }
-        
-        return jsonify(response_data)
+        # Отправляем данные на вебхук n8n
+        n8n_webhook_url = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
+        webhook_response = requests.post(
+            n8n_webhook_url,
+            json=remainder_data,
+            headers={'Content-Type': 'application/json'}
+        )
+
+        if webhook_response.status_code != 200:
+            logger.error(f"Ошибка при отправке в n8n: {webhook_response.text}")
+            return jsonify({"error": "Ошибка при отправке данных"}), 500
+
+        return jsonify({"success": True})
     except Exception as e:
         logger.error(f"Ошибка при обработке остатков: {str(e)}")
         return jsonify({"error": str(e)}), 500
