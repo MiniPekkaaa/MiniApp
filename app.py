@@ -507,29 +507,40 @@ def submit_remainders():
         user_id = request.args.get('user_id')
         
         if not user_id or not check_user_registration(user_id):
-            return jsonify({"success": False, "error": "Unauthorized"}), 401
+            return jsonify({"error": "Unauthorized"}), 401
             
         if not remainders:
-            return jsonify({"success": False, "error": "Нет данных об остатках"}), 400
+            return jsonify({"error": "Нет данных об остатках"}), 400
 
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         org_id = user_data.get('org_ID')
         
         if not org_id:
-            return jsonify({"success": False, "error": "Organization ID not found"}), 400
+            return jsonify({"error": "Organization ID not found"}), 400
 
-        # Формируем данные для n8n
+        # Преобразуем остатки в нужный формат
+        formatted_remainders = []
+        for remainder in remainders:
+            formatted_remainder = {
+                'Beer_ID': int(remainder['id']),
+                'Beer_Name': remainder['name'],
+                'Legal_Entity': int(remainder['legalEntity']),
+                'Beer_Count': int(remainder['quantity'])
+            }
+            formatted_remainders.append(formatted_remainder)
+
+        # Формируем данные для n8n в том же формате, что и get-last-orders
         response_data = {
             "success": True,
-            "remainders": remainders,
+            "positions": formatted_remainders,
             "org_ID": org_id
         }
         
         return jsonify(response_data)
     except Exception as e:
         logger.error(f"Ошибка при обработке остатков: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
