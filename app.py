@@ -49,6 +49,16 @@ def check_user_registration(user_id):
         logger.error(f"Error checking Redis: {str(e)}")
         return False
 
+def check_admin_access(user_id):
+    try:
+        # Получаем значение Admin из Redis
+        admin_id = redis_client.hget('beer:setting', 'Admin')
+        logger.debug(f"Admin ID from Redis: {admin_id}, User ID: {user_id}")
+        return str(user_id) == str(admin_id)
+    except Exception as e:
+        logger.error(f"Error checking admin access: {str(e)}")
+        return False
+
 @app.route('/check-auth')
 def check_auth():
     try:
@@ -72,6 +82,10 @@ def index():
         # Проверяем регистрацию пользователя
         if not check_user_registration(user_id):
             return render_template('unauthorized.html')
+
+        # Проверяем, является ли пользователь администратором
+        if check_admin_access(user_id):
+            return redirect(f'/admin_panel?user_id={user_id}')
 
         return render_template('main_menu.html', user_id=user_id)
     
@@ -509,6 +523,22 @@ def cancel_order():
     except Exception as e:
         logger.error(f"Ошибка при отмене заказа: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/admin_panel')
+def admin_panel():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return redirect('/')
+
+        # Проверяем регистрацию и права администратора
+        if not check_user_registration(user_id) or not check_admin_access(user_id):
+            return redirect('/')
+
+        return render_template('admin_panel.html', user_id=user_id)
+    except Exception as e:
+        logger.error(f"Error in admin_panel route: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
