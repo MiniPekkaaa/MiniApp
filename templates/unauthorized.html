@@ -1,88 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Не авторизован</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <style>
-        .loader {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 4px solid #5288c1;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .hidden {
-            display: none;
-        }
-    </style>
+    <title>Доступ запрещен</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="container">
-        <!-- Экран загрузки -->
-        <div id="loading" style="text-align: center; padding: 20px; margin-top: 50px;">
-            <div class="loader"></div>
-        </div>
-
-        <!-- Сообщение о нерегистрации -->
-        <div id="unauthorized" class="hidden" style="text-align: center; padding: 20px; margin-top: 50px;">
-            <h2 style="color: var(--tg-theme-text-color); margin-bottom: 20px;">
-                Вы не зарегистрированы в системе
-            </h2>
-            <button onclick="redirectToBot()" style="
-                background-color: #5288c1;
-                color: white;
-                border: none;
-                padding: 15px 30px;
-                border-radius: 8px;
-                font-size: 16px;
-                cursor: pointer;
-            ">
-                Пройти регистрацию в боте
-            </button>
+        <h1>Доступ запрещен</h1>
+        <div class="error-message">
+            {% if message %}
+                {{ message }}
+            {% else %}
+                Для доступа к этой странице необходимо авторизоваться.
+            {% endif %}
         </div>
     </div>
-
-    <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
-
-        // Получаем user_id из Telegram WebApp
-        const userId = tg.initDataUnsafe?.user?.id;
-        
-        function showUnauthorized() {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('unauthorized').classList.remove('hidden');
-        }
-
-        function checkAuthAndRedirect() {
-            if (!window.location.search.includes('user_id') && userId) {
-                window.location.href = `${window.location.pathname}?user_id=${userId}`;
-            } else {
-                // Если user_id нет или уже есть в URL, показываем сообщение через 1 секунду
-                setTimeout(showUnauthorized, 1000);
-            }
-        }
-
-        function redirectToBot() {
-            window.location.href = 'https://t.me/beer_otto_bot?start=register';
-            setTimeout(() => {
-                tg.close();
-            }, 1000);
-        }
-
-        // Запускаем проверку
-        checkAuthAndRedirect();
-    </script>
 </body>
 </html> 
