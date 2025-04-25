@@ -388,7 +388,7 @@
                 return;
             }
             
-            // Преобразуем в число
+            // Преобразуем в число и округляем до 1 десятичного знака
             let numValue = parseFloat(value);
             
             // Проверяем границы
@@ -398,16 +398,16 @@
                 numValue = 50;
             }
             
-            // Обновляем значение в поле ввода
-            input.value = numValue.toString();
+            // Форматируем число с одним десятичным знаком
+            input.value = numValue.toFixed(1);
         }
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
             let value = parseFloat(quantityInput.value);
             if (value < 50) {
-                value += 1;
-                quantityInput.value = value.toString();
+                value = Math.min(50, value + 1);
+                quantityInput.value = value.toFixed(1);
             }
         }
         
@@ -415,8 +415,8 @@
             let quantityInput = document.getElementById('quantity');
             let value = parseFloat(quantityInput.value);
             if (value > 0) {
-                value -= 1;
-                quantityInput.value = value.toString();
+                value = Math.max(0, value - 1);
+                quantityInput.value = value.toFixed(1);
             }
         }
 
@@ -539,9 +539,6 @@
             } else {
                 remainders.push(product);
             }
-            
-            // Показываем уведомление о добавлении остатка
-            tg.showAlert("Остаток обновлен");
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
@@ -567,11 +564,8 @@
                         element.remove();
                     }
                 }
-                
-                tg.showAlert("Позиция удалена");
             } catch (error) {
                 console.error('Ошибка при удалении позиции:', error);
-                tg.showAlert("Ошибка при удалении позиции");
             }
         }
         
@@ -611,7 +605,8 @@
                     ${product.name}
                 </div>
                 <div class="product-controls">
-                    <input type="number" value="${quantity}" min="1" class="quantity-input" 
+                    <input type="text" value="${quantity}" class="quantity-input" 
+                           oninput="validateQuantity(this)"
                            onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
                     <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
                             class="delete-button">
@@ -625,9 +620,6 @@
             searchInput.value = "";
             document.getElementById('quantity').value = "1";
             selectedProduct = null;
-            
-            // Показываем уведомление о добавлении остатка
-            tg.showAlert("Остаток добавлен");
         }
 
         function submitRemainders() {
