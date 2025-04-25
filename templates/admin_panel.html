@@ -13,6 +13,7 @@
             color: #fff;
             min-height: 100vh;
             padding: 20px;
+            position: relative;
         }
         .container {
             max-width: 600px;
@@ -94,6 +95,32 @@
         .btn-danger:hover {
             background-color: #d63a30;
         }
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #31b545;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .notification.show {
+            opacity: 1;
+        }
+        .notification-icon {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
     </style>
 </head>
 <body>
@@ -131,13 +158,36 @@
         </button>
     </div>
 
+    <div class="notification" id="notification">
+        <svg class="notification-icon" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+        </svg>
+        <span>Новый коэффициент успешно установлен</span>
+    </div>
+
     <script>
         let tg = window.Telegram.WebApp;
+        let notificationTimeout;
 
         document.addEventListener('DOMContentLoaded', function() {
             fetchCurrentCoefficient();
             tg.ready();
         });
+
+        function showNotification() {
+            const notification = document.getElementById('notification');
+            notification.classList.add('show');
+            
+            // Очищаем предыдущий таймер, если он есть
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            // Устанавливаем новый таймер на 5 секунд
+            notificationTimeout = setTimeout(() => {
+                notification.classList.remove('show');
+            }, 5000);
+        }
 
         function closeApp() {
             tg.close();
@@ -190,6 +240,7 @@
                     }
                     document.getElementById('newCoefficient').value = '';
                     errorElement.style.display = 'none';
+                    showNotification(); // Показываем уведомление после успешного обновления
                 } else {
                     showError(data.error || 'Ошибка при обновлении коэффициента');
                 }
