@@ -34,16 +34,15 @@ def check_user_registration(user_id):
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
         
-        # Проверяем наличие данных, совпадение UserChatID и статус регистрации
+        # Проверяем наличие данных и статус регистрации
         registration_complete = (
             bool(user_data) and 
-            user_data.get('UserChatID') == str(user_id) and
             user_data.get('current_step') == 'complete'
         )
         
-        if not registration_complete:
-            logger.debug(f"Registration check failed for user {user_id}. Data: {user_data}")
-            
+        logger.debug(f"Registration status for user {user_id}: {registration_complete}")
+        logger.debug(f"User data: {user_data}")
+        
         return registration_complete
     except Exception as e:
         logger.error(f"Error checking Redis: {str(e)}")
@@ -75,17 +74,29 @@ def check_auth():
 def index():
     try:
         user_id = request.args.get('user_id')
+        logger.debug(f"Получен user_id: {user_id}")
+        
         if not user_id:
+            logger.debug("user_id отсутствует")
             return render_template('unauthorized.html')
 
         # Сначала проверяем, является ли пользователь администратором
-        if check_admin_rights(user_id):
+        is_admin = check_admin_rights(user_id)
+        logger.debug(f"Проверка прав администратора: {is_admin}")
+        
+        if is_admin:
+            logger.debug("Перенаправление в админ панель")
             return redirect(f'/admin_panel?user_id={user_id}')
 
         # Если не администратор, проверяем регистрацию пользователя
-        if not check_user_registration(user_id):
+        is_registered = check_user_registration(user_id)
+        logger.debug(f"Проверка регистрации пользователя: {is_registered}")
+        
+        if not is_registered:
+            logger.debug("Пользователь не зарегистрирован")
             return render_template('unauthorized.html')
 
+        logger.debug("Перенаправление в главное меню")
         return render_template('main_menu.html', user_id=user_id)
     
     except Exception as e:
