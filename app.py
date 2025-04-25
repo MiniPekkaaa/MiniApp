@@ -34,27 +34,19 @@ def check_user_registration(user_id):
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         logger.debug(f"Redis data for user {user_id}: {user_data}")
         
-        # Проверяем наличие данных и статус регистрации
+        # Проверяем наличие данных, совпадение UserChatID и статус регистрации
         registration_complete = (
             bool(user_data) and 
+            user_data.get('UserChatID') == str(user_id) and
             user_data.get('current_step') == 'complete'
         )
         
-        logger.debug(f"Registration status for user {user_id}: {registration_complete}")
-        logger.debug(f"User data: {user_data}")
-        
+        if not registration_complete:
+            logger.debug(f"Registration check failed for user {user_id}. Data: {user_data}")
+            
         return registration_complete
     except Exception as e:
         logger.error(f"Error checking Redis: {str(e)}")
-        return False
-
-def check_admin_rights(user_id):
-    try:
-        # Получаем ID администратора из Redis
-        admin_id = redis_client.hget('beer:setting', 'Admin')
-        return str(user_id) == str(admin_id)
-    except Exception as e:
-        logger.error(f"Ошибка при проверке прав администратора: {str(e)}")
         return False
 
 @app.route('/check-auth')
@@ -74,29 +66,13 @@ def check_auth():
 def index():
     try:
         user_id = request.args.get('user_id')
-        logger.debug(f"Получен user_id: {user_id}")
-        
         if not user_id:
-            logger.debug("user_id отсутствует")
             return render_template('unauthorized.html')
 
-        # Сначала проверяем, является ли пользователь администратором
-        is_admin = check_admin_rights(user_id)
-        logger.debug(f"Проверка прав администратора: {is_admin}")
-        
-        if is_admin:
-            logger.debug("Перенаправление в админ панель")
-            return redirect(f'/admin_panel?user_id={user_id}')
-
-        # Если не администратор, проверяем регистрацию пользователя
-        is_registered = check_user_registration(user_id)
-        logger.debug(f"Проверка регистрации пользователя: {is_registered}")
-        
-        if not is_registered:
-            logger.debug("Пользователь не зарегистрирован")
+        # Проверяем регистрацию пользователя
+        if not check_user_registration(user_id):
             return render_template('unauthorized.html')
 
-        logger.debug("Перенаправление в главное меню")
         return render_template('main_menu.html', user_id=user_id)
     
     except Exception as e:
@@ -533,22 +509,6 @@ def cancel_order():
     except Exception as e:
         logger.error(f"Ошибка при отмене заказа: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/admin_panel')
-def admin_panel():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not check_user_registration(user_id):
-            return redirect('/')
-        
-        # Проверяем права администратора
-        if not check_admin_rights(user_id):
-            return render_template('unauthorized.html', message="Доступ запрещен. Только для администраторов.")
-        
-        return render_template('admin_panel.html', user_id=user_id)
-    except Exception as e:
-        logger.error(f"Ошибка в маршруте admin_panel: {str(e)}", exc_info=True)
-        return f"Ошибка: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
