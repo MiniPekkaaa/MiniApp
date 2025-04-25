@@ -574,8 +574,9 @@ def update_coefficient():
             
         # Обновляем коэффициент в Redis
         redis_client.hset('beer:setting', 'coefficient', str(coefficient))
-        # Обновляем дату последнего изменения
-        current_time = datetime.now().strftime("%d.%m.%Y %H:%M")
+        # Обновляем дату последнего изменения с учетом часового пояса UTC+10
+        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
+        current_time = datetime.now(timezone).strftime("%d.%m.%Y %H:%M")
         redis_client.hset('beer:setting', 'coefficient_last_Date', current_time)
         
         return jsonify({
