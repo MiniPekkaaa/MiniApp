@@ -544,7 +544,12 @@ def admin_panel():
 def get_coefficient():
     try:
         coefficient = redis_client.hget('beer:setting', 'coefficient')
-        return jsonify({"success": True, "coefficient": coefficient or "1.0"})
+        last_date = redis_client.hget('beer:setting', 'coefficient_last_Date')
+        return jsonify({
+            "success": True, 
+            "coefficient": coefficient or "1.0",
+            "last_date": last_date
+        })
     except Exception as e:
         logger.error(f"Error getting coefficient: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -573,7 +578,10 @@ def update_coefficient():
         current_time = datetime.now().strftime("%d.%m.%Y %H:%M")
         redis_client.hset('beer:setting', 'coefficient_last_Date', current_time)
         
-        return jsonify({"success": True})
+        return jsonify({
+            "success": True,
+            "last_date": current_time
+        })
     except Exception as e:
         logger.error(f"Error updating coefficient: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
