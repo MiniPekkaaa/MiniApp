@@ -302,6 +302,13 @@
             dialog.style.display = 'none';
             
             if (confirmed) {
+                if (!userId) {
+                    tg.showAlert("Ошибка: не удалось определить пользователя");
+                    return;
+                }
+
+                showNotification('Отменяем заказ...');
+                
                 fetch('/api/cancel-order', {
                     method: 'POST',
                     headers: {
@@ -311,10 +318,17 @@
                         userId: userId
                     })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || `Ошибка сервера: ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
-                        showNotification('Ваш заказ отменен');
+                        showNotification('Ваш заказ успешно отменен');
                         cart = [];
                         sessionStorage.setItem('cart', JSON.stringify(cart));
                         updateCartCount();
@@ -327,6 +341,7 @@
                 })
                 .catch(error => {
                     console.error('Ошибка при отмене заказа:', error);
+                    showNotification('Ошибка: ' + error.message);
                     tg.showAlert(error.message);
                 });
             }
