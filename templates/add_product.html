@@ -276,7 +276,14 @@
                 </div>
                 <div class="quantity-controls">
                     <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
-                    <input type="text" id="quantity" value="1" class="quantity-input" oninput="validateQuantity(this)">
+                    <input type="number" 
+                           id="quantity" 
+                           value="1" 
+                           min="0" 
+                           max="50" 
+                           step="0.5" 
+                           class="quantity-input" 
+                           style="width: 80px; text-align: center; padding: 8px;">
                     <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
                 </div>
                 <button onclick="addToRemainders()" class="button" style="margin-bottom: 20px;">Добавить остаток</button>
@@ -379,35 +386,21 @@
         }
         
         function validateQuantity(input) {
-            // Заменяем запятую на точку
-            let value = input.value.replace(',', '.');
-            
-            // Проверяем, что значение является числом
-            if (isNaN(value) || value === '') {
-                input.value = '0';
-                return;
+            let value = parseFloat(input.value);
+            if (isNaN(value) || value < 0) {
+                value = 0;
+            } else if (value > 50) {
+                value = 50;
             }
-            
-            // Преобразуем в число и округляем до 1 десятичного знака
-            let numValue = parseFloat(value);
-            
-            // Проверяем границы
-            if (numValue < 0) {
-                numValue = 0;
-            } else if (numValue > 50) {
-                numValue = 50;
-            }
-            
-            // Форматируем число с одним десятичным знаком
-            input.value = numValue.toFixed(1);
+            input.value = value;
         }
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
             let value = parseFloat(quantityInput.value);
             if (value < 50) {
-                value = Math.min(50, value + 1);
-                quantityInput.value = value.toFixed(1);
+                value = Math.min(50, value + 0.5);
+                quantityInput.value = value;
             }
         }
         
@@ -415,8 +408,8 @@
             let quantityInput = document.getElementById('quantity');
             let value = parseFloat(quantityInput.value);
             if (value > 0) {
-                value = Math.max(0, value - 1);
-                quantityInput.value = value.toFixed(1);
+                value = Math.max(0, value - 0.5);
+                quantityInput.value = value;
             }
         }
 
@@ -455,8 +448,13 @@
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="text" value="1" class="quantity-input" 
-                                           oninput="validateQuantity(this)"
+                                    <input type="number" 
+                                           value="1" 
+                                           min="0" 
+                                           max="50" 
+                                           step="0.5" 
+                                           class="quantity-input" 
+                                           style="width: 80px; text-align: center; padding: 8px;"
                                            onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
                                     <button onclick="deleteRemainder('${position.Beer_ID}', ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
@@ -605,8 +603,13 @@
                     ${product.name}
                 </div>
                 <div class="product-controls">
-                    <input type="text" value="${quantity}" class="quantity-input" 
-                           oninput="validateQuantity(this)"
+                    <input type="number" 
+                           value="${quantity}" 
+                           min="0" 
+                           max="50" 
+                           step="0.5" 
+                           class="quantity-input" 
+                           style="width: 80px; text-align: center; padding: 8px;"
                            onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
                     <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
                             class="delete-button">
