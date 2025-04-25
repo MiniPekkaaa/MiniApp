@@ -540,5 +540,43 @@ def admin_panel():
         logger.error(f"Error in admin_panel route: {str(e)}", exc_info=True)
         return f"Error: {str(e)}", 500
 
+@app.route('/api/get-coefficient')
+def get_coefficient():
+    try:
+        coefficient = redis_client.hget('beer:setting', 'coefficient')
+        return jsonify({"success": True, "coefficient": coefficient or "1.0"})
+    except Exception as e:
+        logger.error(f"Error getting coefficient: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/update-coefficient', methods=['POST'])
+def update_coefficient():
+    try:
+        coefficient = request.json.get('coefficient')
+        user_id = request.json.get('user_id')
+        
+        # Проверяем права администратора
+        if not check_admin_access(user_id):
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+            
+        # Проверяем валидность коэффициента
+        try:
+            coef_float = float(coefficient)
+            if not (0.75 <= coef_float <= 1.25):
+                return jsonify({"success": False, "error": "Коэффициент должен быть от 0.75 до 1.25"}), 400
+        except ValueError:
+            return jsonify({"success": False, "error": "Некорректное значение коэффициента"}), 400
+            
+        # Обновляем коэффициент в Redis
+        redis_client.hset('beer:setting', 'coefficient', str(coefficient))
+        # Обновляем дату последнего изменения
+        current_time = datetime.now().strftime("%d.%m.%Y %H:%M")
+        redis_client.hset('beer:setting', 'coefficient_last_Date', current_time)
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Error updating coefficient: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
