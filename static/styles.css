@@ -86,12 +86,28 @@ body {
 .quantity-input {
     width: 60px;
     text-align: center;
-    padding: 8px;
-    background-color: var(--tg-theme-bg-color);
-    color: var(--tg-theme-text-color);
-    border: 1px solid var(--tg-theme-hint-color);
-    border-radius: 8px;
-    font-size: 15px;
+    padding: 5px;
+    border: 1px solid var(--tg-theme-hint-color, #999);
+    border-radius: 4px;
+    background-color: var(--tg-theme-bg-color, #fff);
+    color: var(--tg-theme-text-color, #000);
+    font-size: 16px;
+    margin: 0 5px;
+}
+
+.quantity-input:focus {
+    outline: none;
+    border-color: var(--tg-theme-link-color, #5288c1);
+}
+
+.quantity-input::-webkit-inner-spin-button,
+.quantity-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.quantity-input[type=text] {
+    -moz-appearance: textfield;
 }
 
 .cart-item {

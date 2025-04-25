@@ -276,7 +276,7 @@
                 </div>
                 <div class="quantity-controls">
                     <button onclick="decrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">-</button>
-                    <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+                    <input type="text" id="quantity" value="1" class="quantity-input" oninput="validateQuantity(this)">
                     <button onclick="incrementQuantity()" class="button" style="width: auto; padding: 5px 15px;">+</button>
                 </div>
                 <button onclick="addToRemainders()" class="button" style="margin-bottom: 20px;">Добавить остаток</button>
@@ -378,15 +378,45 @@
             }
         }
         
+        function validateQuantity(input) {
+            // Заменяем запятую на точку
+            let value = input.value.replace(',', '.');
+            
+            // Проверяем, что значение является числом
+            if (isNaN(value) || value === '') {
+                input.value = '0';
+                return;
+            }
+            
+            // Преобразуем в число
+            let numValue = parseFloat(value);
+            
+            // Проверяем границы
+            if (numValue < 0) {
+                numValue = 0;
+            } else if (numValue > 50) {
+                numValue = 50;
+            }
+            
+            // Обновляем значение в поле ввода
+            input.value = numValue.toString();
+        }
+        
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
-            quantityInput.value = parseInt(quantityInput.value) + 1;
+            let value = parseFloat(quantityInput.value);
+            if (value < 50) {
+                value += 1;
+                quantityInput.value = value.toString();
+            }
         }
         
         function decrementQuantity() {
             let quantityInput = document.getElementById('quantity');
-            if (parseInt(quantityInput.value) > 1) {
-                quantityInput.value = parseInt(quantityInput.value) - 1;
+            let value = parseFloat(quantityInput.value);
+            if (value > 0) {
+                value -= 1;
+                quantityInput.value = value.toString();
             }
         }
 
@@ -425,7 +455,8 @@
                                     ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
-                                    <input type="number" value="1" min="1" class="quantity-input" 
+                                    <input type="text" value="1" class="quantity-input" 
+                                           oninput="validateQuantity(this)"
                                            onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
                                     <button onclick="deleteRemainder('${position.Beer_ID}', ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
@@ -485,7 +516,7 @@
             );
             
             if (index !== -1) {
-                remainders[index].quantity = parseInt(newQuantity);
+                remainders[index].quantity = parseFloat(newQuantity);
                 tg.showAlert("Количество обновлено");
             }
         }
@@ -495,7 +526,7 @@
                 id: beerId.toString(),
                 name: beerName,
                 legalEntity: legalEntity,
-                quantity: parseInt(quantity)
+                quantity: parseFloat(quantity)
             };
 
             const existingItemIndex = remainders.findIndex(item => 
@@ -550,7 +581,7 @@
                 return;
             }
             
-            let quantity = parseInt(document.getElementById('quantity').value);
+            let quantity = parseFloat(document.getElementById('quantity').value);
             
             let product = {
                 id: selectedProduct.id,
@@ -618,7 +649,7 @@
             // Добавляем все позиции из DOM
             items.forEach(item => {
                 const name = item.querySelector('.product-info').textContent.trim();
-                const quantity = parseInt(item.querySelector('.quantity-input').value);
+                const quantity = parseFloat(item.querySelector('.quantity-input').value);
                 const deleteButton = item.querySelector('.delete-button');
                 // Получаем beer_id и legal_entity из атрибутов кнопки удаления
                 const onclick = deleteButton.getAttribute('onclick');
