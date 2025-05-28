@@ -258,10 +258,9 @@
             const savedCart = sessionStorage.getItem('cart');
             if (savedCart) {
                 cart = JSON.parse(savedCart);
-                // Проверяем и форматируем цены
+                // Проверяем и форматируем значения
                 cart = cart.map(item => ({
                     ...item,
-                    price: parseFloat(item.price) || 0,
                     quantity: parseInt(item.quantity) || 0
                 }));
             }
@@ -277,12 +276,11 @@
             const showMoreContainer = document.getElementById('show_more_container');
             const showMoreButton = document.getElementById('show_more_button');
             cartItems.innerHTML = '';
-            let total = 0;
             
             if (!Array.isArray(cart) || cart.length === 0) {
                 cartItems.innerHTML = '<p>Корзина пуста</p>';
                 showMoreContainer.style.display = 'none';
-                document.getElementById('total_amount').textContent = '0';
+                document.getElementById('total_amount').style.display = 'none';
                 return;
             }
             
@@ -298,9 +296,6 @@
             cart.forEach((item, index) => {
                 if (index >= itemsToShow) return;
                 
-                const itemTotal = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 0);
-                total += itemTotal;
-                
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
                 
@@ -309,9 +304,21 @@
                         <h3 class="cart-item-name">${item.name}</h3>
                         <div class="cart-item-details">
                             <p>Количество: ${item.quantity}</p>
-                            <p>Цена: ${item.price}₽</p>
-                            <p>Сумма: ${itemTotal}₽</p>
-                        </div>
+                        </div>`;
+                        
+                // Добавляем ползунок "Тара" в заголовок, если у позиции TARA = true
+                if (item.TARA === true) {
+                    itemHtml += `
+                        <div class="tara-toggle">
+                            <label>Тара:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="tara-switch-${index}" onchange="updateTara(${index}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>`;
+                }
+                        
+                itemHtml += `
                     </div>
                     <div class="cart-item-controls">
                         <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
@@ -332,19 +339,6 @@
                     </div>
                 `;
                 
-                // Добавляем ползунок "Тара", если у позиции TARA = true
-                if (item.TARA === true) {
-                    itemHtml += `
-                        <div class="tara-toggle">
-                            <label>Тара:</label>
-                            <label class="switch">
-                                <input type="checkbox" id="tara-switch-${index}" onchange="updateTara(${index}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                    `;
-                }
-                
                 itemElement.innerHTML = itemHtml;
                 cartItems.appendChild(itemElement);
                 
@@ -357,7 +351,8 @@
                 }
             });
             
-            document.getElementById('total_amount').textContent = total;
+            // Убираем отображение общей суммы
+            document.getElementById('total_amount').parentElement.style.display = 'none';
         }
         
         function toggleShowAll() {
@@ -444,7 +439,6 @@
                         id: item.id,
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
-                        price: parseFloat(item.price) || 0,
                         legalEntity: parseInt(item.legalEntity) || 1,
                         TARA: item.TARA || false,
                         taraSelected: item.taraSelected || false

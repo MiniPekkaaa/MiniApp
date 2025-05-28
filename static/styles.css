@@ -253,26 +253,26 @@ body {
     background-color: var(--tg-theme-secondary-bg-color);
 }
 
-/* Добавляем стили для ползунка "Тара" */
+/* Обновляем стили для ползунка "Тара" */
 .tara-toggle {
     display: flex;
     align-items: center;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 5px;
+    margin-bottom: 5px;
+    padding: 2px 0;
 }
 
 .tara-toggle label {
     margin-right: 10px;
     font-size: 14px;
-    color: var(--tg-theme-text-color);
+    color: var(--tg-theme-hint-color);
 }
 
 .switch {
     position: relative;
     display: inline-block;
-    width: 40px;
-    height: 20px;
+    width: 36px;
+    height: 18px;
 }
 
 .switch input {
@@ -289,19 +289,19 @@ body {
     right: 0;
     bottom: 0;
     background-color: #ccc;
-    transition: .4s;
-    border-radius: 20px;
+    transition: .3s;
+    border-radius: 18px;
 }
 
 .slider:before {
     position: absolute;
     content: "";
-    height: 16px;
-    width: 16px;
+    height: 14px;
+    width: 14px;
     left: 2px;
     bottom: 2px;
     background-color: white;
-    transition: .4s;
+    transition: .3s;
     border-radius: 50%;
 }
 
@@ -314,5 +314,5 @@ input:focus + .slider {
 }
 
 input:checked + .slider:before {
-    transform: translateX(20px);
+    transform: translateX(18px);
 }
