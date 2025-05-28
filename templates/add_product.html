@@ -366,9 +366,13 @@
             
             if (filteredProducts.length > 0) {
                 // Сортируем товары по алфавиту
-                const sortedProducts = [...filteredProducts].sort(function(a, b) {
+                const sortedProducts = filteredProducts.slice().sort(function(a, b) {
+                    if (!a.name || !b.name) return 0;
                     return a.name.localeCompare(b.name, 'ru');
                 });
+                
+                console.log('Товары отсортированы по алфавиту:', 
+                    sortedProducts.slice(0, 5).map(p => p.name));
                 
                 sortedProducts.forEach(product => {
                     const item = document.createElement('div');
