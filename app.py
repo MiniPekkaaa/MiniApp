@@ -590,47 +590,27 @@ def get_user_org_data():
             return jsonify({'success': False, 'error': 'User not found in Redis'}), 404
 
         org_id = user_data.get('org_ID')
+        customer_id = user_data.get('customer_id', '')
+        
+        # Если нет customer_id, попробуем получить его из других источников
+        if not customer_id:
+            # Пробуем найти customer_id в базе настроек
+            customer_id = redis_client.hget('beer:setting', 'customer_id') or ''
+            
+            # Если все еще нет, используем значение по умолчанию
+            if not customer_id:
+                customer_id = '16d79d5f-a651-11ef-895a-005056c00008'  # Значение по умолчанию
         
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
-            
-        # Получаем информацию об организации из MongoDB
-        org_info = mongo.cx.Pivo.organizations.find_one({'_id': org_id})
-        
-        if not org_info:
-            logger.warning(f"Организация с ID {org_id} не найдена в MongoDB")
-            organization_id = ""
-        else:
-            organization_id = org_info.get('organizationId', '')
-            logger.debug(f"Найден organizationId: {organization_id} для org_ID: {org_id}")
-            
-        # Получаем информацию о товарах для определения legalEntity
-        catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'legalEntity': 1, 'UID': 1, 'id': 1}))
-        
-        # Формируем мапу UID -> id для последующего использования
-        uid_map = {}
-        legal_entity = None
-        
-        for item in catalog_items:
-            if 'UID' in item and 'id' in item:
-                uid_map[str(item['id'])] = item.get('UID', '')
-                
-            # Берем legalEntity из первого найденного товара
-            if not legal_entity and 'legalEntity' in item:
-                legal_entity = item['legalEntity']
-                
-        logger.debug(f"Карта UID -> id: {uid_map}")
-        logger.debug(f"Обнаружено legalEntity: {legal_entity}")
 
         # Возвращаем данные организации
         return jsonify({
             'success': True,
             'data': {
                 'org_ID': org_id,
-                'organization': user_data.get('organization', ''),
-                'organization_id': organization_id,
-                'legal_entity': legal_entity,
-                'uid_map': uid_map
+                'customer_id': customer_id,
+                'organization': user_data.get('organization', '')
             }
         })
     except Exception as e:
@@ -660,12 +640,7 @@ def calculate_prices():
         try:
             response = requests.post(
                 'http://87.225.110.142:65531/uttest/hs/int/calculate_checkout',
-                json={
-                    "DATE": data.get('DATE', str(int(datetime.now().timestamp()))),
-                    "ID_customer": data.get('ID_customer', ''),
-                    "INN_legal_entity": data.get('INN_legal_entity', ''),
-                    "positions": data.get('positions', [])
-                },
+                json=data,
                 auth=('int2', 'pcKnE8GqXn'),
                 headers={'Content-Type': 'application/json'},
                 timeout=10  # Добавляем тайм-аут
