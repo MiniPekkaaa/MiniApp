@@ -292,34 +292,6 @@
             // Сначала показываем товары с ценами по умолчанию 0
             renderCartItems();
             
-            // Формируем данные для запроса цен
-            const positions = cart.map(item => ({
-                ID_product: item.id,
-                Amount: item.quantity
-            }));
-            
-            console.log('Подготовлены позиции для запроса:', positions);
-            
-            // Функция для тестовых данных
-            function getTestPriceData() {
-                const testData = {
-                    Summa: 0,
-                    Korzina: []
-                };
-                
-                // Создаем тестовые цены
-                cart.forEach(item => {
-                    const price = Math.floor(Math.random() * 500) + 100;
-                    testData.Korzina.push({
-                        ID_product: item.id,
-                        Price: price
-                    });
-                    testData.Summa += price * item.quantity;
-                });
-                
-                return testData;
-            }
-            
             // Устанавливаем таймаут, чтобы показать "мигание" цен при загрузке
             setTimeout(() => {
                 // Получаем ID организации
@@ -327,10 +299,23 @@
                     .then(userData => {
                         console.log('Данные организации получены успешно:', userData);
                         
-                        // Отправляем запрос на расчет стоимости
+                        // Формируем данные для запроса цен с использованием UID
+                        const positions = cart.map(item => {
+                            // Проверяем, есть ли UID в карте соответствия
+                            const uid = userData.uid_map && userData.uid_map[item.id] ? 
+                                        userData.uid_map[item.id] : item.id;
+                            return {
+                                ID_product: uid,
+                                Amount: item.quantity
+                            };
+                        });
+                        
+                        console.log('Подготовлены позиции для запроса с UID:', positions);
+                        
+                        // Отправляем запрос на расчет стоимости с правильными параметрами
                         return calculatePrices({
-                            ID_customer: userData.customer_id,
-                            INN_legal_entity: userData.org_ID,
+                            ID_customer: userData.organization_id || userData.customer_id,
+                            INN_legal_entity: userData.legal_entity || userData.org_ID,
                             positions: positions
                         });
                     })
@@ -340,10 +325,13 @@
                         // Добавляем информацию о ценах в объекты корзины
                         if (priceData && priceData.Korzina) {
                             priceData.Korzina.forEach(priceItem => {
-                                const cartItem = cart.find(item => item.id === priceItem.ID_product);
+                                // Ищем товар в корзине, учитывая возможные соответствия UID и ID
+                                const cartItem = findCartItemByUID(priceItem.ID_product);
                                 if (cartItem) {
                                     cartItem.price = priceItem.Price;
                                     console.log(`Установлена цена ${priceItem.Price} для товара ${cartItem.name}`);
+                                } else {
+                                    console.warn(`Не найден товар для UID: ${priceItem.ID_product}`);
                                 }
                             });
                         }
@@ -660,6 +648,45 @@
                     throw error;
                 });
             }
+        }
+        
+        // Функция для нахождения товара в корзине по UID
+        function findCartItemByUID(uid) {
+            // Сначала пробуем найти товар напрямую по id
+            let item = cart.find(item => item.id === uid);
+            if (item) return item;
+            
+            // Если не нашли, проверяем поле UID, если оно есть
+            item = cart.find(item => item.UID === uid);
+            if (item) return item;
+            
+            // Если не нашли, проверяем все поля товара
+            for (let cartItem of cart) {
+                // Проверяем разные поля, которые могут содержать UID
+                if (cartItem.uid === uid) return cartItem;
+            }
+            
+            return null;
+        }
+        
+        // Функция для тестовых данных
+        function getTestPriceData() {
+            const testData = {
+                Summa: 0,
+                Korzina: []
+            };
+            
+            // Создаем тестовые цены
+            cart.forEach(item => {
+                const price = Math.floor(Math.random() * 500) + 100;
+                testData.Korzina.push({
+                    ID_product: item.id,
+                    Price: price
+                });
+                testData.Summa += price * item.quantity;
+            });
+            
+            return testData;
         }
         
         // Запускаем проверку авторизации и отображаем корзину

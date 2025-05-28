@@ -590,27 +590,53 @@ def get_user_org_data():
             return jsonify({'success': False, 'error': 'User not found in Redis'}), 404
 
         org_id = user_data.get('org_ID')
-        customer_id = user_data.get('customer_id', '')
-        
-        # Если нет customer_id, попробуем получить его из других источников
-        if not customer_id:
-            # Пробуем найти customer_id в базе настроек
-            customer_id = redis_client.hget('beer:setting', 'customer_id') or ''
-            
-            # Если все еще нет, используем значение по умолчанию
-            if not customer_id:
-                customer_id = '16d79d5f-a651-11ef-895a-005056c00008'  # Значение по умолчанию
         
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
+        
+        # Получаем информацию об организации из MongoDB для получения organizationId
+        org_info = mongo.cx.Pivo.organizations.find_one({'_id': org_id})
+        
+        if not org_info:
+            logger.warning(f"Организация с ID {org_id} не найдена в MongoDB")
+            organization_id = ""
+        else:
+            organization_id = org_info.get('organizationId', '')
+            logger.debug(f"Найден organizationId: {organization_id} для org_ID: {org_id}")
+        
+        # Если нет organization_id, используем значение по умолчанию
+        if not organization_id:
+            organization_id = '16d79d5f-a651-11ef-895a-005056c00008'  # Значение по умолчанию
+            
+        # Получаем информацию о товарах для получения UID и legalEntity
+        catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'UID': 1, 'legalEntity': 1}))
+        
+        # Создаем словарь сопоставления id -> UID для товаров
+        uid_map = {}
+        legal_entity = None
+        
+        for item in catalog_items:
+            if 'id' in item and 'UID' in item:
+                uid_map[str(item['id'])] = item.get('UID', '')
+            
+            # Берем первое значение legalEntity, если еще не задано
+            if legal_entity is None and 'legalEntity' in item:
+                legal_entity = item.get('legalEntity')
+        
+        # Если legalEntity не найден, используем значение по умолчанию
+        if not legal_entity:
+            legal_entity = '2724132975'  # Значение по умолчанию
 
-        # Возвращаем данные организации
+        # Возвращаем данные организации и карту UID
         return jsonify({
             'success': True,
             'data': {
                 'org_ID': org_id,
-                'customer_id': customer_id,
-                'organization': user_data.get('organization', '')
+                'organization': user_data.get('organization', ''),
+                'customer_id': organization_id,  # Для обратной совместимости
+                'organization_id': organization_id,
+                'legal_entity': legal_entity,
+                'uid_map': uid_map
             }
         })
     except Exception as e:
@@ -636,11 +662,20 @@ def calculate_prices():
         if not data.get('positions') or len(data.get('positions')) == 0:
             logger.warning("Positions пусты или отсутствуют в запросе")
         
-        # Формируем запрос к внешнему API
+        # Формируем запрос к внешнему API с правильными параметрами
+        request_body = {
+            "DATE": data.get('DATE', str(int(datetime.now().timestamp()))),
+            "ID_customer": data.get('ID_customer', ''),
+            "INN_legal_entity": data.get('INN_legal_entity', ''),
+            "positions": data.get('positions', [])
+        }
+        
+        logger.debug(f"Отправляем запрос на расчет цен: {request_body}")
+        
         try:
             response = requests.post(
                 'http://87.225.110.142:65531/uttest/hs/int/calculate_checkout',
-                json=data,
+                json=request_body,
                 auth=('int2', 'pcKnE8GqXn'),
                 headers={'Content-Type': 'application/json'},
                 timeout=10  # Добавляем тайм-аут
