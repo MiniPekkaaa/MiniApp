@@ -299,11 +299,23 @@
                     .then(userData => {
                         console.log('Данные организации получены успешно:', userData);
                         
+                        // Сохраняем карту UID для последующего использования
+                        window.uidMap = userData.uid_map || {};
+                        console.log('Карта UID товаров:', window.uidMap);
+                        
+                        // Создаем обратную карту: UID -> индекс товара в корзине
+                        window.uidToCartItemMap = {};
+                        
                         // Формируем данные для запроса цен с использованием UID
-                        const positions = cart.map(item => {
+                        const positions = cart.map((item, index) => {
                             // Проверяем, есть ли UID в карте соответствия
                             const uid = userData.uid_map && userData.uid_map[item.id] ? 
-                                        userData.uid_map[item.id] : item.id;
+                                      userData.uid_map[item.id] : item.id;
+                            
+                            // Сохраняем соответствие UID -> индекс товара
+                            window.uidToCartItemMap[uid] = index;
+                            console.log(`Сопоставление UID ${uid} -> товар ${item.name} (индекс ${index})`);
+                            
                             return {
                                 ID_product: uid,
                                 Amount: item.quantity
@@ -311,6 +323,7 @@
                         });
                         
                         console.log('Подготовлены позиции для запроса с UID:', positions);
+                        console.log('Карта соответствия UID -> индекс товара:', window.uidToCartItemMap);
                         
                         // Отправляем запрос на расчет стоимости с правильными параметрами
                         return calculatePrices({
@@ -325,16 +338,47 @@
                         // Добавляем информацию о ценах в объекты корзины
                         if (priceData && priceData.Korzina) {
                             priceData.Korzina.forEach(priceItem => {
-                                // Ищем товар в корзине, учитывая возможные соответствия UID и ID
-                                const cartItem = findCartItemByUID(priceItem.ID_product);
+                                const uid = priceItem.ID_product;
+                                console.log(`Обрабатываем цену для UID: ${uid}, цена: ${priceItem.Price}`);
+                                
+                                // Сначала проверяем карту соответствий
+                                if (window.uidToCartItemMap && window.uidToCartItemMap[uid] !== undefined) {
+                                    const itemIndex = window.uidToCartItemMap[uid];
+                                    const cartItem = cart[itemIndex];
+                                    if (cartItem) {
+                                        cartItem.price = priceItem.Price;
+                                        console.log(`Найден товар по карте соответствий: ${cartItem.name}, установлена цена ${priceItem.Price}`);
+                                        return; // Переходим к следующему элементу
+                                    }
+                                }
+                                
+                                // Если не нашли по карте, используем функцию findCartItemByUID
+                                const cartItem = findCartItemByUID(uid);
                                 if (cartItem) {
                                     cartItem.price = priceItem.Price;
                                     console.log(`Установлена цена ${priceItem.Price} для товара ${cartItem.name}`);
                                 } else {
-                                    console.warn(`Не найден товар для UID: ${priceItem.ID_product}`);
+                                    console.warn(`Не найден товар для UID: ${uid}`);
+                                    
+                                    // Пробуем найти товар по обратной карте UID -> ID
+                                    for (const [productId, productUid] of Object.entries(window.uidMap)) {
+                                        if (productUid === uid) {
+                                            console.log(`Найдено соответствие ID ${productId} для UID ${uid}`);
+                                            const matchingItem = cart.find(item => item.id === productId);
+                                            if (matchingItem) {
+                                                matchingItem.price = priceItem.Price;
+                                                console.log(`Установлена цена ${priceItem.Price} для товара ${matchingItem.name} через обратную карту`);
+                                            }
+                                        }
+                                    }
                                 }
                             });
+                        } else {
+                            console.warn('В ответе API отсутствуют данные о ценах');
                         }
+                        
+                        // Отладочная информация о товарах после обработки цен
+                        console.log('Товары в корзине после обработки цен:', cart);
                         
                         // Обновляем отображение корзины с ценами
                         renderCartItems();
@@ -380,10 +424,15 @@
                 cartItems.innerHTML = '';
                 let totalSum = 0;
                 
+                console.log('Рендеринг товаров в корзине:', cart);
+                
                 cart.forEach((item, index) => {
                     if (index >= itemsToShow) return;
                     
-                    const price = item.price || 0;
+                    // Убедимся, что price является числом
+                    const price = parseFloat(item.price) || 0;
+                    console.log(`Товар ${item.name}, цена: ${price}`);
+                    
                     const itemTotal = price * (parseInt(item.quantity) || 0);
                     totalSum += itemTotal;
                     
@@ -421,9 +470,12 @@
                     cartItems.appendChild(itemElement);
                 });
                 
+                console.log(`Общая сумма расчитана: ${totalSum.toFixed(2)}₽`);
+                
                 // Обновляем общую сумму, если она еще не была установлена от API
                 if (!document.getElementById('total_amount').textContent || 
-                    document.getElementById('total_amount').textContent === '0.00') {
+                    document.getElementById('total_amount').textContent === '0.00' ||
+                    document.getElementById('total_amount').textContent === '0') {
                     document.getElementById('total_amount').textContent = totalSum.toFixed(2);
                 }
             }
@@ -652,20 +704,45 @@
         
         // Функция для нахождения товара в корзине по UID
         function findCartItemByUID(uid) {
+            console.log(`Ищем товар с UID: ${uid}`);
+            console.log('Текущие товары в корзине:', cart);
+            
             // Сначала пробуем найти товар напрямую по id
             let item = cart.find(item => item.id === uid);
-            if (item) return item;
+            if (item) {
+                console.log(`Найден товар по id: ${item.name}`);
+                return item;
+            }
             
             // Если не нашли, проверяем поле UID, если оно есть
             item = cart.find(item => item.UID === uid);
-            if (item) return item;
-            
-            // Если не нашли, проверяем все поля товара
-            for (let cartItem of cart) {
-                // Проверяем разные поля, которые могут содержать UID
-                if (cartItem.uid === uid) return cartItem;
+            if (item) {
+                console.log(`Найден товар по UID: ${item.name}`);
+                return item;
             }
             
+            // Пробуем найти по uid в нижнем регистре
+            item = cart.find(item => item.uid === uid);
+            if (item) {
+                console.log(`Найден товар по uid (lowercase): ${item.name}`);
+                return item;
+            }
+            
+            // Сохраняем соответствие UID -> индекс товара в корзине
+            if (!window.uidToCartItemMap) {
+                window.uidToCartItemMap = {};
+            }
+            
+            // Проверяем кеш соответствий
+            if (window.uidToCartItemMap[uid] !== undefined) {
+                const cachedItem = cart[window.uidToCartItemMap[uid]];
+                if (cachedItem) {
+                    console.log(`Найден товар из кеша: ${cachedItem.name}`);
+                    return cachedItem;
+                }
+            }
+            
+            console.warn(`Товар с UID ${uid} не найден в корзине`);
             return null;
         }
         
