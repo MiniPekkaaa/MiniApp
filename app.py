@@ -137,9 +137,9 @@ def products():
                 '_id': str(product.get('_id', '')),
                 'name': product.get('name', ''),
                 'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
+                'volume': float(product.get('volume', 0) or 0),
+                'price': int(product.get('price', 0) or 0),
+                'legalEntity': int(product.get('legalEntity', 1) or 1)
             }
             formatted_products.append(formatted_product)
             logger.debug(f"Formatted product: {formatted_product}")
@@ -175,9 +175,9 @@ def add_product():
                 '_id': str(product.get('_id', '')),
                 'name': product.get('name', ''),
                 'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
+                'volume': float(product.get('volume', 0) or 0),
+                'price': int(product.get('price', 0) or 0),
+                'legalEntity': int(product.get('legalEntity', 1) or 1)
             }
             formatted_products.append(formatted_product)
 
@@ -202,9 +202,9 @@ def get_products():
                 '_id': str(product.get('_id', '')),
                 'name': product.get('name', ''),
                 'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
+                'volume': float(product.get('volume', 0) or 0),
+                'price': int(product.get('price', 0) or 0),
+                'legalEntity': int(product.get('legalEntity', 1) or 1)
             }
             formatted_products.append(formatted_product)
         
@@ -232,11 +232,15 @@ def create_order():
         positions = {}
         for index, item in enumerate(data.get('items', []), 1):
             position_key = f"Position_{index}"
+            beer_id = item.get('id')
+            legal_entity = item.get('legalEntity')
+            quantity = item.get('quantity')
+            
             positions[position_key] = {
-                'Beer_ID': int(item['id']),
-                'Beer_Name': item['name'],
-                'Legal_Entity': int(item['legalEntity']),
-                'Beer_Count': int(item['quantity'])
+                'Beer_ID': int(beer_id) if beer_id is not None else 0,
+                'Beer_Name': item.get('name', ''),
+                'Legal_Entity': int(legal_entity) if legal_entity is not None else 1,
+                'Beer_Count': int(quantity) if quantity is not None else 0
             }
 
         # Создаем заказ
@@ -277,9 +281,9 @@ def order_menu():
                 '_id': str(product.get('_id', '')),
                 'name': product.get('name', ''),
                 'fullName': product.get('fullName', ''),
-                'volume': float(product.get('volume', 0)),
-                'price': int(product.get('price', 0)),
-                'legalEntity': int(product.get('legalEntity', 1))
+                'volume': float(product.get('volume', 0) or 0),
+                'price': int(product.get('price', 0) or 0),
+                'legalEntity': int(product.get('legalEntity', 1) or 1)
             }
             formatted_products.append(formatted_product)
             
@@ -316,13 +320,20 @@ def get_last_orders():
         for order in orders:
             positions = order.get('Positions', {})
             for position in positions.values():
-                position_key = f"{position['Beer_ID']}_{position['Legal_Entity']}"
+                beer_id = position.get('Beer_ID')
+                legal_entity = position.get('Legal_Entity')
+                beer_count = position.get('Beer_Count')
+                
+                if beer_id is None or legal_entity is None:
+                    continue
+                
+                position_key = f"{beer_id}_{legal_entity}"
                 if position_key not in unique_positions:
                     unique_positions[position_key] = {
-                        'Beer_ID': position['Beer_ID'],
-                        'Beer_Name': position['Beer_Name'],
-                        'Legal_Entity': position['Legal_Entity'],
-                        'Beer_Count': position['Beer_Count']  # Берем количество из последнего заказа
+                        'Beer_ID': beer_id,
+                        'Beer_Name': position.get('Beer_Name', ''),
+                        'Legal_Entity': legal_entity,
+                        'Beer_Count': beer_count if beer_count is not None else 0
                     }
 
         # Преобразуем в список
@@ -368,7 +379,7 @@ def get_orders():
         orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1).limit(5))
         
         # Получаем каталог продуктов для цен
-        products = {str(p['id']): p for p in mongo.cx.Pivo.catalog.find()}
+        products = {str(p.get('id', '')): p for p in mongo.cx.Pivo.catalog.find()}
         
         # Преобразуем заказы в нужный формат
         formatted_orders = []
@@ -378,23 +389,23 @@ def get_orders():
             total_amount = 0
             
             for pos_key, pos_data in order.get('Positions', {}).items():
-                beer_id = str(pos_data.get('Beer_ID'))
-                quantity = pos_data.get('Beer_Count', 0)
+                beer_id = str(pos_data.get('Beer_ID', ''))
+                quantity = pos_data.get('Beer_Count', 0) or 0
                 
                 # Получаем цену из каталога
                 product = products.get(beer_id, {})
-                price = product.get('price', 0)
+                price = product.get('price', 0) or 0
                 
                 # Считаем сумму для позиции
                 position_total = price * quantity
                 total_amount += position_total
 
                 positions.append({
-                    'name': pos_data.get('Beer_Name'),
+                    'name': pos_data.get('Beer_Name', ''),
                     'quantity': quantity,
                     'id': beer_id,
                     'price': price,
-                    'legal_entity': pos_data.get('Legal_Entity')
+                    'legal_entity': pos_data.get('Legal_Entity', 1) or 1
                 })
 
             formatted_order = {
@@ -430,33 +441,33 @@ def get_order():
             return jsonify({'success': False, 'error': 'Order not found'}), 404
 
         # Получаем каталог продуктов для цен
-        products = {str(p['id']): p for p in mongo.cx.Pivo.catalog.find()}
+        products = {str(p.get('id', '')): p for p in mongo.cx.Pivo.catalog.find()}
 
         # Преобразуем позиции из словаря в список
         positions = []
         total_amount = 0
         
         for pos_key, pos_data in order.get('Positions', {}).items():
-            beer_id = str(pos_data.get('Beer_ID'))
-            quantity = pos_data.get('Beer_Count', 0)
+            beer_id = str(pos_data.get('Beer_ID', ''))
+            quantity = pos_data.get('Beer_Count', 0) or 0
             
             # Получаем цену из каталога
             product = products.get(beer_id, {})
-            price = product.get('price', 0)
+            price = product.get('price', 0) or 0
             
             # Считаем сумму для позиции
             position_total = price * quantity
             total_amount += position_total
 
             positions.append({
-                'name': pos_data.get('Beer_Name'),
+                'name': pos_data.get('Beer_Name', ''),
                 'quantity': quantity,
                 'id': beer_id,
                 'price': price,
-                'legal_entity': pos_data.get('Legal_Entity')
+                'legal_entity': pos_data.get('Legal_Entity', 1) or 1
             })
-
-        # Преобразуем дату из строки в правильный формат
+            
+        # Форматируем дату
         date_str = order.get('date', '')
         try:
             # Парсим дату
