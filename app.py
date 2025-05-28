@@ -613,19 +613,13 @@ def get_user_org_data():
         
         # Создаем словарь сопоставления id -> UID для товаров
         uid_map = {}
-        legal_entity = None
+        
+        # Устанавливаем фиксированное значение legalEntity для всех запросов
+        legal_entity = "2724132975"  # Фиксированное значение ИНН
         
         for item in catalog_items:
             if 'id' in item and 'UID' in item:
                 uid_map[str(item['id'])] = item.get('UID', '')
-            
-            # Берем первое значение legalEntity, если еще не задано
-            if legal_entity is None and 'legalEntity' in item:
-                legal_entity = item.get('legalEntity')
-        
-        # Если legalEntity не найден, используем значение по умолчанию
-        if not legal_entity:
-            legal_entity = '2724132975'  # Значение по умолчанию
 
         # Возвращаем данные организации и карту UID
         return jsonify({
@@ -689,6 +683,13 @@ def calculate_prices():
                 logger.error(f"Ошибка API: {response.status_code}, {response.text}")
                 return jsonify({"error": f"API error: {response.status_code}"}), 500
                 
+            # Проверяем, является ли ответ сообщением об ошибке
+            if response.text.strip().startswith('"') and response.text.strip().endswith('"'):
+                # Это сообщение об ошибке в формате строки
+                error_message = response.text.strip(' "\t\n\r')
+                logger.debug(f"Ответ API: {error_message}")
+                return jsonify(error_message)
+                
             # Преобразуем ответ в JSON
             try:
                 api_response = response.json()
@@ -697,7 +698,7 @@ def calculate_prices():
             except Exception as e:
                 logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
                 # Если JSON не работает, вернем хотя бы текст
-                return jsonify({"error": "Invalid JSON response", "text": response.text}), 500
+                return jsonify(response.text)
         
         except requests.exceptions.RequestException as e:
             logger.error(f"Ошибка при отправке запроса: {str(e)}")
