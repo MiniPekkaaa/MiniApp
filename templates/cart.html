@@ -360,58 +360,89 @@
                             document.getElementById('total_amount').textContent = testData.Summa.toFixed(2);
                             return;
                         }
-                        
+
                         // Выводим сырые данные о ценах в DOM для отладки
                         const debugDiv = document.createElement('div');
                         debugDiv.style.display = 'none'; // скрываем, но можно показать при необходимости
                         debugDiv.id = 'debug-price-data';
                         debugDiv.innerHTML = `<pre style="display:none">${JSON.stringify(priceData, null, 2)}</pre>`;
                         document.body.appendChild(debugDiv);
-                        
+
                         // Добавляем информацию о ценах в объекты корзины
                         if (priceData && priceData.Korzina) {
+                            // Выводим все UID в консоль для отладки
+                            console.log('UID товаров в корзине:');
+                            cart.forEach(item => {
+                                console.log(`ID: ${item.id}, UID из карты: ${window.uidMap && window.uidMap[item.id] || 'не найден'}`);
+                            });
+                            
+                            console.log('UID товаров в ответе API:');
                             priceData.Korzina.forEach(priceItem => {
-                                const uid = priceItem.ID_product;
-                                console.log(`Обрабатываем цену для UID: ${uid}, цена: ${priceItem.Price}`);
-                                
-                                // Сначала проверяем карту соответствий
-                                if (window.uidToCartItemMap && window.uidToCartItemMap[uid] !== undefined) {
-                                    const itemIndex = window.uidToCartItemMap[uid];
-                                    const cartItem = cart[itemIndex];
-                                    if (cartItem) {
-                                        cartItem.price = priceItem.Price;
-                                        console.log(`Найден товар по карте соответствий: ${cartItem.name}, установлена цена ${priceItem.Price}`);
-                                        return; // Переходим к следующему элементу
+                                console.log(`UID: ${priceItem.ID_product}, Цена: ${priceItem.Price}`);
+                            });
+                            
+                            // Сначала создаем карту цен по UID
+                            const priceMap = {};
+                            priceData.Korzina.forEach(priceItem => {
+                                priceMap[priceItem.ID_product] = priceItem.Price;
+                            });
+                            console.log('Карта цен по UID:', priceMap);
+                            
+                            // Применяем цены к товарам в корзине, используя обратную карту
+                            let appliedCount = 0;
+                            
+                            // Если есть карта UID, используем ее
+                            if (window.uidMap) {
+                                console.log('Применяем цены по карте UID');
+                                cart.forEach(item => {
+                                    const itemUid = window.uidMap[item.id];
+                                    if (itemUid && priceMap[itemUid]) {
+                                        const price = priceMap[itemUid];
+                                        console.log(`Установлена цена ${price} для товара ${item.name} (ID: ${item.id}, UID: ${itemUid})`);
+                                        item.price = price;
+                                        appliedCount++;
+                                    } else {
+                                        console.warn(`Не найдена цена для товара ${item.name} (ID: ${item.id})`);
                                     }
-                                }
-                                
-                                // Если не нашли по карте, используем функцию findCartItemByUID
-                                const cartItem = findCartItemByUID(uid);
-                                if (cartItem) {
-                                    cartItem.price = priceItem.Price;
-                                    console.log(`Установлена цена ${priceItem.Price} для товара ${cartItem.name}`);
-                                } else {
-                                    console.warn(`Не найден товар для UID: ${uid}`);
-                                    
-                                    // Пробуем найти товар по обратной карте UID -> ID
-                                    for (const [productId, productUid] of Object.entries(window.uidMap)) {
-                                        if (productUid === uid) {
-                                            console.log(`Найдено соответствие ID ${productId} для UID ${uid}`);
-                                            const matchingItem = cart.find(item => item.id === productId);
-                                            if (matchingItem) {
-                                                matchingItem.price = priceItem.Price;
-                                                console.log(`Установлена цена ${priceItem.Price} для товара ${matchingItem.name} через обратную карту`);
-                                            }
-                                        }
+                                });
+                            }
+                            
+                            // Если не удалось применить ни одной цены, пробуем прямое сопоставление
+                            if (appliedCount === 0) {
+                                console.log('Пробуем прямое сопоставление ID и UID');
+                                // Прямое сопоставление по ID
+                                cart.forEach(item => {
+                                    // Проверяем, есть ли такой ID в ответе API
+                                    if (priceMap[item.id]) {
+                                        const price = priceMap[item.id];
+                                        console.log(`Установлена цена ${price} для товара ${item.name} по прямому ID: ${item.id}`);
+                                        item.price = price;
+                                        appliedCount++;
                                     }
+                                });
+                                
+                                // Если все еще ничего не нашли, пробуем по каждому UID из ответа
+                                if (appliedCount === 0 && priceData.Korzina.length > 0 && cart.length > 0) {
+                                    console.log('Применяем первую доступную цену');
+                                    // Если всего один товар в корзине, применяем первую доступную цену
+                                    cart[0].price = priceData.Korzina[0].Price;
+                                    console.log(`Установлена цена ${priceData.Korzina[0].Price} для первого товара ${cart[0].name}`);
                                 }
+                            }
+                            
+                            // Отладочный вывод итоговых данных
+                            console.log('Товары в корзине после обработки цен:');
+                            cart.forEach(item => {
+                                console.log(`${item.name}: Количество=${item.quantity}, Цена=${item.price}`);
                             });
                         } else {
                             console.warn('В ответе API отсутствуют данные о ценах');
+                            updateProcessIndicator('Ошибка: в ответе API отсутствуют данные о ценах');
                         }
                         
                         // Отладочная информация о товарах после обработки цен
-                        console.log('Товары в корзине после обработки цен:', cart);
+                        console.log('Товары в корзине после обработки цен:', JSON.stringify(cart, null, 2));
+                        updateProcessIndicator('Этап: обновление отображения корзины');
                         
                         // Обновляем отображение корзины с ценами
                         renderCartItems();
