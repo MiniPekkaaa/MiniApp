@@ -165,6 +165,24 @@
             background-color: #ff4444;
             color: white;
         }
+
+        /* Добавляем стиль для товаров с TARA=true */
+        .cart-item.tara-item {
+            background-color: rgba(255, 193, 7, 0.2); /* Золотистый полупрозрачный фон */
+            border-left: 4px solid #ffc107; /* Золотистая боковая полоса */
+        }
+
+        .tara-badge {
+            display: inline-block;
+            background-color: #ffc107;
+            color: #333;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -501,11 +519,15 @@
                     totalSum += itemTotal;
                     
                     const itemElement = document.createElement('div');
-                    itemElement.className = 'cart-item';
+                    // Проверяем, является ли товар тарой
+                    itemElement.className = `cart-item${item.TARA ? ' tara-item' : ''}`;
+                    
+                    // Создаем метку ТАРА, если товар является тарой
+                    const taraLabel = item.TARA ? '<span class="tara-badge">ТАРА</span>' : '';
                     
                     itemElement.innerHTML = `
                         <div class="cart-item-info">
-                            <h3 class="cart-item-name">${item.name}</h3>
+                            <h3 class="cart-item-name">${item.name}${taraLabel}</h3>
                             <div class="cart-item-details">
                                 <p>Количество: ${item.quantity}</p>
                                 <p>Цена: ${price.toFixed(2)}₽</p>

@@ -365,7 +365,12 @@
             dropdownList.innerHTML = '';
             
             if (filteredProducts.length > 0) {
-                filteredProducts.forEach(product => {
+                // Сортируем товары по алфавиту
+                const sortedProducts = [...filteredProducts].sort(function(a, b) {
+                    return a.name.localeCompare(b.name, 'ru');
+                });
+                
+                sortedProducts.forEach(product => {
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
                     item.innerHTML = `${product.name} (${product.volume}л - ${product.price}₽)`;
