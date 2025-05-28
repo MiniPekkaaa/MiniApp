@@ -6,6 +6,7 @@ import json
 import redis
 from datetime import datetime, timedelta
 import pytz
+import requests
 
 # Настройка логирования
 logging.basicConfig(
@@ -591,6 +592,15 @@ def get_user_org_data():
         org_id = user_data.get('org_ID')
         customer_id = user_data.get('customer_id', '')
         
+        # Если нет customer_id, попробуем получить его из других источников
+        if not customer_id:
+            # Пробуем найти customer_id в базе настроек
+            customer_id = redis_client.hget('beer:setting', 'customer_id') or ''
+            
+            # Если все еще нет, используем значение по умолчанию
+            if not customer_id:
+                customer_id = '16d79d5f-a651-11ef-895a-005056c00008'  # Значение по умолчанию
+        
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
 
@@ -609,6 +619,58 @@ def get_user_org_data():
             'success': False,
             'error': 'Failed to get user organization data'
         }), 500
+
+@app.route('/api/calculate-prices', methods=['POST'])
+def calculate_prices():
+    try:
+        data = request.json
+        logger.debug(f"Получен запрос на расчет цен: {data}")
+        
+        # Проверка наличия необходимых полей
+        if not data.get('INN_legal_entity'):
+            logger.warning("INN_legal_entity отсутствует в запросе")
+            
+        if not data.get('ID_customer'):
+            logger.warning("ID_customer отсутствует в запросе")
+            
+        if not data.get('positions') or len(data.get('positions')) == 0:
+            logger.warning("Positions пусты или отсутствуют в запросе")
+        
+        # Формируем запрос к внешнему API
+        try:
+            response = requests.post(
+                'http://87.225.110.142:65531/uttest/hs/int/calculate_checkout',
+                json=data,
+                auth=('int2', 'pcKnE8GqXn'),
+                headers={'Content-Type': 'application/json'},
+                timeout=10  # Добавляем тайм-аут
+            )
+            
+            logger.debug(f"Статус ответа от API: {response.status_code}")
+            logger.debug(f"Текст ответа от API: {response.text[:200]}...")
+            
+            # Проверяем ответ
+            if response.status_code != 200:
+                logger.error(f"Ошибка API: {response.status_code}, {response.text}")
+                return jsonify({"error": f"API error: {response.status_code}"}), 500
+                
+            # Преобразуем ответ в JSON
+            try:
+                api_response = response.json()
+                logger.debug(f"Ответ API: {api_response}")
+                return jsonify(api_response)
+            except Exception as e:
+                logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
+                # Если JSON не работает, вернем хотя бы текст
+                return jsonify({"error": "Invalid JSON response", "text": response.text}), 500
+        
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при отправке запроса: {str(e)}")
+            return jsonify({"error": f"Request error: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при расчете цен: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
