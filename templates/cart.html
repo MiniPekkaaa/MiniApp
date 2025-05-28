@@ -303,7 +303,8 @@
                 
                 const itemElement = document.createElement('div');
                 itemElement.className = 'cart-item';
-                itemElement.innerHTML = `
+                
+                let itemHtml = `
                     <div class="cart-item-info">
                         <h3 class="cart-item-name">${item.name}</h3>
                         <div class="cart-item-details">
@@ -330,7 +331,30 @@
                         </div>
                     </div>
                 `;
+                
+                // Добавляем ползунок "Тара", если у позиции TARA = true
+                if (item.TARA === true) {
+                    itemHtml += `
+                        <div class="tara-toggle">
+                            <label>Тара:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="tara-switch-${index}" onchange="updateTara(${index}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    `;
+                }
+                
+                itemElement.innerHTML = itemHtml;
                 cartItems.appendChild(itemElement);
+                
+                // Устанавливаем начальное значение ползунка, если оно есть
+                if (item.TARA === true && item.taraSelected) {
+                    const switchElement = document.getElementById(`tara-switch-${index}`);
+                    if (switchElement) {
+                        switchElement.checked = item.taraSelected;
+                    }
+                }
             });
             
             document.getElementById('total_amount').textContent = total;
@@ -421,7 +445,9 @@
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
                         price: parseFloat(item.price) || 0,
-                        legalEntity: parseInt(item.legalEntity) || 1
+                        legalEntity: parseInt(item.legalEntity) || 1,
+                        TARA: item.TARA || false,
+                        taraSelected: item.taraSelected || false
                     }))
                 })
             })
@@ -453,6 +479,14 @@
         
         function goBack() {
             window.location.href = `/order_menu?user_id=${userId}`;
+        }
+        
+        // Функция для обновления состояния тары
+        function updateTara(index, checked) {
+            if (index >= 0 && index < cart.length) {
+                cart[index].taraSelected = checked;
+                sessionStorage.setItem('cart', JSON.stringify(cart));
+            }
         }
         
         // Запускаем проверку авторизации и отображаем корзину

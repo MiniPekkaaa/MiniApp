@@ -196,7 +196,16 @@
                 filteredProducts.forEach(product => {
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
-                    item.innerHTML = `${product.name} (${product.volume}л - ${product.price}₽)`;
+                    
+                    // Выводим объем только если он больше нуля
+                    let displayText = '';
+                    if (product.volume > 0) {
+                        displayText = `${product.name} (${product.volume}л - ${product.price}₽)`;
+                    } else {
+                        displayText = `${product.name} (${product.price}₽)`;
+                    }
+                    
+                    item.textContent = displayText;
                     
                     item.addEventListener('click', () => {
                         selectedProduct = product;
@@ -254,7 +263,8 @@
                 volume: parseFloat(selectedProduct.volume),
                 price: parseInt(selectedProduct.price),
                 legalEntity: parseInt(selectedProduct.legalEntity),
-                quantity: quantity
+                quantity: quantity,
+                TARA: selectedProduct.TARA === true
             };
             
             const existingItemIndex = cart.findIndex(item => 

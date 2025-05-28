@@ -139,7 +139,8 @@ def products():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'price': int(product.get('price', 0) or 0),
-                'legalEntity': int(product.get('legalEntity', 1) or 1)
+                'legalEntity': int(product.get('legalEntity', 1) or 1),
+                'TARA': bool(product.get('TARA', False))
             }
             formatted_products.append(formatted_product)
             logger.debug(f"Formatted product: {formatted_product}")
@@ -177,7 +178,8 @@ def add_product():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'price': int(product.get('price', 0) or 0),
-                'legalEntity': int(product.get('legalEntity', 1) or 1)
+                'legalEntity': int(product.get('legalEntity', 1) or 1),
+                'TARA': bool(product.get('TARA', False))
             }
             formatted_products.append(formatted_product)
 
@@ -204,7 +206,8 @@ def get_products():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'price': int(product.get('price', 0) or 0),
-                'legalEntity': int(product.get('legalEntity', 1) or 1)
+                'legalEntity': int(product.get('legalEntity', 1) or 1),
+                'TARA': bool(product.get('TARA', False))
             }
             formatted_products.append(formatted_product)
         
@@ -235,12 +238,16 @@ def create_order():
             beer_id = item.get('id')
             legal_entity = item.get('legalEntity')
             quantity = item.get('quantity')
+            tara = item.get('TARA')
+            tara_selected = item.get('taraSelected')
             
             positions[position_key] = {
                 'Beer_ID': int(beer_id) if beer_id is not None else 0,
                 'Beer_Name': item.get('name', ''),
                 'Legal_Entity': int(legal_entity) if legal_entity is not None else 1,
-                'Beer_Count': int(quantity) if quantity is not None else 0
+                'Beer_Count': int(quantity) if quantity is not None else 0,
+                'TARA': bool(tara),
+                'taraSelected': bool(tara_selected)
             }
 
         # Создаем заказ
@@ -283,7 +290,8 @@ def order_menu():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'price': int(product.get('price', 0) or 0),
-                'legalEntity': int(product.get('legalEntity', 1) or 1)
+                'legalEntity': int(product.get('legalEntity', 1) or 1),
+                'TARA': bool(product.get('TARA', False))
             }
             formatted_products.append(formatted_product)
             
