@@ -276,83 +276,118 @@
             const showMoreContainer = document.getElementById('show_more_container');
             const showMoreButton = document.getElementById('show_more_button');
             cartItems.innerHTML = '';
+            let total = 0;
             
             if (!Array.isArray(cart) || cart.length === 0) {
                 cartItems.innerHTML = '<p>Корзина пуста</p>';
                 showMoreContainer.style.display = 'none';
-                document.getElementById('total_amount').style.display = 'none';
+                document.getElementById('cart_total').style.display = 'none';
                 return;
             }
             
-            const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
+            // Формируем данные для запроса цен
+            const positions = cart.map(item => ({
+                ID_product: item.id,
+                Amount: item.quantity
+            }));
             
-            if (cart.length > 5) {
-                showMoreContainer.style.display = 'block';
-                showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
-            } else {
-                showMoreContainer.style.display = 'none';
-            }
+            // Получаем ID организации из локального хранилища
+            // или создаем функцию для запроса этой информации через API
+            getUserOrgData()
+                .then(userData => {
+                    // Отправляем запрос на расчет стоимости
+                    return calculatePrices({
+                        ID_customer: userData.customer_id,
+                        INN_legal_entity: userData.org_ID,
+                        positions: positions
+                    });
+                })
+                .then(priceData => {
+                    // Добавляем информацию о ценах в объекты корзины
+                    if (priceData && priceData.Korzina) {
+                        priceData.Korzina.forEach(priceItem => {
+                            const cartItem = cart.find(item => item.id === priceItem.ID_product);
+                            if (cartItem) {
+                                cartItem.price = priceItem.Price;
+                            }
+                        });
+                    }
+                    
+                    // Обновляем отображение корзины с ценами
+                    renderCartItems();
+                    
+                    // Устанавливаем общую сумму
+                    if (priceData && priceData.Summa) {
+                        document.getElementById('total_amount').textContent = priceData.Summa.toFixed(2);
+                        document.getElementById('cart_total').style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при получении цен:', error);
+                    // В случае ошибки отображаем товары без цен
+                    renderCartItems();
+                    document.getElementById('cart_total').style.display = 'none';
+                });
             
-            cart.forEach((item, index) => {
-                if (index >= itemsToShow) return;
+            function renderCartItems() {
+                const itemsToShow = showAll ? cart.length : Math.min(5, cart.length);
                 
-                const itemElement = document.createElement('div');
-                itemElement.className = 'cart-item';
-                
-                let itemHtml = `
-                    <div class="cart-item-info">
-                        <h3 class="cart-item-name">${item.name}</h3>
-                        <div class="cart-item-details">
-                            <p>Количество: ${item.quantity}</p>
-                        </div>`;
-                        
-                // Добавляем ползунок "Тара" в заголовок, если у позиции TARA = true
-                if (item.TARA === true) {
-                    itemHtml += `
-                        <div class="tara-toggle">
-                            <label>Тара:</label>
-                            <label class="switch">
-                                <input type="checkbox" id="tara-switch-${index}" onchange="updateTara(${index}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>`;
+                if (cart.length > 5) {
+                    showMoreContainer.style.display = 'block';
+                    showMoreButton.textContent = showAll ? 'Свернуть' : 'Показать все';
+                } else {
+                    showMoreContainer.style.display = 'none';
                 }
-                        
-                itemHtml += `
-                    </div>
-                    <div class="cart-item-controls">
-                        <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
-                        <div class="edit-volume-container">
-                            <button onclick="toggleQuantityEditor(this, ${index})" class="button">Изменить объем</button>
-                            <div class="quantity-editor">
-                                <div class="quantity-controls">
-                                    <button onclick="decrementEditorQuantity(this)" class="button">−</button>
-                                    <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
-                                    <button onclick="incrementEditorQuantity(this)" class="button">+</button>
-                                </div>
-                                <div style="display: flex; justify-content: center; gap: 8px;">
-                                    <button onclick="saveQuantity(this, ${index})" class="button button-confirm">✓</button>
-                                    <button onclick="cancelEditing(this)" class="button button-cancel">✕</button>
+                
+                cartItems.innerHTML = '';
+                let totalSum = 0;
+                
+                cart.forEach((item, index) => {
+                    if (index >= itemsToShow) return;
+                    
+                    const price = item.price || 0;
+                    const itemTotal = price * (parseInt(item.quantity) || 0);
+                    totalSum += itemTotal;
+                    
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'cart-item';
+                    
+                    itemElement.innerHTML = `
+                        <div class="cart-item-info">
+                            <h3 class="cart-item-name">${item.name}</h3>
+                            <div class="cart-item-details">
+                                <p>Количество: ${item.quantity}</p>
+                                <p>Цена: ${price.toFixed(2)}₽</p>
+                                <p>Сумма: ${itemTotal.toFixed(2)}₽</p>
+                            </div>
+                        </div>
+                        <div class="cart-item-controls">
+                            <button onclick="removeItem(${index})" class="button button-delete">Удалить</button>
+                            <div class="edit-volume-container">
+                                <button onclick="toggleQuantityEditor(this, ${index})" class="button">Изменить объем</button>
+                                <div class="quantity-editor">
+                                    <div class="quantity-controls">
+                                        <button onclick="decrementEditorQuantity(this)" class="button">−</button>
+                                        <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
+                                        <button onclick="incrementEditorQuantity(this)" class="button">+</button>
+                                    </div>
+                                    <div style="display: flex; justify-content: center; gap: 8px;">
+                                        <button onclick="saveQuantity(this, ${index})" class="button button-confirm">✓</button>
+                                        <button onclick="cancelEditing(this)" class="button button-cancel">✕</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                    
+                    cartItems.appendChild(itemElement);
+                });
                 
-                itemElement.innerHTML = itemHtml;
-                cartItems.appendChild(itemElement);
-                
-                // Устанавливаем начальное значение ползунка, если оно есть
-                if (item.TARA === true && item.taraSelected) {
-                    const switchElement = document.getElementById(`tara-switch-${index}`);
-                    if (switchElement) {
-                        switchElement.checked = item.taraSelected;
-                    }
+                // Если цен из API не получено, но нам нужно показать общую сумму
+                if (!document.getElementById('total_amount').textContent) {
+                    document.getElementById('total_amount').textContent = totalSum.toFixed(2);
                 }
-            });
-            
-            // Убираем отображение общей суммы
-            document.getElementById('total_amount').parentElement.style.display = 'none';
+            }
         }
         
         function toggleShowAll() {
@@ -440,8 +475,7 @@
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
                         legalEntity: parseInt(item.legalEntity) || 1,
-                        TARA: item.TARA || false,
-                        taraSelected: item.taraSelected || false
+                        price: item.price || 0
                     }))
                 })
             })
@@ -475,12 +509,39 @@
             window.location.href = `/order_menu?user_id=${userId}`;
         }
         
-        // Функция для обновления состояния тары
-        function updateTara(index, checked) {
-            if (index >= 0 && index < cart.length) {
-                cart[index].taraSelected = checked;
-                sessionStorage.setItem('cart', JSON.stringify(cart));
-            }
+        // Функция для получения данных организации пользователя
+        function getUserOrgData() {
+            return fetch(`/api/get-user-org-data?user_id=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error || 'Не удалось получить данные организации');
+                    }
+                    return data.data;
+                });
+        }
+
+        // Функция для расчета цен
+        function calculatePrices(requestData) {
+            return fetch('http://87.225.110.142:65531/uttest/hs/int/calculate_checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Basic ' + btoa('int2:pcKnE8GqXn')
+                },
+                body: JSON.stringify({
+                    DATE: Math.floor(Date.now() / 1000).toString(),
+                    ID_customer: requestData.ID_customer,
+                    INN_legal_entity: requestData.INN_legal_entity,
+                    positions: requestData.positions
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            });
         }
         
         // Запускаем проверку авторизации и отображаем корзину

@@ -235,16 +235,14 @@ def create_order():
             beer_id = item.get('id')
             legal_entity = item.get('legalEntity')
             quantity = item.get('quantity')
-            tara = item.get('TARA')
-            tara_selected = item.get('taraSelected')
+            price = item.get('price')
             
             positions[position_key] = {
                 'Beer_ID': int(beer_id) if beer_id is not None else 0,
                 'Beer_Name': item.get('name', ''),
                 'Legal_Entity': int(legal_entity) if legal_entity is not None else 1,
                 'Beer_Count': int(quantity) if quantity is not None else 0,
-                'TARA': bool(tara),
-                'taraSelected': bool(tara_selected)
+                'Price': float(price) if price is not None else 0
             }
 
         # Создаем заказ
@@ -391,14 +389,14 @@ def get_orders():
             for pos_key, pos_data in order.get('Positions', {}).items():
                 beer_id = str(pos_data.get('Beer_ID', ''))
                 quantity = pos_data.get('Beer_Count', 0) or 0
+                price = pos_data.get('Price', 0) or 0
 
                 positions.append({
                     'name': pos_data.get('Beer_Name', ''),
                     'quantity': quantity,
                     'id': beer_id,
                     'legal_entity': pos_data.get('Legal_Entity', 1) or 1,
-                    'TARA': pos_data.get('TARA', False),
-                    'taraSelected': pos_data.get('taraSelected', False)
+                    'price': price
                 })
 
             formatted_order = {
@@ -438,14 +436,14 @@ def get_order():
         for pos_key, pos_data in order.get('Positions', {}).items():
             beer_id = str(pos_data.get('Beer_ID', ''))
             quantity = pos_data.get('Beer_Count', 0) or 0
+            price = pos_data.get('Price', 0) or 0
 
             positions.append({
                 'name': pos_data.get('Beer_Name', ''),
                 'quantity': quantity,
                 'id': beer_id,
                 'legal_entity': pos_data.get('Legal_Entity', 1) or 1,
-                'TARA': pos_data.get('TARA', False),
-                'taraSelected': pos_data.get('taraSelected', False)
+                'price': price
             })
             
         # Форматируем дату
@@ -577,6 +575,40 @@ def update_coefficient():
     except Exception as e:
         logger.error(f"Error updating coefficient: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/get-user-org-data')
+def get_user_org_data():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User ID is required'}), 400
+
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        if not user_data:
+            return jsonify({'success': False, 'error': 'User not found in Redis'}), 404
+
+        org_id = user_data.get('org_ID')
+        customer_id = user_data.get('customer_id', '')
+        
+        if not org_id:
+            return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
+
+        # Возвращаем данные организации
+        return jsonify({
+            'success': True,
+            'data': {
+                'org_ID': org_id,
+                'customer_id': customer_id,
+                'organization': user_data.get('organization', '')
+            }
+        })
+    except Exception as e:
+        logger.error(f'Error getting user organization data: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to get user organization data'
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
