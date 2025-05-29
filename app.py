@@ -790,6 +790,13 @@ def create_1c_order():
         if not organization_id:
             organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
             
+        # Получаем информацию о каталоге товаров
+        catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1}))
+        catalog_uid_map = {}
+        for item in catalog_items:
+            if 'id' in item and 'UID' in item and item.get('UID'):
+                catalog_uid_map[str(item.get('id', ''))] = item.get('UID')
+            
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
         for item in data.get('items', []):
@@ -813,26 +820,39 @@ def create_1c_order():
             positions = []
             valid_items = []
             for item in items:
-                uid = item.get('uid')  # ID продукта в 1С (UID)
+                # Получаем UID товара
+                uid = item.get('uid')
+                item_id = item.get('id')
                 
-                # Проверяем наличие UID
-                if uid is not None and str(uid).strip():
-                    positions.append({
-                        "ID_product": uid,
-                        "Amount": int(item.get('quantity', 0))
-                    })
-                    valid_items.append(item)
-                else:
-                    logger.warning(f"Товар без UID не будет добавлен в заказ: {item.get('name', 'Неизвестный товар')}")
+                # Если UID отсутствует, пытаемся найти его в каталоге
+                if uid is None or not str(uid).strip():
+                    if item_id and str(item_id) in catalog_uid_map:
+                        uid = catalog_uid_map[str(item_id)]
+                        logger.info(f"Найден UID в каталоге для товара {item.get('name')}: {uid}")
+                    else:
+                        # Если UID не найден в каталоге, используем ID в качестве запасного варианта
+                        uid = item_id
+                        logger.warning(f"Используем ID в качестве UID для товара {item.get('name')}: {uid}")
+                
+                # Если всё еще нет UID или ID, пропускаем товар
+                if uid is None or not str(uid).strip():
+                    logger.warning(f"Товар без UID и ID не будет добавлен в заказ: {item.get('name', 'Неизвестный товар')}")
+                    continue
+                    
+                positions.append({
+                    "ID_product": str(uid),
+                    "Amount": int(item.get('quantity', 0))
+                })
+                valid_items.append(item)
             
-            # Проверяем, есть ли товары с действительными UID
+            # Проверяем, есть ли товары с действительными UID или ID
             if not positions:
-                logger.warning(f"Нет товаров с действительными UID для legalEntity {legal_entity}")
+                logger.warning(f"Нет товаров с действительными UID или ID для legalEntity {legal_entity}")
                 # Добавляем информацию о заказе, даже если не смогли его создать
                 orders_results.append({
                     "legalEntity": legal_entity,
                     "items": items,
-                    "order": {"error": "Нет товаров с действительными UID"},
+                    "order": {"error": "Нет товаров с действительными UID или ID"},
                     "success": False
                 })
                 continue

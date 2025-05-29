@@ -688,6 +688,8 @@
                             console.log(`Найден UID для товара ${item.name} (ID: ${item.id}): ${uid}`);
                         } else {
                             console.warn(`Не найден UID для товара ${item.name} (ID: ${item.id})`);
+                            // Если UID не найден, будем использовать ID в качестве запасного варианта
+                            // Сервер будет использовать ID, если UID отсутствует
                         }
                         
                         // Определяем legalEntity (обычно должно быть предустановлено в товаре)
@@ -703,13 +705,13 @@
                         };
                     });
                     
-                    // Проверяем, есть ли товары с UID
-                    const itemsWithUID = items.filter(item => item.uid !== null);
-                    if (itemsWithUID.length === 0) {
-                        hideNotification();
-                        tg.showAlert("Ни один товар не имеет UID. Невозможно создать заказ.");
-                        return Promise.reject(new Error("Товары без UID"));
-                    }
+                    // Отключаем проверку на UID - теперь заказы будут создаваться даже без UID
+                    // const itemsWithUID = items.filter(item => item.uid !== null);
+                    // if (itemsWithUID.length === 0) {
+                    //     hideNotification();
+                    //     tg.showAlert("Ни один товар не имеет UID. Невозможно создать заказ.");
+                    //     return Promise.reject(new Error("Товары без UID"));
+                    // }
                     
                     console.log('Отправляем данные для создания заказа:', items);
                     
