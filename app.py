@@ -792,10 +792,23 @@ def create_1c_order():
             
         # Получаем информацию о каталоге товаров
         catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1}))
-        catalog_uid_map = {}
+        
+        # Создаем словари сопоставлений для поиска UID
+        catalog_uid_by_id = {}      # ID -> UID
+        catalog_uid_by_name = {}    # name -> UID
+        
         for item in catalog_items:
-            if 'id' in item and 'UID' in item and item.get('UID'):
-                catalog_uid_map[str(item.get('id', ''))] = item.get('UID')
+            if 'UID' in item and item.get('UID'):
+                # Сопоставление по ID
+                if 'id' in item and item.get('id') is not None:
+                    catalog_uid_by_id[str(item.get('id', ''))] = item.get('UID')
+                
+                # Сопоставление по имени
+                if 'name' in item and item.get('name'):
+                    catalog_uid_by_name[item.get('name')] = item.get('UID')
+        
+        logger.debug(f"Создано {len(catalog_uid_by_id)} сопоставлений ID->UID")
+        logger.debug(f"Создано {len(catalog_uid_by_name)} сопоставлений name->UID")
             
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
@@ -823,16 +836,29 @@ def create_1c_order():
                 # Получаем UID товара
                 uid = item.get('uid')
                 item_id = item.get('id')
+                item_name = item.get('name')
                 
                 # Если UID отсутствует, пытаемся найти его в каталоге
                 if uid is None or not str(uid).strip():
-                    if item_id and str(item_id) in catalog_uid_map:
-                        uid = catalog_uid_map[str(item_id)]
-                        logger.info(f"Найден UID в каталоге для товара {item.get('name')}: {uid}")
-                    else:
-                        # Если UID не найден в каталоге, используем ID в качестве запасного варианта
-                        uid = item_id
-                        logger.warning(f"Используем ID в качестве UID для товара {item.get('name')}: {uid}")
+                    # Сначала ищем по ID
+                    if item_id and str(item_id) in catalog_uid_by_id:
+                        uid = catalog_uid_by_id[str(item_id)]
+                        logger.info(f"Найден UID по ID в каталоге для товара {item_name}: {uid}")
+                    # Если не нашли по ID, ищем по имени
+                    elif item_name and item_name in catalog_uid_by_name:
+                        uid = catalog_uid_by_name[item_name]
+                        logger.info(f"Найден UID по имени в каталоге для товара {item_name}: {uid}")
+                    # Если не нашли ни по ID, ни по имени, делаем прямой запрос в MongoDB
+                    elif item_name:
+                        # Ищем товар в MongoDB по имени
+                        catalog_item = mongo.cx.Pivo.catalog.find_one({'name': item_name})
+                        if catalog_item and 'UID' in catalog_item and catalog_item['UID']:
+                            uid = catalog_item['UID']
+                            logger.info(f"Найден UID через прямой запрос в MongoDB для товара {item_name}: {uid}")
+                        else:
+                            # Если все еще не нашли, используем ID в качестве запасного варианта
+                            uid = item_id
+                            logger.warning(f"Используем ID в качестве UID для товара {item_name}: {uid}")
                 
                 # Если всё еще нет UID или ID, пропускаем товар
                 if uid is None or not str(uid).strip():
