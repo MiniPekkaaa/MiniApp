@@ -688,8 +688,19 @@
                             console.log(`Найден UID для товара ${item.name} (ID: ${item.id}): ${uid}`);
                         } else {
                             console.warn(`Не найден UID для товара ${item.name} (ID: ${item.id})`);
-                            // Если UID не найден, сервер будет искать его по имени товара
-                            console.log(`Сервер попытается найти UID по имени товара: ${item.name}`);
+                            // Ищем в каталоге по другим полям, если есть
+                            if (window.initialProducts) {
+                                const catalogItem = window.initialProducts.find(p => p.id === item.id);
+                                if (catalogItem && catalogItem.UID) {
+                                    uid = catalogItem.UID;
+                                    console.log(`Найден UID в каталоге для товара ${item.name}: ${uid}`);
+                                }
+                            }
+                        }
+                        
+                        // Если UID так и не найден, добавляем особое логирование
+                        if (!uid) {
+                            console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
                         }
                         
                         // Определяем legalEntity (обычно должно быть предустановлено в товаре)
@@ -698,7 +709,7 @@
                         // Всегда передаем name, так как сервер может найти UID по имени
                         return {
                             id: item.id,
-                            uid: uid,
+                            uid: uid, // Передаем UID строкой, даже если null
                             name: item.name || "Неизвестный товар", // Гарантируем, что name всегда есть
                             quantity: parseInt(item.quantity),
                             price: parseFloat(item.price) || 0,
@@ -706,7 +717,7 @@
                         };
                     });
                     
-                    console.log('Отправляем данные для создания заказа:', items);
+                    console.log('Подготовлены товары для заказа:', JSON.stringify(items, null, 2));
                     
                     // Отправляем запрос на создание заказа в 1С
                     return fetch('/api/create-1c-order', {

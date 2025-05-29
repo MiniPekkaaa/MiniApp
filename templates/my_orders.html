@@ -257,11 +257,27 @@
         .order-1c-info p {
             margin: 0;
         }
+
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #5288c1;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div id="loading" class="hidden">
-        Загрузка...
+        <div class="loader"></div>
+        <div style="margin-top: 20px;">Загрузка заказов...</div>
     </div>
 
     <div id="content">
@@ -380,37 +396,122 @@
             }
         }
 
+        function showLoading() {
+            document.getElementById('loading').classList.add('visible');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('content').classList.add('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('visible');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('content').classList.remove('hidden');
+        }
+
         function loadOrders() {
             showLoading();
             
-            // Загружаем заказы из MongoDB
-            fetch(`/api/get-orders?user_id=${userId}`)
+            // Загружаем заказы из 1С
+            fetch(`/api/get-orders-from-1c?user_id=${userId}`)
                 .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    if (data.success) {
-                        displayOrdersFromMongo(data.orders);
-                    } else {
-                        console.error('Error loading orders:', data.error);
-                        document.getElementById('orders-list').innerHTML = `
-                            <div class="no-orders">
-                                <p>Не удалось загрузить заказы: ${data.error}</p>
-                            </div>
-                        `;
+                .then(data1C => {
+                    console.log('Получены данные из 1С:', data1C);
+                    
+                    if (!data1C.success) {
+                        console.error('Ошибка при получении данных из 1С:', data1C.error);
+                        throw new Error(data1C.error || 'Ошибка при получении данных из 1С');
                     }
+                    
+                    // Затем загружаем заказы из MongoDB
+                    return fetch(`/api/get-orders?user_id=${userId}`)
+                        .then(response => response.json())
+                        .then(dataMongo => {
+                            console.log('Получены данные из MongoDB:', dataMongo);
+                            
+                            if (!dataMongo.success) {
+                                console.error('Ошибка при получении данных из MongoDB:', dataMongo.error);
+                                throw new Error(dataMongo.error || 'Ошибка при получении данных из MongoDB');
+                            }
+                            
+                            // Объединяем данные из 1С и MongoDB
+                            return { 
+                                orders1C: data1C.orders,
+                                ordersMongo: dataMongo.orders
+                            };
+                        });
+                })
+                .then(combinedData => {
+                    // Комбинируем данные из 1С и MongoDB
+                    const matchedOrders = matchOrdersFromBothSources(combinedData.orders1C, combinedData.ordersMongo);
+                    hideLoading();
+                    displayMatchedOrders(matchedOrders);
                 })
                 .catch(error => {
                     hideLoading();
-                    console.error('Error fetching orders:', error);
+                    console.error('Ошибка при загрузке заказов:', error);
                     document.getElementById('orders-list').innerHTML = `
                         <div class="no-orders">
-                            <p>Не удалось загрузить заказы</p>
+                            <p>Не удалось загрузить заказы: ${error.message}</p>
                         </div>
                     `;
                 });
         }
-
-        function displayOrdersFromMongo(orders) {
+        
+        // Функция для сопоставления заказов из 1С и MongoDB
+        function matchOrdersFromBothSources(orders1C, ordersMongo) {
+            const matchedOrders = [];
+            const processedMongoIds = new Set();
+            
+            console.log(`Обработка ${orders1C.length} заказов из 1С и ${ordersMongo.length} заказов из MongoDB`);
+            
+            // Перебираем заказы из 1С
+            for (const order1C of orders1C) {
+                // Получаем ID заказа из 1С
+                const orderId1C = order1C.ID_ORDER;
+                console.log(`Обработка заказа из 1С с ID: ${orderId1C}`);
+                
+                // Ищем соответствующий заказ в MongoDB по ordersUID
+                const matchedMongoOrder = ordersMongo.find(orderMongo => {
+                    if (!orderMongo.ordersUID) return false;
+                    
+                    // Проверяем все UID в заказе MongoDB
+                    for (const [key, uid] of Object.entries(orderMongo.ordersUID)) {
+                        if (uid === orderId1C) {
+                            console.log(`Найдено соответствие: заказ из 1С ${orderId1C} связан с заказом из MongoDB ${orderMongo.order_ID}`);
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+                
+                if (matchedMongoOrder) {
+                    // Если нашли соответствие, добавляем комбинированный заказ
+                    console.log(`Добавляем комбинированный заказ: MongoDB ID ${matchedMongoOrder.order_ID}`);
+                    
+                    // Добавляем информацию из 1С к заказу из MongoDB
+                    const combinedOrder = {
+                        ...matchedMongoOrder,
+                        order1C: order1C
+                    };
+                    
+                    matchedOrders.push(combinedOrder);
+                    processedMongoIds.add(matchedMongoOrder.order_ID);
+                }
+            }
+            
+            // Добавляем оставшиеся заказы из MongoDB, которые не были сопоставлены
+            for (const orderMongo of ordersMongo) {
+                if (!processedMongoIds.has(orderMongo.order_ID)) {
+                    console.log(`Добавляем заказ только из MongoDB: ID ${orderMongo.order_ID}`);
+                    matchedOrders.push(orderMongo);
+                }
+            }
+            
+            console.log(`Итого создано ${matchedOrders.length} комбинированных заказов`);
+            return matchedOrders;
+        }
+        
+        function displayMatchedOrders(orders) {
             const ordersList = document.getElementById('orders-list');
             
             if (!orders || orders.length === 0) {
@@ -422,6 +523,13 @@
                 return;
             }
             
+            // Сортируем заказы по дате (от новых к старым)
+            orders.sort((a, b) => {
+                const dateA = new Date(a.created_at || '2000-01-01');
+                const dateB = new Date(b.created_at || '2000-01-01');
+                return dateB - dateA;
+            });
+            
             let ordersHTML = '';
             
             orders.forEach((order, index) => {
@@ -430,11 +538,13 @@
                 
                 // Считаем общую сумму заказа
                 let totalPrice = 0;
-                order.positions.forEach(position => {
-                    const price = parseFloat(position.price) || 0;
-                    const quantity = parseInt(position.quantity) || 0;
-                    totalPrice += price * quantity;
-                });
+                if (order.positions && Array.isArray(order.positions)) {
+                    order.positions.forEach(position => {
+                        const price = parseFloat(position.price) || 0;
+                        const quantity = parseInt(position.quantity) || 0;
+                        totalPrice += price * quantity;
+                    });
+                }
                 
                 // Отображаем информацию о заказах в 1С, если есть
                 let ordersUIDInfo = '';
@@ -442,6 +552,16 @@
                     ordersUIDInfo = `
                         <div class="order-1c-info">
                             <p>Заказы в 1С: ${Object.keys(order.ordersUID).length}</p>
+                        </div>
+                    `;
+                }
+                
+                // Добавляем дополнительную информацию из 1С, если есть
+                let order1CInfo = '';
+                if (order.order1C) {
+                    order1CInfo = `
+                        <div class="order-1c-info">
+                            <p>Номер заказа в 1С: ${order.order1C.NOMER_ORDER || 'Не указан'}</p>
                         </div>
                     `;
                 }
@@ -457,6 +577,7 @@
                             <div>Сумма: ${totalPrice.toFixed(2)}₽</div>
                         </div>
                         ${ordersUIDInfo}
+                        ${order1CInfo}
                         <button class="toggle-details" onclick="toggleOrderDetails(${index})">Подробнее</button>
                         <div id="order-details-${index}" class="order-details">
                             ${generateProductsHTMLFromMongo(order.positions || [])}

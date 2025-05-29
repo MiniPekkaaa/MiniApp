@@ -1095,29 +1095,81 @@ def get_orders_from_1c():
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 404
             
+        logger.debug(f"Получение истории заказов из 1С для организации: {org_id}")
+        
         # Получаем историю заказов из 1С используя новый эндпоинт
         try:
+            api_url = f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}'
+            logger.debug(f"Отправка запроса: GET {api_url}")
+            
             response = requests.get(
-                f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}',
+                api_url,
                 auth=('int2', 'pcKnE8GqXn'),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
             
             logger.debug(f"Статус ответа от API истории заказов: {response.status_code}")
-            logger.debug(f"Ответ от API истории заказов: {response.text[:200]}...")
+            logger.debug(f"Ответ от API истории заказов (первые 200 символов): {response.text[:200]}...")
             
             if response.status_code != 200:
                 logger.error(f"Ошибка API истории заказов: {response.status_code}, {response.text}")
                 return jsonify({"error": f"API error: {response.status_code}"}), 500
                 
-            # Преобразуем ответ в JSON
+            # Обработка ответа
             try:
-                orders_data = response.json()
-                logger.debug(f"Данные истории заказов: {orders_data}")
+                # Проверяем содержимое ответа
+                response_text = response.text.strip()
+                
+                # Если ответ пустой
+                if not response_text:
+                    logger.warning("Получен пустой ответ от API")
+                    return jsonify({"success": True, "orders": []})
+                
+                # Если ответ начинается с "[{\n"
+                if response_text.startswith('[{\\n'):
+                    logger.debug("Ответ содержит экранированный JSON. Выполняем специальную обработку")
+                    
+                    # Заменяем экранированные символы
+                    clean_text = response_text.replace('\\n', ' ').replace('\\', '')
+                    
+                    # Преобразуем в JSON
+                    try:
+                        import json
+                        orders_data = json.loads(clean_text)
+                        logger.debug(f"Успешно обработан экранированный JSON. Найдено заказов: {len(orders_data)}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Ошибка декодирования JSON после очистки: {str(e)}")
+                        
+                        # Альтернативный подход - использовать ast.literal_eval
+                        try:
+                            import ast
+                            # Заменяем одинарные кавычки на двойные
+                            cleaned_for_ast = clean_text.replace("'", '"')
+                            orders_data = ast.literal_eval(cleaned_for_ast)
+                            logger.debug(f"Успешно обработан с помощью ast.literal_eval. Найдено заказов: {len(orders_data)}")
+                        except Exception as ast_error:
+                            logger.error(f"Ошибка обработки с помощью ast: {str(ast_error)}")
+                            return jsonify({"error": f"Не удалось обработать ответ: {str(e)}, {str(ast_error)}"}), 500
+                else:
+                    # Обычный JSON
+                    try:
+                        orders_data = response.json()
+                        logger.debug(f"Успешно обработан стандартный JSON. Найдено заказов: {len(orders_data)}")
+                    except Exception as e:
+                        logger.error(f"Ошибка декодирования стандартного JSON: {str(e)}")
+                        return jsonify({"error": f"Не удалось обработать ответ: {str(e)}"}), 500
+                
+                # Проверяем, что данные правильно обработаны
+                if not isinstance(orders_data, list):
+                    logger.error(f"Ответ не является списком: {type(orders_data)}")
+                    return jsonify({"error": "Неверный формат данных (ожидался список)"}), 500
+                
+                # Отдаем данные клиенту
                 return jsonify({"success": True, "orders": orders_data})
+                
             except Exception as e:
-                logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
+                logger.error(f"Общая ошибка при обработке ответа API: {str(e)}", exc_info=True)
                 return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
                 
         except requests.exceptions.RequestException as e:
@@ -1150,13 +1202,16 @@ def save_combined_order():
         # Перебираем все товары из корзины
         for index, item in enumerate(data.get('items', []), 1):
             position_key = f"Position_{index}"
+            # Используем тот же UID, что и при запросе цен
+            uid = item.get('uid') or None
+            
             all_positions[position_key] = {
                 'Beer_ID': item.get('id'),
                 'Beer_Name': item.get('name', ''),
                 'Legal_Entity': item.get('legalEntity'),
                 'Beer_Count': int(item.get('quantity', 0)),
                 'Price': float(item.get('price', 0)),
-                'UID': item.get('uid')
+                'UID': uid
             }
         
         # Формируем словарь ordersUID из успешно созданных заказов в 1С
@@ -1176,9 +1231,8 @@ def save_combined_order():
         current_time = datetime.now(timezone)
         formatted_date = current_time.strftime("%d.%m.%y %H:%M")
         
-        # Создаем единый заказ
+        # Создаем единый заказ (без поля status)
         combined_order = {
-            'status': "Новый",
             'date': formatted_date,
             'userid': str(user_id),
             'username': user_data.get('organization', 'ООО Пивной мир'),
