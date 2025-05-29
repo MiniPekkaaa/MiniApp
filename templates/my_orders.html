@@ -265,15 +265,10 @@
             document.getElementById('content').classList.add('hidden');
         }
 
-        function toggleOrderDetails(orderId) {
-            const details = document.getElementById(`order-details-${orderId}`);
-            const button = document.getElementById(`toggle-button-${orderId}`);
-            if (details.classList.contains('show')) {
-                details.classList.remove('show');
-                button.textContent = 'Состав заказа ▼';
-            } else {
-                details.classList.add('show');
-                button.textContent = 'Состав заказа ▲';
+        function toggleOrderDetails(index) {
+            const detailsElement = document.getElementById(`order-details-${index}`);
+            if (detailsElement) {
+                detailsElement.classList.toggle('show');
             }
         }
 
@@ -330,104 +325,240 @@
         }
 
         function loadOrders() {
-            hideContent();
+            showLoading();
             
-            fetch(`/api/get-orders?user_id=${userId}`)
+            // Загружаем заказы из 1С
+            fetch(`/api/get-orders-from-1c?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data => {
-                    const ordersList = document.getElementById('orders-list');
-                    ordersList.innerHTML = '';
-
-                    if (!data.orders || data.orders.length === 0) {
-                        ordersList.innerHTML = '<div class="no-orders">У вас пока нет заказов</div>';
-                        showContent();
-                        return;
-                    }
-
-                    data.orders.forEach(order => {
-                        const orderCard = document.createElement('div');
-                        orderCard.className = 'order-card';
-
-                        orderCard.innerHTML = `
-                            <div class="order-header">
-                                <span class="order-date">Дата заказа: ${order.created_at}</span>
-                                <span class="order-status">${order.status || 'in work'}</span>
+                    hideLoading();
+                    if (data.success) {
+                        displayOrders(data.orders);
+                    } else {
+                        console.error('Error loading orders:', data.error);
+                        document.getElementById('orders-list').innerHTML = `
+                            <div class="no-orders">
+                                <p>Не удалось загрузить заказы: ${data.error}</p>
                             </div>
-                            <div class="order-info">
-                                <span>Количество позиций: ${order.positions.length}</span>
-                                <span>Сумма: ${order.total_amount} ₽</span>
-                            </div>
-                            <button class="toggle-details" id="toggle-button-${order.created_at}" 
-                                    onclick="toggleOrderDetails('${order.created_at}')">
-                                Состав заказа ▼
-                            </button>
-                            <div class="order-details" id="order-details-${order.created_at}">
-                                ${order.positions.map(pos => `
-                                    <div class="product-item">
-                                        <span>${pos.name}</span>
-                                        <span>${pos.quantity} шт.</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <button class="repeat-order" onclick="repeatOrder('${order.created_at}')">
-                                Повторить заказ
-                            </button>
-                            ${order.status === 'Новый' ? `
-                                <button class="cancel-order" onclick="showDialog()">
-                                    Отменить заказ
-                                </button>
-                            ` : ''}
                         `;
-                        
-                        ordersList.appendChild(orderCard);
-                    });
-                    
-                    showContent();
+                    }
                 })
                 .catch(error => {
-                    console.error('Ошибка при загрузке заказов:', error);
-                    const ordersList = document.getElementById('orders-list');
-                    ordersList.innerHTML = '<div class="no-orders">Ошибка при загрузке заказов</div>';
-                    showContent();
+                    hideLoading();
+                    console.error('Error fetching orders:', error);
+                    document.getElementById('orders-list').innerHTML = `
+                        <div class="no-orders">
+                            <p>Не удалось загрузить заказы</p>
+                        </div>
+                    `;
                 });
         }
 
-        async function repeatOrder(orderDate) {
-            hideContent();
+        function displayOrders(orders) {
+            const ordersList = document.getElementById('orders-list');
             
-            try {
-                // Находим заказ по дате
-                const response = await fetch(`/api/get-orders?user_id=${userId}`);
-                const data = await response.json();
-                
-                if (!data.success || !data.orders) {
-                    throw new Error('Не удалось получить список заказов');
-                }
-
-                // Ищем нужный заказ по дате
-                const order = data.orders.find(o => o.created_at === orderDate);
-                if (!order) {
-                    throw new Error('Заказ не найден');
-                }
-
-                // Сохраняем позиции в корзину
-                const cart = order.positions.map(pos => ({
-                    id: pos.id,
-                    name: pos.name,
-                    quantity: pos.quantity,
-                    price: pos.price,
-                    legalEntity: pos.legal_entity
-                }));
-                
-                sessionStorage.setItem('cart', JSON.stringify(cart));
-                
-                // Переходим в корзину
-                window.location.href = `/cart?user_id=${userId}`;
-            } catch (error) {
-                console.error('Ошибка при повторении заказа:', error);
-                tg.showAlert('Ошибка при повторении заказа: ' + error.message);
-                showContent();
+            if (!orders || orders.length === 0) {
+                ordersList.innerHTML = `
+                    <div class="no-orders">
+                        <p>У вас пока нет заказов</p>
+                    </div>
+                `;
+                return;
             }
+            
+            // Сортируем заказы по дате (от новых к старым)
+            orders.sort((a, b) => {
+                // Предполагаем, что даты в формате ДД.ММ.ГГ ЧЧ:ММ
+                const dateA = parseOrderDate(a.DATE);
+                const dateB = parseOrderDate(b.DATE);
+                return dateB - dateA;
+            });
+            
+            let ordersHTML = '';
+            
+            orders.forEach((order, index) => {
+                const date = formatOrderDate(order.DATE);
+                const status = getOrderStatus(order.STATUS);
+                const totalPrice = calculateOrderTotal(order);
+                
+                ordersHTML += `
+                    <div class="order-card">
+                        <div class="order-header">
+                            <div class="order-date">Заказ от ${date}</div>
+                            <div class="order-status">${status}</div>
+                        </div>
+                        <div class="order-info">
+                            <div>Номер заказа: ${order.NOMER || 'Не указан'}</div>
+                            <div>Сумма: ${totalPrice.toFixed(2)}₽</div>
+                        </div>
+                        <button class="toggle-details" onclick="toggleOrderDetails(${index})">Подробнее</button>
+                        <div id="order-details-${index}" class="order-details">
+                            ${generateProductsHTML(order.POSITIONS || [])}
+                        </div>
+                        <button class="repeat-order" onclick="repeatOrder(${index})">Повторить заказ</button>
+                    </div>
+                `;
+            });
+            
+            ordersList.innerHTML = ordersHTML;
+            
+            // Сохраняем заказы в глобальной переменной для последующего использования
+            window.ordersData = orders;
+        }
+
+        function generateProductsHTML(positions) {
+            if (!positions || positions.length === 0) {
+                return '<p>Нет информации о товарах</p>';
+            }
+            
+            let productsHTML = '';
+            
+            positions.forEach(position => {
+                productsHTML += `
+                    <div class="product-item">
+                        <div>${position.NAME || 'Товар'} (${position.AMOUNT || 0} шт.)</div>
+                        <div>${position.PRICE ? (position.PRICE * position.AMOUNT).toFixed(2) : '0.00'}₽</div>
+                    </div>
+                `;
+            });
+            
+            return productsHTML;
+        }
+
+        function parseOrderDate(dateStr) {
+            // Конвертирует строку даты в объект Date
+            if (!dateStr) return new Date(0);
+            
+            // Проверяем, timestamp ли это
+            if (!isNaN(dateStr) && dateStr.length > 8) {
+                return new Date(parseInt(dateStr) * 1000);
+            }
+            
+            // Формат: ДД.ММ.ГГ ЧЧ:ММ
+            const parts = dateStr.split(' ');
+            if (parts.length !== 2) return new Date(0);
+            
+            const dateParts = parts[0].split('.');
+            const timeParts = parts[1].split(':');
+            
+            if (dateParts.length !== 3 || timeParts.length !== 2) return new Date(0);
+            
+            const day = parseInt(dateParts[0]);
+            const month = parseInt(dateParts[1]) - 1; // Месяцы в JS начинаются с 0
+            const year = 2000 + parseInt(dateParts[2]); // Предполагаем, что год двузначный
+            const hour = parseInt(timeParts[0]);
+            const minute = parseInt(timeParts[1]);
+            
+            return new Date(year, month, day, hour, minute);
+        }
+
+        function formatOrderDate(dateStr) {
+            if (!dateStr) return 'Неизвестно';
+            
+            // Если это timestamp
+            if (!isNaN(dateStr) && dateStr.length > 8) {
+                const date = new Date(parseInt(dateStr) * 1000);
+                return date.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            
+            return dateStr;
+        }
+
+        function getOrderStatus(status) {
+            if (!status) return 'В обработке';
+            
+            const statusMap = {
+                'NEW': 'Новый',
+                'ACCEPTED': 'Принят',
+                'PROCESSING': 'В обработке',
+                'SHIPPED': 'Отправлен',
+                'COMPLETED': 'Выполнен',
+                'CANCELLED': 'Отменен'
+            };
+            
+            return statusMap[status] || status;
+        }
+
+        function calculateOrderTotal(order) {
+            if (!order.POSITIONS || !Array.isArray(order.POSITIONS)) {
+                return 0;
+            }
+            
+            return order.POSITIONS.reduce((total, position) => {
+                const price = parseFloat(position.PRICE) || 0;
+                const amount = parseInt(position.AMOUNT) || 0;
+                return total + (price * amount);
+            }, 0);
+        }
+
+        function repeatOrder(index) {
+            showLoading();
+            
+            // Получаем данные заказа из сохраненного массива
+            const order = window.ordersData[index];
+            
+            if (!order || !order.POSITIONS || !Array.isArray(order.POSITIONS)) {
+                tg.showAlert('Не удалось повторить заказ: нет данных о товарах');
+                hideLoading();
+                return;
+            }
+            
+            // Создаем временную корзину с товарами из заказа
+            const cartItems = [];
+            
+            // Загружаем каталог товаров для получения актуальных данных о товарах
+            fetch(`/api/products?user_id=${userId}`)
+                .then(response => response.json())
+                .then(products => {
+                    // Для каждой позиции в заказе ищем соответствующий товар в каталоге
+                    order.POSITIONS.forEach(position => {
+                        // Ищем товар по ID (предполагаем, что ID_product соответствует id товара в каталоге)
+                        const product = products.find(p => p.id === position.ID_product);
+                        
+                        if (product) {
+                            cartItems.push({
+                                id: product.id,
+                                name: product.name,
+                                fullName: product.fullName,
+                                volume: product.volume,
+                                legalEntity: product.legalEntity,
+                                TARA: product.TARA,
+                                quantity: position.AMOUNT || 1,
+                                price: position.PRICE || 0
+                            });
+                        }
+                    });
+                    
+                    // Если не удалось найти товары, используем данные из заказа
+                    if (cartItems.length === 0) {
+                        order.POSITIONS.forEach(position => {
+                            cartItems.push({
+                                id: position.ID_product,
+                                name: position.NAME || 'Товар',
+                                quantity: position.AMOUNT || 1,
+                                price: position.PRICE || 0,
+                                legalEntity: 2724132975 // Значение по умолчанию
+                            });
+                        });
+                    }
+                    
+                    // Сохраняем корзину в sessionStorage
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    
+                    // Перенаправляем на страницу корзины
+                    window.location.href = `/cart?user_id=${userId}`;
+                })
+                .catch(error => {
+                    console.error('Ошибка при повторении заказа:', error);
+                    tg.showAlert('Не удалось повторить заказ');
+                    hideLoading();
+                });
         }
 
         function goBack() {

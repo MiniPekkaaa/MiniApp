@@ -708,5 +708,237 @@ def calculate_prices():
         logger.error(f"Ошибка при расчете цен: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/create-1c-order', methods=['POST'])
+def create_1c_order():
+    try:
+        logger.debug("Получен запрос на создание заказа в 1С")
+        data = request.json
+        user_id = data.get('userId')
+        
+        if not user_id or not check_user_registration(user_id):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        logger.debug(f"Данные заказа: {data}")
+
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        
+        # Получаем информацию об организации из MongoDB для получения organizationId
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 404
+            
+        org_info = mongo.cx.Pivo.organizations.find_one({'_id': org_id})
+        if not org_info:
+            logger.warning(f"Организация с ID {org_id} не найдена в MongoDB")
+            organization_id = ""
+        else:
+            organization_id = org_info.get('organizationId', '')
+            logger.debug(f"Найден organizationId: {organization_id} для org_ID: {org_id}")
+            
+        # Если нет organization_id, используем значение по умолчанию
+        if not organization_id:
+            organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
+            
+        # Группируем товары по legalEntity
+        items_by_legal_entity = {}
+        for item in data.get('items', []):
+            legal_entity = item.get('legalEntity')
+            if legal_entity not in items_by_legal_entity:
+                items_by_legal_entity[legal_entity] = []
+            items_by_legal_entity[legal_entity].append(item)
+            
+        logger.debug(f"Товары сгруппированы по legalEntity: {len(items_by_legal_entity)} групп")
+        
+        # Создаем заказы для каждой группы товаров
+        orders_results = []
+        
+        for legal_entity, items in items_by_legal_entity.items():
+            # Формируем запрос к API 1С
+            positions = []
+            for item in items:
+                uid = item.get('uid')  # ID продукта в 1С (UID)
+                positions.append({
+                    "ID_product": uid,
+                    "Amount": int(item.get('quantity', 0))
+                })
+                
+            # Формируем запрос
+            request_body = {
+                "DATE": str(int(datetime.now().timestamp())),
+                "ID_customer": organization_id,
+                "INN_legal_entity": str(legal_entity),
+                "positions": positions
+            }
+            
+            logger.debug(f"Запрос на создание заказа в 1С: {request_body}")
+            
+            # Отправляем запрос
+            try:
+                response = requests.post(
+                    'http://87.225.110.142:65531/uttest/hs/int/novzakaz',
+                    json=request_body,
+                    auth=('int2', 'pcKnE8GqXn'),
+                    headers={'Content-Type': 'application/json'},
+                    timeout=10
+                )
+                
+                logger.debug(f"Ответ от API 1С: Статус {response.status_code}, Тело: {response.text}")
+                
+                if response.status_code != 200:
+                    logger.error(f"Ошибка API 1С: {response.status_code}, {response.text}")
+                    return jsonify({"error": f"API error: {response.status_code}"}), 500
+                    
+                # Парсим ответ
+                try:
+                    order_response = response.json()
+                    logger.debug(f"Ответ API 1С (JSON): {order_response}")
+                    
+                    # Сохраняем результат
+                    orders_results.append({
+                        "legalEntity": legal_entity,
+                        "items": items,
+                        "order": order_response
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
+                    return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Ошибка при отправке запроса в 1С: {str(e)}")
+                return jsonify({"error": f"Request error: {str(e)}"}), 500
+        
+        # Формируем окончательный ответ
+        response_data = {
+            "success": True,
+            "orders": orders_results
+        }
+        
+        logger.debug(f"Результаты создания заказов: {response_data}")
+        
+        return jsonify(response_data)
+                
+    except Exception as e:
+        logger.error(f"Ошибка при создании заказа в 1С: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/save-order', methods=['POST'])
+def save_order():
+    try:
+        logger.debug("Получен запрос на сохранение заказа в MongoDB")
+        data = request.json
+        
+        # Проверяем наличие необходимых полей
+        if not data.get('userid'):
+            return jsonify({"error": "Отсутствует идентификатор пользователя"}), 400
+            
+        # Сохраняем заказ в MongoDB
+        result = mongo.cx.Pivo.Orders.insert_one(data)
+        logger.debug(f"Заказ сохранен в MongoDB, ID: {result.inserted_id}")
+        
+        return jsonify({"success": True, "orderId": str(result.inserted_id)})
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении заказа: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/get-order-history', methods=['GET'])
+def get_order_history():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"error": "User ID is required"}), 400
+            
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        if not user_data:
+            return jsonify({"error": "User not found"}), 404
+            
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 404
+            
+        # Получаем историю заказов из 1С
+        try:
+            response = requests.get(
+                f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}',
+                auth=('int2', 'pcKnE8GqXn'),
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            logger.debug(f"Статус ответа от API истории заказов: {response.status_code}")
+            
+            if response.status_code != 200:
+                logger.error(f"Ошибка API истории заказов: {response.status_code}, {response.text}")
+                return jsonify({"error": f"API error: {response.status_code}"}), 500
+                
+            # Преобразуем ответ в JSON
+            try:
+                orders_data = response.json()
+                logger.debug(f"Ответ API истории заказов: {orders_data}")
+                return jsonify({"success": True, "orders": orders_data})
+            except Exception as e:
+                logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
+                return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при отправке запроса истории заказов: {str(e)}")
+            return jsonify({"error": f"Request error: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при получении истории заказов: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/get-orders-from-1c')
+def get_orders_from_1c():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"error": "User ID is required"}), 400
+            
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        if not user_data:
+            return jsonify({"error": "User not found"}), 404
+            
+        # Получаем информацию об организации для получения organizationId
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({"error": "Organization ID not found"}), 404
+            
+        # Получаем историю заказов из 1С используя новый эндпоинт
+        try:
+            response = requests.get(
+                f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}',
+                auth=('int2', 'pcKnE8GqXn'),
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            logger.debug(f"Статус ответа от API истории заказов: {response.status_code}")
+            logger.debug(f"Ответ от API истории заказов: {response.text[:200]}...")
+            
+            if response.status_code != 200:
+                logger.error(f"Ошибка API истории заказов: {response.status_code}, {response.text}")
+                return jsonify({"error": f"API error: {response.status_code}"}), 500
+                
+            # Преобразуем ответ в JSON
+            try:
+                orders_data = response.json()
+                logger.debug(f"Данные истории заказов: {orders_data}")
+                return jsonify({"success": True, "orders": orders_data})
+            except Exception as e:
+                logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
+                return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при отправке запроса истории заказов: {str(e)}")
+            return jsonify({"error": f"Request error: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при получении истории заказов из 1С: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

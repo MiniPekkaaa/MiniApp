@@ -655,48 +655,129 @@
         }
         
         function placeOrder() {
-            if (cart.length === 0) {
-                tg.showAlert("Корзина пуста");
+            // Проверяем, есть ли товары в корзине
+            if (!cart || cart.length === 0) {
+                tg.showAlert("Ваша корзина пуста. Добавьте товары перед оформлением заказа.");
                 return;
             }
-
-            // Отправляем запрос на создание заказа
-            fetch('/api/create-order', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    userId: userId,
-                    items: cart.map(item => ({
-                        id: item.id,
-                        name: item.name,
-                        quantity: parseInt(item.quantity) || 0,
-                        legalEntity: parseInt(item.legalEntity) || 1,
-                        price: item.price || 0
-                    }))
+            
+            // Проверяем, что все товары имеют цены
+            const itemsWithoutPrice = cart.filter(item => !item.price || item.price <= 0);
+            if (itemsWithoutPrice.length > 0) {
+                tg.showAlert("Не все товары имеют цены. Дождитесь расчета цен или обновите страницу.");
+                return;
+            }
+            
+            // Отображаем уведомление о создании заказа
+            showNotification("Создание заказа в 1С...", 30000);
+            
+            // Получаем данные организации пользователя
+            getUserOrgData()
+                .then(userData => {
+                    // Готовим данные для запроса в 1С
+                    const items = cart.map(item => {
+                        const uid = userData.uid_map && userData.uid_map[item.id] ? 
+                                  userData.uid_map[item.id] : item.id;
+                        return {
+                            id: item.id,
+                            uid: uid,
+                            name: item.name,
+                            quantity: parseInt(item.quantity),
+                            price: parseFloat(item.price) || 0,
+                            legalEntity: item.legalEntity || "2724132975"
+                        };
+                    });
+                    
+                    // Отправляем запрос на создание заказа в 1С
+                    return fetch('/api/create-1c-order', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userId: userId,
+                            items: items
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    });
                 })
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
+                .then(ordersData => {
+                    console.log('Заказы успешно созданы в 1С:', ordersData);
+                    showNotification("Заказы успешно созданы. Сохранение информации...", 10000);
+                    
+                    // Сохраняем заказы в MongoDB
+                    const savePromises = ordersData.orders.map(orderData => {
+                        // Позиции для сохранения в MongoDB
+                        const positions = {};
+                        orderData.items.forEach((item, index) => {
+                            positions[`Position_${index + 1}`] = {
+                                Beer_ID: item.id,
+                                Beer_Name: item.name,
+                                Legal_Entity: item.legalEntity,
+                                Beer_Count: parseInt(item.quantity) || 0,
+                                Price: parseFloat(item.price) || 0
+                            };
+                        });
+                        
+                        // Данные заказа для MongoDB
+                        const timezone = new Date().getTimezoneOffset() === -600 ? 
+                            'Asia/Vladivostok' : 'Europe/Moscow';
+                        const now = new Date();
+                        const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getFullYear()).slice(2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                        
+                        const mongoOrderData = {
+                            status: "Новый",
+                            date: formattedDate,
+                            userid: String(userId),
+                            username: userData.organization || 'ООО Пивной мир',
+                            org_ID: userData.org_ID,
+                            Positions: positions,
+                            legalEntity: orderData.legalEntity,
+                            orderNomer: orderData.order.Nomer,
+                            orderUID: orderData.order.UID
+                        };
+                        
+                        return fetch('/api/save-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(mongoOrderData)
+                        })
+                        .then(response => response.json());
+                    });
+                    
+                    return Promise.all(savePromises);
+                })
+                .then(saveResults => {
+                    console.log('Заказы сохранены в MongoDB:', saveResults);
+                    
                     // Очищаем корзину
                     cart = [];
                     sessionStorage.setItem('cart', JSON.stringify(cart));
                     displayCart();
+                    
+                    // Скрываем уведомление
+                    hideNotification();
+                    
+                    // Показываем сообщение об успешном создании заказа
                     tg.showAlert("Заказ успешно создан!");
+                    
                     // Перенаправляем на главное меню
                     setTimeout(() => {
-                        window.location.href = `/?user_id=${userId}`;
+                        window.location.href = `/main_menu?user_id=${userId}`;
                     }, 1000);
-                } else {
-                    throw new Error(result.error || 'Ошибка при создании заказа');
-                }
-            })
-            .catch(error => {
-                console.error('Ошибка при создании заказа:', error);
-                tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
-            });
+                })
+                .catch(error => {
+                    console.error('Ошибка при создании заказа:', error);
+                    hideNotification();
+                    tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
+                });
         }
         
         function addMore() {
