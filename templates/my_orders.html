@@ -490,6 +490,7 @@
         function matchOrdersFromBothSources(orders1C, ordersMongo) {
             const matchedOrders = [];
             const processedMongoIds = new Set();
+            const processedOrderUIDs = new Set(); // Для отслеживания уже добавленных заказов из 1C
             
             console.log(`Обработка ${orders1C ? orders1C.length : 0} заказов из 1С и ${ordersMongo ? ordersMongo.length : 0} заказов из MongoDB`);
             
@@ -504,7 +505,23 @@
                 ordersMongo = [];
             }
             
-            // Перебираем заказы из 1С
+            // Сначала добавляем заказы из MongoDB
+            for (const orderMongo of ordersMongo) {
+                // Добавляем заказ из MongoDB
+                console.log(`Добавляем заказ из MongoDB: ID ${orderMongo.order_ID}`);
+                processedMongoIds.add(orderMongo.order_ID);
+                matchedOrders.push(orderMongo);
+                
+                // Если у заказа есть ordersUID, добавляем их в Set обработанных UID
+                if (orderMongo.ordersUID && Object.keys(orderMongo.ordersUID).length > 0) {
+                    for (const [key, uid] of Object.entries(orderMongo.ordersUID)) {
+                        processedOrderUIDs.add(uid);
+                        console.log(`Добавлен UID ${uid} в список обработанных`);
+                    }
+                }
+            }
+            
+            // Затем проверяем заказы из 1С и добавляем только те, которых еще нет
             for (const order1C of orders1C) {
                 // Получаем ID заказа из 1С
                 const orderId1C = order1C.ID_ORDER;
@@ -513,87 +530,54 @@
                     continue;
                 }
                 
-                console.log(`Обработка заказа из 1С с ID: ${orderId1C}`);
+                // Проверяем, не был ли этот заказ уже добавлен из MongoDB
+                if (processedOrderUIDs.has(orderId1C)) {
+                    console.log(`Пропускаем заказ из 1С ${orderId1C}, так как он уже был добавлен из MongoDB`);
+                    continue;
+                }
                 
-                // Ищем соответствующий заказ в MongoDB по ordersUID
-                const matchedMongoOrder = ordersMongo.find(orderMongo => {
-                    if (!orderMongo || !orderMongo.ordersUID) return false;
-                    
-                    // Проверяем все UID в заказе MongoDB
-                    for (const [key, uid] of Object.entries(orderMongo.ordersUID)) {
-                        if (uid === orderId1C) {
-                            console.log(`Найдено соответствие: заказ из 1С ${orderId1C} связан с заказом из MongoDB ${orderMongo.order_ID}`);
-                            return true;
-                        }
-                    }
-                    return false;
-                });
+                // Если заказ еще не был добавлен, создаем его из данных 1C
+                console.log(`Заказ из 1С ${orderId1C} не найден в MongoDB, добавляем как отдельный заказ`);
                 
-                if (matchedMongoOrder) {
-                    // Если нашли соответствие, добавляем комбинированный заказ
-                    console.log(`Добавляем комбинированный заказ: MongoDB ID ${matchedMongoOrder.order_ID}`);
-                    
-                    // Добавляем информацию из 1С к заказу из MongoDB
-                    const combinedOrder = {
-                        ...matchedMongoOrder,
-                        order1C: order1C
-                    };
-                    
-                    matchedOrders.push(combinedOrder);
-                    processedMongoIds.add(matchedMongoOrder.order_ID);
-                } else {
-                    // Если не нашли соответствие в MongoDB, создаем заказ только из данных 1C
-                    console.log(`Заказ из 1С ${orderId1C} не найден в MongoDB, добавляем как отдельный заказ`);
-                    
-                    // Создаем позиции из данных 1С
-                    const positions = [];
-                    if (order1C.positions && Array.isArray(order1C.positions)) {
-                        order1C.positions.forEach(pos => {
-                            positions.push({
-                                id: pos.ID_NOM,
-                                name: pos.NAME || 'Неизвестный товар',
-                                quantity: pos.AMOUNT || 0,
-                                price: 0, // Цена неизвестна из данных 1С
-                                legal_entity: 1 // Значение по умолчанию
-                            });
+                // Создаем позиции из данных 1С
+                const positions = [];
+                if (order1C.positions && Array.isArray(order1C.positions)) {
+                    order1C.positions.forEach(pos => {
+                        positions.push({
+                            id: pos.ID_NOM,
+                            name: pos.NAME || 'Неизвестный товар',
+                            quantity: pos.AMOUNT || 0,
+                            price: 0, // Цена неизвестна из данных 1С
+                            legal_entity: 1 // Значение по умолчанию
                         });
-                    }
-                    
-                    // Формируем дату из данных 1С
-                    let created_at = 'Неизвестно';
-                    if (order1C.DATE) {
-                        try {
-                            const date = new Date(order1C.DATE);
-                            created_at = date.toLocaleDateString('ru-RU');
-                        } catch (e) {
-                            console.warn(`Ошибка форматирования даты: ${order1C.DATE}`, e);
-                        }
-                    }
-                    
-                    // Создаем заказ из данных 1С
-                    const order1COnly = {
-                        order_ID: order1C.ID_ORDER,
-                        created_at: created_at,
-                        status: 'Выполнен', // Предполагаем, что заказы из 1С уже выполнены
-                        positions: positions,
-                        order1C: order1C,
-                        source: '1C' // Метка, что заказ только из 1С
-                    };
-                    
-                    matchedOrders.push(order1COnly);
+                    });
                 }
+                
+                // Формируем дату из данных 1С
+                let created_at = 'Неизвестно';
+                if (order1C.DATE) {
+                    try {
+                        const date = new Date(order1C.DATE);
+                        created_at = date.toLocaleDateString('ru-RU');
+                    } catch (e) {
+                        console.warn(`Ошибка форматирования даты: ${order1C.DATE}`, e);
+                    }
+                }
+                
+                // Создаем заказ из данных 1С
+                const order1COnly = {
+                    order_ID: order1C.ID_ORDER,
+                    created_at: created_at,
+                    status: 'Выполнен', // Предполагаем, что заказы из 1С уже выполнены
+                    positions: positions,
+                    order1C: order1C
+                };
+                
+                matchedOrders.push(order1COnly);
+                processedOrderUIDs.add(orderId1C);
             }
             
-            // Добавляем оставшиеся заказы из MongoDB, которые не были сопоставлены
-            for (const orderMongo of ordersMongo) {
-                if (!processedMongoIds.has(orderMongo.order_ID)) {
-                    console.log(`Добавляем заказ только из MongoDB: ID ${orderMongo.order_ID}`);
-                    orderMongo.source = 'MongoDB'; // Метка, что заказ только из MongoDB
-                    matchedOrders.push(orderMongo);
-                }
-            }
-            
-            console.log(`Итого создано ${matchedOrders.length} комбинированных заказов`);
+            console.log(`Итого создано ${matchedOrders.length} заказов`);
             return matchedOrders;
         }
         
@@ -627,9 +611,60 @@
                         console.error(`Ошибка при запросе статуса для заказа ID ${order.order_ID}:`, error);
                     }
                 }
+                // Если это заказ напрямую из 1С (без MongoDB), проверяем его статус напрямую
+                else if (order.order1C && order.order1C.ID_ORDER && !order.ordersUID) {
+                    try {
+                        console.log(`Запрос прямого статуса для заказа из 1С ID: ${order.order1C.ID_ORDER}`);
+                        
+                        // Получаем статус напрямую
+                        const response = await fetch(`/api/get-order-status?order_uid=${order.order1C.ID_ORDER}`);
+                        const statusData = await response.json();
+                        
+                        if (statusData.success && statusData.status) {
+                            let status = "В обработке";
+                            
+                            // Проверяем различные форматы ответа
+                            if (typeof statusData.status === 'string') {
+                                status = statusData.status;
+                            } else if (typeof statusData.status === 'object' && statusData.status.STATUS) {
+                                status = statusData.status.STATUS;
+                            }
+                            
+                            console.log(`Получен прямой статус для заказа из 1С ID ${order.order1C.ID_ORDER}: ${status}`);
+                            // Обновляем статус заказа
+                            processedOrders[i].status = status;
+                        } else {
+                            console.error(`Ошибка получения прямого статуса для заказа из 1С ID ${order.order1C.ID_ORDER}`);
+                        }
+                    } catch (error) {
+                        console.error(`Ошибка при запросе прямого статуса для заказа из 1С ID ${order.order1C.ID_ORDER}:`, error);
+                    }
+                }
             }
             
-            return processedOrders;
+            // Фильтруем дубликаты заказов (для надежности)
+            const uniqueOrderIds = new Set();
+            const uniqueOrders = [];
+            
+            for (const order of processedOrders) {
+                // Создаем уникальный идентификатор для заказа
+                let orderId = order.order_ID;
+                
+                // Если есть ID_ORDER из 1С, используем его для заказов из 1С
+                if (order.order1C && order.order1C.ID_ORDER) {
+                    orderId = order.order1C.ID_ORDER;
+                }
+                
+                if (!uniqueOrderIds.has(orderId)) {
+                    uniqueOrderIds.add(orderId);
+                    uniqueOrders.push(order);
+                } else {
+                    console.log(`Пропускаем дубликат заказа: ${orderId}`);
+                }
+            }
+            
+            console.log(`Удалено ${processedOrders.length - uniqueOrders.length} дубликатов заказов`);
+            return uniqueOrders;
         }
         
         function displayMatchedOrders(orders) {
