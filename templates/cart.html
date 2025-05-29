@@ -753,61 +753,25 @@
                     
                     showNotification("Заказы успешно созданы. Сохранение информации...", 10000);
                     
-                    // Сохраняем только успешно созданные заказы в MongoDB
-                    const savePromises = ordersData.orders
-                        .filter(orderData => orderData.success)
-                        .map(orderData => {
-                            // Позиции для сохранения в MongoDB
-                            const positions = {};
-                            orderData.items.forEach((item, index) => {
-                                positions[`Position_${index + 1}`] = {
-                                    Beer_ID: item.id,
-                                    Beer_Name: item.name,
-                                    Legal_Entity: item.legalEntity,
-                                    Beer_Count: parseInt(item.quantity) || 0,
-                                    Price: parseFloat(item.price) || 0
-                                };
-                            });
-                            
-                            // Данные заказа для MongoDB
-                            const timezone = new Date().getTimezoneOffset() === -600 ? 
-                                'Asia/Vladivostok' : 'Europe/Moscow';
-                            const now = new Date();
-                            const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getFullYear()).slice(2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                            
-                            const mongoOrderData = {
-                                status: "Новый",
-                                date: formattedDate,
-                                userid: String(userId),
-                                username: window.userData.organization || 'ООО Пивной мир',
-                                org_ID: window.userData.org_ID,
-                                Positions: positions,
-                                legalEntity: orderData.legalEntity,
-                                orderNomer: orderData.order.Nomer,
-                                orderUID: orderData.order.UID
-                            };
-                            
-                            return fetch('/api/save-order', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(mongoOrderData)
-                            })
-                            .then(response => response.json());
-                        });
-                    
-                    // Если нет успешно созданных заказов, завершаем
-                    if (savePromises.length === 0) {
-                        hideNotification();
-                        tg.showAlert("Ни один заказ не был создан успешно");
-                        return Promise.reject(new Error("Ни один заказ не был создан успешно"));
-                    }
-                    
-                    return Promise.all(savePromises);
+                    // Теперь сохраняем единый заказ со всеми позициями
+                    return fetch('/api/save-combined-order', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userId: userId,
+                            orders: ordersData.orders
+                        })
+                    })
+                    .then(response => response.json());
                 })
-                .then(saveResults => {
-                    console.log('Заказы сохранены в MongoDB:', saveResults);
+                .then(saveResult => {
+                    console.log('Результат сохранения объединенного заказа:', saveResult);
+                    
+                    if (!saveResult.success) {
+                        throw new Error(saveResult.error || "Не удалось сохранить объединенный заказ");
+                    }
                     
                     // Очищаем корзину
                     cart = [];

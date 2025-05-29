@@ -400,10 +400,16 @@ def get_orders():
                     'price': price
                 })
 
+            # Проверяем наличие поля ordersUID и добавляем его, если оно есть
+            orders_uid = None
+            if 'ordersUID' in order:
+                orders_uid = order.get('ordersUID')
+
             formatted_order = {
                 'created_at': order.get('date', ''),
                 'status': order.get('status', 'in work'),
-                'positions': positions
+                'positions': positions,
+                'ordersUID': orders_uid
             }
             formatted_orders.append(formatted_order)
 
@@ -466,11 +472,17 @@ def get_order():
         except:
             formatted_date = date_str
 
+        # Проверяем наличие поля ordersUID и добавляем его, если оно есть
+        orders_uid = None
+        if 'ordersUID' in order:
+            orders_uid = order.get('ordersUID')
+
         formatted_order = {
             'order_ID': str(order.get('_id')),
             'created_at': formatted_date,
             'status': order.get('status', 'in work'),
-            'positions': positions
+            'positions': positions,
+            'ordersUID': orders_uid
         }
 
         return jsonify({
@@ -1113,6 +1125,86 @@ def get_orders_from_1c():
             
     except Exception as e:
         logger.error(f"Ошибка при получении истории заказов из 1С: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/save-combined-order', methods=['POST'])
+def save_combined_order():
+    try:
+        logger.debug("Получен запрос на сохранение объединенного заказа в MongoDB")
+        data = request.json
+        
+        # Проверяем наличие необходимых полей
+        if not data.get('userId'):
+            return jsonify({"error": "Отсутствует идентификатор пользователя"}), 400
+            
+        if not data.get('orders') or len(data.get('orders')) == 0:
+            return jsonify({"error": "Отсутствуют данные о заказах"}), 400
+            
+        # Собираем все позиции из всех заказов
+        all_positions = {}
+        position_index = 1
+        
+        # Формируем словарь ordersUID и собираем все позиции
+        orders_uid = {}
+        order_index = 1
+        
+        # Общая информация о заказе
+        user_id = data.get('userId')
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
+        current_time = datetime.now(timezone)
+        formatted_date = current_time.strftime("%d.%m.%y %H:%M")
+        
+        # Перебираем все заказы
+        for order_data in data.get('orders', []):
+            # Если заказ успешно создан в 1С
+            if order_data.get('success'):
+                # Добавляем UID заказа в словарь ordersUID
+                orders_uid[str(order_index)] = order_data.get('order', {}).get('UID', '')
+                
+                # Записываем все позиции из этого заказа
+                for item in order_data.get('items', []):
+                    position_key = f"Position_{position_index}"
+                    all_positions[position_key] = {
+                        'Beer_ID': item.get('id'),
+                        'Beer_Name': item.get('name', ''),
+                        'Legal_Entity': item.get('legalEntity'),
+                        'Beer_Count': int(item.get('quantity', 0)),
+                        'Price': float(item.get('price', 0)),
+                        'UID': item.get('uid')
+                    }
+                    position_index += 1
+                
+                order_index += 1
+        
+        # Создаем единый заказ
+        combined_order = {
+            'status': "Новый",
+            'date': formatted_date,
+            'userid': str(user_id),
+            'username': user_data.get('organization', 'ООО Пивной мир'),
+            'org_ID': user_data.get('org_ID'),
+            'Positions': all_positions,
+            'ordersUID': orders_uid,
+            'createdAt': current_time
+        }
+        
+        # Если были успешно созданные заказы в 1С
+        if orders_uid:
+            # Записываем номер первого заказа для отображения
+            first_order = data.get('orders', [])[0]
+            if first_order.get('success'):
+                combined_order['orderNomer'] = first_order.get('order', {}).get('Nomer', '')
+        
+        logger.debug(f"Сохраняем объединенный заказ: {combined_order}")
+        
+        # Сохраняем заказ в MongoDB
+        result = mongo.cx.Pivo.Orders.insert_one(combined_order)
+        logger.debug(f"Объединенный заказ сохранен в MongoDB, ID: {result.inserted_id}")
+        
+        return jsonify({"success": True, "orderId": str(result.inserted_id)})
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении объединенного заказа: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

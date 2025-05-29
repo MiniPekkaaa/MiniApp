@@ -209,6 +209,41 @@
             background: var(--tg-theme-secondary-bg-color, #f5f5f5);
             color: var(--tg-theme-text-color, #000);
         }
+
+        .dialog-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Стили для отображения заказов в 1С */
+        .orders-1c-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .order-1c-item {
+            background: var(--tg-theme-bg-color, #f5f5f5);
+            border: 1px solid var(--tg-theme-hint-color, #ddd);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .order-1c-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+        
+        .order-1c-number {
+            font-weight: 500;
+        }
+        
+        .order-1c-uid {
+            color: var(--tg-theme-hint-color, #999);
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -235,6 +270,14 @@
                 <button class="dialog-button dialog-button-cancel" onclick="hideDialog()">Нет</button>
                 <button class="dialog-button dialog-button-confirm" onclick="confirmCancel()">Да</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Добавляю секцию для отображения информации о заказах в 1С -->
+    <div class="order-info-section" id="orders1c_info" style="display: none; margin-top: 15px;">
+        <h3>Заказы в 1С</h3>
+        <div id="orders1c_list">
+            <!-- Здесь будет список заказов в 1С -->
         </div>
     </div>
 
@@ -567,6 +610,85 @@
 
         // Загружаем заказы при загрузке страницы
         document.addEventListener('DOMContentLoaded', loadOrders);
+
+        // Добавляю код для отображения информации о заказах в 1С
+        function renderOrder(order) {
+            const orderContainer = document.getElementById('order_container');
+            const orderPositions = document.getElementById('order_positions');
+            const orders1cInfo = document.getElementById('orders1c_info');
+            const orders1cList = document.getElementById('orders1c_list');
+            
+            if (!order) {
+                orderContainer.style.display = 'none';
+                return;
+            }
+            
+            orderContainer.style.display = 'block';
+            
+            // Отображаем основную информацию о заказе
+            document.getElementById('order_date').textContent = order.created_at;
+            document.getElementById('order_status').textContent = order.status;
+            
+            // Проверяем наличие информации о заказах в 1С
+            if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
+                orders1cInfo.style.display = 'block';
+                orders1cList.innerHTML = '';
+                
+                // Создаем список заказов в 1С
+                const ordersList = document.createElement('ul');
+                ordersList.className = 'orders-1c-list';
+                
+                Object.entries(order.ordersUID).forEach(([index, uid]) => {
+                    const orderItem = document.createElement('li');
+                    orderItem.className = 'order-1c-item';
+                    orderItem.innerHTML = `
+                        <div class="order-1c-details">
+                            <span class="order-1c-number">Заказ ${index}</span>
+                            <span class="order-1c-uid">UID: ${uid}</span>
+                        </div>
+                    `;
+                    ordersList.appendChild(orderItem);
+                });
+                
+                orders1cList.appendChild(ordersList);
+            } else {
+                orders1cInfo.style.display = 'none';
+            }
+            
+            // Отображаем позиции заказа
+            orderPositions.innerHTML = '';
+            
+            if (!order.positions || order.positions.length === 0) {
+                orderPositions.innerHTML = '<p>В заказе нет товаров</p>';
+                return;
+            }
+            
+            let totalSum = 0;
+            
+            order.positions.forEach(item => {
+                const price = parseFloat(item.price) || 0;
+                const quantity = parseInt(item.quantity) || 0;
+                const itemTotal = price * quantity;
+                totalSum += itemTotal;
+                
+                const positionElement = document.createElement('div');
+                positionElement.className = 'order-item';
+                positionElement.innerHTML = `
+                    <div class="order-item-info">
+                        <h3 class="order-item-name">${item.name}</h3>
+                        <div class="order-item-details">
+                            <p>Количество: ${quantity}</p>
+                            <p>Цена: ${price.toFixed(2)}₽</p>
+                            <p>Сумма: ${itemTotal.toFixed(2)}₽</p>
+                        </div>
+                    </div>
+                `;
+                
+                orderPositions.appendChild(positionElement);
+            });
+            
+            document.getElementById('order_total').textContent = totalSum.toFixed(2);
+        }
     </script>
 </body>
 </html> 
