@@ -674,19 +674,44 @@
             // Получаем данные организации пользователя
             getUserOrgData()
                 .then(userData => {
+                    // Сохраняем userData для использования ниже
+                    window.userData = userData;
+                    
                     // Готовим данные для запроса в 1С
                     const items = cart.map(item => {
-                        const uid = userData.uid_map && userData.uid_map[item.id] ? 
-                                  userData.uid_map[item.id] : item.id;
+                        // Пытаемся получить UID из карты соответствия
+                        let uid = null;
+                        
+                        // Проверяем наличие UID в карте соответствия
+                        if (userData.uid_map && userData.uid_map[item.id]) {
+                            uid = userData.uid_map[item.id];
+                            console.log(`Найден UID для товара ${item.name} (ID: ${item.id}): ${uid}`);
+                        } else {
+                            console.warn(`Не найден UID для товара ${item.name} (ID: ${item.id})`);
+                        }
+                        
+                        // Определяем legalEntity (обычно должно быть предустановлено в товаре)
+                        const legalEntity = item.legalEntity || "2724132975";
+                        
                         return {
                             id: item.id,
                             uid: uid,
                             name: item.name,
                             quantity: parseInt(item.quantity),
                             price: parseFloat(item.price) || 0,
-                            legalEntity: item.legalEntity || "2724132975"
+                            legalEntity: legalEntity
                         };
                     });
+                    
+                    // Проверяем, есть ли товары с UID
+                    const itemsWithUID = items.filter(item => item.uid !== null);
+                    if (itemsWithUID.length === 0) {
+                        hideNotification();
+                        tg.showAlert("Ни один товар не имеет UID. Невозможно создать заказ.");
+                        return Promise.reject(new Error("Товары без UID"));
+                    }
+                    
+                    console.log('Отправляем данные для создания заказа:', items);
                     
                     // Отправляем запрос на создание заказа в 1С
                     return fetch('/api/create-1c-order', {
@@ -707,50 +732,82 @@
                     });
                 })
                 .then(ordersData => {
-                    console.log('Заказы успешно созданы в 1С:', ordersData);
+                    console.log('Результат создания заказов в 1С:', ordersData);
+                    
+                    // Проверяем общий успех операции
+                    if (!ordersData.success) {
+                        // Если ни один заказ не был создан успешно
+                        let errorMessage = "Не удалось создать заказы. ";
+                        
+                        // Собираем информацию об ошибках
+                        const errors = ordersData.orders
+                            .filter(order => !order.success)
+                            .map(order => {
+                                const itemNames = order.items.map(item => item.name).join(", ");
+                                return `Товары (${itemNames}): ${order.order.error || "Неизвестная ошибка"}`;
+                            });
+                        
+                        if (errors.length > 0) {
+                            errorMessage += errors.join("; ");
+                        }
+                        
+                        hideNotification();
+                        tg.showAlert(errorMessage);
+                        return Promise.reject(new Error(errorMessage));
+                    }
+                    
                     showNotification("Заказы успешно созданы. Сохранение информации...", 10000);
                     
-                    // Сохраняем заказы в MongoDB
-                    const savePromises = ordersData.orders.map(orderData => {
-                        // Позиции для сохранения в MongoDB
-                        const positions = {};
-                        orderData.items.forEach((item, index) => {
-                            positions[`Position_${index + 1}`] = {
-                                Beer_ID: item.id,
-                                Beer_Name: item.name,
-                                Legal_Entity: item.legalEntity,
-                                Beer_Count: parseInt(item.quantity) || 0,
-                                Price: parseFloat(item.price) || 0
+                    // Сохраняем только успешно созданные заказы в MongoDB
+                    const savePromises = ordersData.orders
+                        .filter(orderData => orderData.success)
+                        .map(orderData => {
+                            // Позиции для сохранения в MongoDB
+                            const positions = {};
+                            orderData.items.forEach((item, index) => {
+                                positions[`Position_${index + 1}`] = {
+                                    Beer_ID: item.id,
+                                    Beer_Name: item.name,
+                                    Legal_Entity: item.legalEntity,
+                                    Beer_Count: parseInt(item.quantity) || 0,
+                                    Price: parseFloat(item.price) || 0
+                                };
+                            });
+                            
+                            // Данные заказа для MongoDB
+                            const timezone = new Date().getTimezoneOffset() === -600 ? 
+                                'Asia/Vladivostok' : 'Europe/Moscow';
+                            const now = new Date();
+                            const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getFullYear()).slice(2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                            
+                            const mongoOrderData = {
+                                status: "Новый",
+                                date: formattedDate,
+                                userid: String(userId),
+                                username: window.userData.organization || 'ООО Пивной мир',
+                                org_ID: window.userData.org_ID,
+                                Positions: positions,
+                                legalEntity: orderData.legalEntity,
+                                orderNomer: orderData.order.Nomer,
+                                orderUID: orderData.order.UID
                             };
+                            
+                            return fetch('/api/save-order', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(mongoOrderData)
+                            })
+                            .then(response => response.json());
                         });
-                        
-                        // Данные заказа для MongoDB
-                        const timezone = new Date().getTimezoneOffset() === -600 ? 
-                            'Asia/Vladivostok' : 'Europe/Moscow';
-                        const now = new Date();
-                        const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getFullYear()).slice(2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                        
-                        const mongoOrderData = {
-                            status: "Новый",
-                            date: formattedDate,
-                            userid: String(userId),
-                            username: userData.organization || 'ООО Пивной мир',
-                            org_ID: userData.org_ID,
-                            Positions: positions,
-                            legalEntity: orderData.legalEntity,
-                            orderNomer: orderData.order.Nomer,
-                            orderUID: orderData.order.UID
-                        };
-                        
-                        return fetch('/api/save-order', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(mongoOrderData)
-                        })
-                        .then(response => response.json());
-                    });
+                    
+                    // Если нет успешно созданных заказов, завершаем
+                    if (savePromises.length === 0) {
+                        hideNotification();
+                        tg.showAlert("Ни один заказ не был создан успешно");
+                        return Promise.reject(new Error("Ни один заказ не был создан успешно"));
+                    }
                     
                     return Promise.all(savePromises);
                 })

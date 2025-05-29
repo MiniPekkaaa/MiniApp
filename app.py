@@ -606,10 +606,11 @@ def get_user_org_data():
         
         # Если нет organization_id, используем значение по умолчанию
         if not organization_id:
-            organization_id = '16d79d5f-a651-11ef-895a-005056c00008'  # Значение по умолчанию
+            organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
             
         # Получаем информацию о товарах для получения UID и legalEntity
-        catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'UID': 1, 'legalEntity': 1}))
+        catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1, 'legalEntity': 1}))
+        logger.debug(f"Получено {len(catalog_items)} товаров из каталога")
         
         # Создаем словарь сопоставления id -> UID для товаров
         uid_map = {}
@@ -617,9 +618,37 @@ def get_user_org_data():
         # Устанавливаем фиксированное значение legalEntity для всех запросов
         legal_entity = "2724132975"  # Фиксированное значение ИНН
         
+        # Подробное логирование товаров без UID
+        items_without_uid = []
+        
         for item in catalog_items:
-            if 'id' in item and 'UID' in item:
-                uid_map[str(item['id'])] = item.get('UID', '')
+            item_id = str(item.get('id', ''))
+            item_uid = item.get('UID')
+            
+            if 'id' in item and item_id and 'UID' in item and item_uid:
+                uid_map[item_id] = item_uid
+            else:
+                items_without_uid.append({
+                    'id': item_id,
+                    'name': item.get('name', 'Неизвестно'),
+                    'UID': item_uid
+                })
+        
+        if items_without_uid:
+            logger.warning(f"Найдено {len(items_without_uid)} товаров без UID: {json.dumps(items_without_uid, ensure_ascii=False)}")
+        
+        # Подробное логирование полученных UID
+        logger.debug(f"Сформирована карта соответствий ID -> UID для {len(uid_map)} товаров")
+        
+        # Проверяем, все ли товары имеют UID
+        total_items = len(catalog_items)
+        mapped_items = len(uid_map)
+        if mapped_items < total_items:
+            logger.warning(f"Не все товары имеют UID: {mapped_items} из {total_items}")
+            
+        # Выборочно выводим некоторые соответствия для отладки
+        sample_entries = list(uid_map.items())[:5]
+        logger.debug(f"Примеры соответствия ID -> UID: {sample_entries}")
 
         # Возвращаем данные организации и карту UID
         return jsonify({
@@ -718,7 +747,28 @@ def create_1c_order():
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
 
-        logger.debug(f"Данные заказа: {data}")
+        # Подробное логирование входящих данных
+        logger.debug("Входящие данные (userId): %s", user_id)
+        logger.debug("Входящие данные (items): %s", json.dumps(data.get('items', []), ensure_ascii=False))
+        
+        # Проверка валидности товаров
+        items = data.get('items', [])
+        if not items:
+            logger.warning("Пустой список товаров")
+            return jsonify({"success": False, "error": "Пустой список товаров"}), 400
+            
+        # Проверка наличия UID у товаров
+        items_without_uid = [item for item in items if item.get('uid') is None]
+        if items_without_uid:
+            logger.warning("Товары без UID: %s", json.dumps(items_without_uid, ensure_ascii=False))
+            
+        # Проверка наличия legalEntity у товаров
+        items_without_legal = [item for item in items if item.get('legalEntity') is None]
+        if items_without_legal:
+            logger.warning("Товары без legalEntity: %s", json.dumps(items_without_legal, ensure_ascii=False))
+            # Устанавливаем значение по умолчанию
+            for item in items_without_legal:
+                item['legalEntity'] = "2724132975"
 
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
@@ -749,6 +799,11 @@ def create_1c_order():
             items_by_legal_entity[legal_entity].append(item)
             
         logger.debug(f"Товары сгруппированы по legalEntity: {len(items_by_legal_entity)} групп")
+        # Логируем группировку
+        for legal_entity, items in items_by_legal_entity.items():
+            logger.debug(f"Группа legalEntity={legal_entity}: {len(items)} товаров")
+            for item in items:
+                logger.debug(f"- Товар: {item.get('name')}, ID: {item.get('id')}, UID: {item.get('uid')}")
         
         # Создаем заказы для каждой группы товаров
         orders_results = []
@@ -756,12 +811,31 @@ def create_1c_order():
         for legal_entity, items in items_by_legal_entity.items():
             # Формируем запрос к API 1С
             positions = []
+            valid_items = []
             for item in items:
                 uid = item.get('uid')  # ID продукта в 1С (UID)
-                positions.append({
-                    "ID_product": uid,
-                    "Amount": int(item.get('quantity', 0))
+                
+                # Проверяем наличие UID
+                if uid is not None and str(uid).strip():
+                    positions.append({
+                        "ID_product": uid,
+                        "Amount": int(item.get('quantity', 0))
+                    })
+                    valid_items.append(item)
+                else:
+                    logger.warning(f"Товар без UID не будет добавлен в заказ: {item.get('name', 'Неизвестный товар')}")
+            
+            # Проверяем, есть ли товары с действительными UID
+            if not positions:
+                logger.warning(f"Нет товаров с действительными UID для legalEntity {legal_entity}")
+                # Добавляем информацию о заказе, даже если не смогли его создать
+                orders_results.append({
+                    "legalEntity": legal_entity,
+                    "items": items,
+                    "order": {"error": "Нет товаров с действительными UID"},
+                    "success": False
                 })
+                continue
                 
             # Формируем запрос
             request_body = {
@@ -787,31 +861,86 @@ def create_1c_order():
                 
                 if response.status_code != 200:
                     logger.error(f"Ошибка API 1С: {response.status_code}, {response.text}")
-                    return jsonify({"error": f"API error: {response.status_code}"}), 500
+                    orders_results.append({
+                        "legalEntity": legal_entity,
+                        "items": items,
+                        "order": {"error": f"API error: {response.status_code}"},
+                        "success": False
+                    })
+                    continue
+                    
+                # Проверяем, является ли ответ сообщением об ошибке
+                response_text = response.text.strip()
+                if response_text.startswith('"') and response_text.endswith('"'):
+                    # Это сообщение об ошибке в формате строки
+                    error_message = response_text.strip(' "\t\n\r')
+                    logger.error(f"Ошибка API 1С: {error_message}")
+                    orders_results.append({
+                        "legalEntity": legal_entity,
+                        "items": items,
+                        "order": {"error": error_message},
+                        "success": False
+                    })
+                    continue
+                
+                if response_text.startswith('\n'):
+                    # Это сообщение об ошибке
+                    error_message = response_text.strip()
+                    logger.error(f"Ошибка API 1С: {error_message}")
+                    orders_results.append({
+                        "legalEntity": legal_entity,
+                        "items": items,
+                        "order": {"error": error_message},
+                        "success": False
+                    })
+                    continue
                     
                 # Парсим ответ
                 try:
                     order_response = response.json()
                     logger.debug(f"Ответ API 1С (JSON): {order_response}")
                     
+                    # Проверяем корректность ответа
+                    if not isinstance(order_response, dict) or "Nomer" not in order_response or "UID" not in order_response:
+                        error_message = "Некорректный ответ от API 1С"
+                        logger.error(f"{error_message}: {order_response}")
+                        orders_results.append({
+                            "legalEntity": legal_entity,
+                            "items": items,
+                            "order": {"error": error_message},
+                            "success": False
+                        })
+                        continue
+                    
                     # Сохраняем результат
                     orders_results.append({
                         "legalEntity": legal_entity,
-                        "items": items,
-                        "order": order_response
+                        "items": valid_items,
+                        "order": order_response,
+                        "success": True
                     })
                     
                 except Exception as e:
                     logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
-                    return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
+                    orders_results.append({
+                        "legalEntity": legal_entity,
+                        "items": items,
+                        "order": {"error": f"JSON parsing error: {str(e)}"},
+                        "success": False
+                    })
                     
             except requests.exceptions.RequestException as e:
                 logger.error(f"Ошибка при отправке запроса в 1С: {str(e)}")
-                return jsonify({"error": f"Request error: {str(e)}"}), 500
+                orders_results.append({
+                    "legalEntity": legal_entity,
+                    "items": items,
+                    "order": {"error": f"Request error: {str(e)}"},
+                    "success": False
+                })
         
         # Формируем окончательный ответ
         response_data = {
-            "success": True,
+            "success": any(order.get("success", False) for order in orders_results),
             "orders": orders_results
         }
         
