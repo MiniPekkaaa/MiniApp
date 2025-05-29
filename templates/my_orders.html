@@ -120,6 +120,7 @@
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s ease, visibility 0.3s ease;
+            flex-direction: column;
         }
 
         #loading.visible {
@@ -668,42 +669,27 @@
                 return dateB - dateA;
             });
             
+            // Ограничиваем до 5 последних заказов
+            const limitedOrders = orders.slice(0, 5);
+            
             let ordersHTML = '';
             
-            orders.forEach((order, index) => {
+            limitedOrders.forEach((order, index) => {
                 // Определяем дату и статус в зависимости от источника заказа
                 let date = order.created_at || 'Неизвестно';
                 let status = order.status || 'in work';
                 
-                // Считаем общую сумму заказа
+                // Считаем общую сумму заказа и количество позиций
                 let totalPrice = 0;
+                let positionsCount = 0;
+                
                 if (order.positions && Array.isArray(order.positions)) {
+                    positionsCount = order.positions.length;
                     order.positions.forEach(position => {
                         const price = parseFloat(position.price) || 0;
                         const quantity = parseInt(position.quantity) || 0;
                         totalPrice += price * quantity;
                     });
-                }
-                
-                // Формируем информацию о заказах в 1С (упрощенный вид)
-                let ordersInfo = '';
-                if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
-                    const ordersCount = Object.keys(order.ordersUID).length;
-                    ordersInfo = `
-                        <div class="order-1c-info">
-                            <p>Заказы в 1С: ${ordersCount}</p>
-                        </div>
-                    `;
-                }
-                
-                // Добавляем номер заказа из 1С (только первый, если есть)
-                let orderNumber = '';
-                if (order.order1C && order.order1C.NOMER_ORDER) {
-                    orderNumber = `
-                        <div class="order-1c-info">
-                            <p>Номер заказа в 1С: ${order.order1C.NOMER_ORDER}</p>
-                        </div>
-                    `;
                 }
                 
                 ordersHTML += `
@@ -715,8 +701,9 @@
                         <div class="order-info">
                             <div>Сумма: ${totalPrice.toFixed(2)}₽</div>
                         </div>
-                        ${ordersInfo}
-                        ${orderNumber}
+                        <div class="order-info">
+                            <div>Позиций: ${positionsCount}</div>
+                        </div>
                         <button class="toggle-details" onclick="toggleOrderDetails(${index})">Подробнее</button>
                         <div id="order-details-${index}" class="order-details">
                             ${generateProductsHTMLFromMongo(order.positions || [])}
@@ -729,7 +716,7 @@
             ordersList.innerHTML = ordersHTML;
             
             // Сохраняем заказы в глобальной переменной для последующего использования
-            window.mongoOrdersData = orders;
+            window.mongoOrdersData = limitedOrders;
         }
 
         function generateProductsHTMLFromMongo(positions) {
