@@ -409,7 +409,8 @@ def get_orders():
                 'created_at': order.get('date', ''),
                 'status': order.get('status', 'in work'),
                 'positions': positions,
-                'ordersUID': orders_uid
+                'ordersUID': orders_uid,
+                'order_ID': str(order.get('_id'))
             }
             formatted_orders.append(formatted_order)
 
@@ -1137,16 +1138,36 @@ def save_combined_order():
         if not data.get('userId'):
             return jsonify({"error": "Отсутствует идентификатор пользователя"}), 400
             
-        if not data.get('orders') or len(data.get('orders')) == 0:
-            return jsonify({"error": "Отсутствуют данные о заказах"}), 400
+        if not data.get('items') or len(data.get('items')) == 0:
+            return jsonify({"error": "Отсутствуют товары в заказе"}), 400
             
-        # Собираем все позиции из всех заказов
+        if not data.get('orders') or len(data.get('orders')) == 0:
+            return jsonify({"error": "Отсутствуют данные о заказах в 1С"}), 400
+            
+        # Сохраняем все товары из корзины пользователя
         all_positions = {}
-        position_index = 1
         
-        # Формируем словарь ordersUID и собираем все позиции
+        # Перебираем все товары из корзины
+        for index, item in enumerate(data.get('items', []), 1):
+            position_key = f"Position_{index}"
+            all_positions[position_key] = {
+                'Beer_ID': item.get('id'),
+                'Beer_Name': item.get('name', ''),
+                'Legal_Entity': item.get('legalEntity'),
+                'Beer_Count': int(item.get('quantity', 0)),
+                'Price': float(item.get('price', 0)),
+                'UID': item.get('uid')
+            }
+        
+        # Формируем словарь ordersUID из успешно созданных заказов в 1С
         orders_uid = {}
         order_index = 1
+        
+        for order_data in data.get('orders', []):
+            if order_data.get('success'):
+                # Добавляем UID заказа в словарь ordersUID
+                orders_uid[str(order_index)] = order_data.get('order', {}).get('UID', '')
+                order_index += 1
         
         # Общая информация о заказе
         user_id = data.get('userId')
@@ -1154,28 +1175,6 @@ def save_combined_order():
         timezone = pytz.timezone('Asia/Vladivostok')  # UTC+10
         current_time = datetime.now(timezone)
         formatted_date = current_time.strftime("%d.%m.%y %H:%M")
-        
-        # Перебираем все заказы
-        for order_data in data.get('orders', []):
-            # Если заказ успешно создан в 1С
-            if order_data.get('success'):
-                # Добавляем UID заказа в словарь ordersUID
-                orders_uid[str(order_index)] = order_data.get('order', {}).get('UID', '')
-                
-                # Записываем все позиции из этого заказа
-                for item in order_data.get('items', []):
-                    position_key = f"Position_{position_index}"
-                    all_positions[position_key] = {
-                        'Beer_ID': item.get('id'),
-                        'Beer_Name': item.get('name', ''),
-                        'Legal_Entity': item.get('legalEntity'),
-                        'Beer_Count': int(item.get('quantity', 0)),
-                        'Price': float(item.get('price', 0)),
-                        'UID': item.get('uid')
-                    }
-                    position_index += 1
-                
-                order_index += 1
         
         # Создаем единый заказ
         combined_order = {

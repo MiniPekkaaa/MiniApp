@@ -761,7 +761,8 @@
                         },
                         body: JSON.stringify({
                             userId: userId,
-                            orders: ordersData.orders
+                            orders: ordersData.orders,
+                            items: cart // Передаем все товары из корзины
                         })
                     })
                     .then(response => response.json());
