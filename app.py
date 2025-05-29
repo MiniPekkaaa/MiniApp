@@ -1283,5 +1283,166 @@ def save_combined_order():
         logger.error(f"Ошибка при сохранении объединенного заказа: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/get-order-status')
+def get_order_status():
+    try:
+        order_uid = request.args.get('order_uid')
+        if not order_uid:
+            return jsonify({"error": "Order UID is required"}), 400
+            
+        logger.debug(f"Запрос статуса заказа с UID: {order_uid}")
+        
+        # Отправляем запрос к API 1С для получения статуса заказа
+        try:
+            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+            logger.debug(f"Отправка запроса: GET {api_url}")
+            
+            response = requests.get(
+                api_url,
+                auth=('int2', 'pcKnE8GqXn'),
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            logger.debug(f"Статус ответа от API статуса заказа: {response.status_code}")
+            logger.debug(f"Ответ от API статуса заказа: {response.text}")
+            
+            if response.status_code != 200:
+                logger.error(f"Ошибка API статуса заказа: {response.status_code}, {response.text}")
+                return jsonify({"error": f"API error: {response.status_code}"}), 500
+                
+            # Обработка ответа
+            try:
+                status_data = response.json()
+                logger.debug(f"Успешно получен статус заказа: {status_data}")
+                return jsonify({"success": True, "status": status_data})
+            except Exception as e:
+                logger.error(f"Ошибка при обработке ответа статуса заказа: {str(e)}")
+                return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при отправке запроса статуса заказа: {str(e)}")
+            return jsonify({"error": f"Request error: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса заказа: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/get-combined-order-status')
+def get_combined_order_status():
+    try:
+        # Получаем MongoDB ID заказа
+        order_id = request.args.get('order_id')
+        if not order_id:
+            return jsonify({"error": "Order ID is required"}), 400
+            
+        logger.debug(f"Запрос комбинированного статуса заказа с ID: {order_id}")
+        
+        # Получаем заказ из MongoDB
+        try:
+            order = mongo.cx.Pivo.Orders.find_one({'_id': ObjectId(order_id)})
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+                
+            # Проверяем наличие ordersUID
+            if not order.get('ordersUID') or not isinstance(order.get('ordersUID'), dict):
+                return jsonify({"success": True, "status": "В обработке", "original": None})
+                
+            # Получаем статусы всех заказов в 1С
+            statuses = []
+            for uid_key, order_uid in order.get('ordersUID', {}).items():
+                try:
+                    # Запрашиваем статус каждого заказа
+                    api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                    response = requests.get(
+                        api_url,
+                        auth=('int2', 'pcKnE8GqXn'),
+                        headers={'Content-Type': 'application/json'},
+                        timeout=10
+                    )
+                    
+                    if response.status_code == 200:
+                        try:
+                            status_data = response.json()
+                            if isinstance(status_data, dict) and 'STATUS' in status_data:
+                                statuses.append(status_data.get('STATUS'))
+                            elif isinstance(status_data, str):
+                                statuses.append(status_data)
+                        except:
+                            logger.warning(f"Не удалось обработать ответ статуса для заказа {order_uid}")
+                except:
+                    logger.warning(f"Не удалось получить статус для заказа {order_uid}")
+            
+            logger.debug(f"Получены статусы заказов: {statuses}")
+            
+            # Определяем наивысший статус
+            final_status = determine_highest_status(statuses)
+            
+            return jsonify({
+                "success": True,
+                "status": final_status,
+                "original_statuses": statuses
+            })
+                
+        except Exception as e:
+            logger.error(f"Ошибка при получении данных заказа: {str(e)}")
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при получении комбинированного статуса заказа: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def determine_highest_status(statuses):
+    """
+    Определяет наивысший приоритет статуса из списка статусов.
+    Приоритет (от низкого к высокому): Новый -> В работе -> Выполнен -> Отменен
+    """
+    if not statuses:
+        return "В обработке"
+        
+    # Приоритеты статусов (чем выше число, тем выше приоритет)
+    status_priority = {
+        "Новый": 1,
+        "В работе": 2,
+        "В обработке": 2,  # Альтернативное название
+        "Выполнен": 3,
+        "Доставлен": 3,    # Альтернативное название
+        "Отменен": 4
+    }
+    
+    # Преобразуем все статусы к нижнему регистру для унификации
+    normalized_statuses = [s.strip().lower() if isinstance(s, str) else "" for s in statuses]
+    
+    # Сопоставление нормализованных статусов с приоритетами
+    normalized_priority = {
+        "новый": 1,
+        "в работе": 2,
+        "в обработке": 2,
+        "выполнен": 3,
+        "доставлен": 3,
+        "отменен": 4
+    }
+    
+    # Находим наивысший приоритет статуса
+    highest_priority = 0
+    highest_status = "В обработке"  # Статус по умолчанию
+    
+    for status in normalized_statuses:
+        if status in normalized_priority:
+            priority = normalized_priority[status]
+            if priority > highest_priority:
+                highest_priority = priority
+                # Возвращаем статус в оригинальном написании
+                if status == "новый":
+                    highest_status = "Новый"
+                elif status in ["в работе", "в обработке"]:
+                    highest_status = "В работе"
+                elif status in ["выполнен", "доставлен"]:
+                    highest_status = "Выполнен"
+                elif status == "отменен":
+                    highest_status = "Отменен"
+    
+    return highest_status
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

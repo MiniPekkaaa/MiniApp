@@ -468,8 +468,11 @@
                 .then(combinedData => {
                     // Комбинируем данные из 1С и MongoDB
                     const matchedOrders = matchOrdersFromBothSources(combinedData.orders1C, combinedData.ordersMongo);
+                    return processOrderStatuses(matchedOrders);
+                })
+                .then(ordersWithStatuses => {
                     hideLoading();
-                    displayMatchedOrders(matchedOrders);
+                    displayMatchedOrders(ordersWithStatuses);
                 })
                 .catch(error => {
                     hideLoading();
@@ -593,6 +596,41 @@
             return matchedOrders;
         }
         
+        // Функция для получения статусов заказов
+        async function processOrderStatuses(orders) {
+            console.log('Обработка статусов заказов:', orders.length);
+            
+            const processedOrders = [...orders];
+            
+            // Обработка статусов для заказов с ordersUID
+            for (let i = 0; i < processedOrders.length; i++) {
+                const order = processedOrders[i];
+                
+                // Проверяем, есть ли у заказа ordersUID
+                if (order.ordersUID && Object.keys(order.ordersUID).length > 0 && order.order_ID) {
+                    try {
+                        console.log(`Запрос статуса для заказа ID: ${order.order_ID}`);
+                        
+                        // Получаем комбинированный статус
+                        const response = await fetch(`/api/get-combined-order-status?order_id=${order.order_ID}`);
+                        const statusData = await response.json();
+                        
+                        if (statusData.success) {
+                            console.log(`Получен статус для заказа ID ${order.order_ID}: ${statusData.status}`);
+                            // Обновляем статус заказа
+                            processedOrders[i].status = statusData.status;
+                        } else {
+                            console.error(`Ошибка получения статуса для заказа ID ${order.order_ID}: ${statusData.error}`);
+                        }
+                    } catch (error) {
+                        console.error(`Ошибка при запросе статуса для заказа ID ${order.order_ID}:`, error);
+                    }
+                }
+            }
+            
+            return processedOrders;
+        }
+        
         function displayMatchedOrders(orders) {
             const ordersList = document.getElementById('orders-list');
             
@@ -604,9 +642,6 @@
                 `;
                 return;
             }
-            
-            // Отладочная информация
-            console.log(`Отображаем ${orders.length} заказов:`, orders);
             
             // Сортируем заказы по дате (от новых к старым)
             orders.sort((a, b) => {
@@ -637,24 +672,8 @@
             
             orders.forEach((order, index) => {
                 // Определяем дату и статус в зависимости от источника заказа
-                let date, status, orderSource;
-                
-                if (order.source === '1C') {
-                    // Заказ только из 1С
-                    date = order.created_at || 'Неизвестно';
-                    status = 'Выполнен';
-                    orderSource = '<span class="order-source order-source-1c">1C</span>';
-                } else if (order.source === 'MongoDB') {
-                    // Заказ только из MongoDB
-                    date = order.created_at || 'Неизвестно';
-                    status = order.status || 'В обработке';
-                    orderSource = '<span class="order-source order-source-mongo">Локальный</span>';
-                } else {
-                    // Комбинированный заказ
-                    date = order.created_at || 'Неизвестно';
-                    status = order.status || 'В обработке';
-                    orderSource = '<span class="order-source order-source-combined">Комбинированный</span>';
-                }
+                let date = order.created_at || 'Неизвестно';
+                let status = order.status || 'in work';
                 
                 // Считаем общую сумму заказа
                 let totalPrice = 0;
@@ -666,23 +685,23 @@
                     });
                 }
                 
-                // Отображаем информацию о заказах в 1С, если есть
-                let ordersUIDInfo = '';
+                // Формируем информацию о заказах в 1С (упрощенный вид)
+                let ordersInfo = '';
                 if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
-                    ordersUIDInfo = `
+                    const ordersCount = Object.keys(order.ordersUID).length;
+                    ordersInfo = `
                         <div class="order-1c-info">
-                            <p>Заказы в 1С: ${Object.keys(order.ordersUID).length}</p>
+                            <p>Заказы в 1С: ${ordersCount}</p>
                         </div>
                     `;
                 }
                 
-                // Добавляем дополнительную информацию из 1С, если есть
-                let order1CInfo = '';
-                if (order.order1C) {
-                    const nomerOrder = order.order1C.NOMER_ORDER || 'Не указан';
-                    order1CInfo = `
+                // Добавляем номер заказа из 1С (только первый, если есть)
+                let orderNumber = '';
+                if (order.order1C && order.order1C.NOMER_ORDER) {
+                    orderNumber = `
                         <div class="order-1c-info">
-                            <p>Номер заказа в 1С: ${nomerOrder}</p>
+                            <p>Номер заказа в 1С: ${order.order1C.NOMER_ORDER}</p>
                         </div>
                     `;
                 }
@@ -690,20 +709,19 @@
                 ordersHTML += `
                     <div class="order-card">
                         <div class="order-header">
-                            <div class="order-date">Заказ от ${date} ${orderSource}</div>
+                            <div class="order-date">Заказ от ${date}</div>
                             <div class="order-status">${status}</div>
                         </div>
                         <div class="order-info">
-                            <div>ID заказа: ${order.order_ID || 'Не указан'}</div>
                             <div>Сумма: ${totalPrice.toFixed(2)}₽</div>
                         </div>
-                        ${ordersUIDInfo}
-                        ${order1CInfo}
+                        ${ordersInfo}
+                        ${orderNumber}
                         <button class="toggle-details" onclick="toggleOrderDetails(${index})">Подробнее</button>
                         <div id="order-details-${index}" class="order-details">
                             ${generateProductsHTMLFromMongo(order.positions || [])}
                         </div>
-                        ${order.source !== '1C' ? `<button class="repeat-order" onclick="repeatOrderFromMongo(${index})">Повторить заказ</button>` : ''}
+                        <button class="repeat-order" onclick="repeatOrderFromMongo(${index})">Повторить заказ</button>
                     </div>
                 `;
             });
