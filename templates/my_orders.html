@@ -257,6 +257,31 @@
         .order-1c-info p {
             margin: 0;
         }
+        
+        .order-source {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            margin-left: 6px;
+            font-weight: normal;
+            vertical-align: middle;
+        }
+        
+        .order-source-1c {
+            background-color: #e0f7fa;
+            color: #0097a7;
+        }
+        
+        .order-source-mongo {
+            background-color: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .order-source-combined {
+            background-color: #fff3e0;
+            color: #ff8f00;
+        }
 
         .loader {
             border: 4px solid rgba(255, 255, 255, 0.3);
@@ -462,17 +487,33 @@
             const matchedOrders = [];
             const processedMongoIds = new Set();
             
-            console.log(`Обработка ${orders1C.length} заказов из 1С и ${ordersMongo.length} заказов из MongoDB`);
+            console.log(`Обработка ${orders1C ? orders1C.length : 0} заказов из 1С и ${ordersMongo ? ordersMongo.length : 0} заказов из MongoDB`);
+            
+            // Защита от null или undefined
+            if (!orders1C || !Array.isArray(orders1C)) {
+                console.warn("Данные заказов из 1С отсутствуют или имеют неверный формат");
+                orders1C = [];
+            }
+            
+            if (!ordersMongo || !Array.isArray(ordersMongo)) {
+                console.warn("Данные заказов из MongoDB отсутствуют или имеют неверный формат");
+                ordersMongo = [];
+            }
             
             // Перебираем заказы из 1С
             for (const order1C of orders1C) {
                 // Получаем ID заказа из 1С
                 const orderId1C = order1C.ID_ORDER;
+                if (!orderId1C) {
+                    console.warn("Заказ из 1С не имеет ID_ORDER:", order1C);
+                    continue;
+                }
+                
                 console.log(`Обработка заказа из 1С с ID: ${orderId1C}`);
                 
                 // Ищем соответствующий заказ в MongoDB по ordersUID
                 const matchedMongoOrder = ordersMongo.find(orderMongo => {
-                    if (!orderMongo.ordersUID) return false;
+                    if (!orderMongo || !orderMongo.ordersUID) return false;
                     
                     // Проверяем все UID в заказе MongoDB
                     for (const [key, uid] of Object.entries(orderMongo.ordersUID)) {
@@ -496,6 +537,46 @@
                     
                     matchedOrders.push(combinedOrder);
                     processedMongoIds.add(matchedMongoOrder.order_ID);
+                } else {
+                    // Если не нашли соответствие в MongoDB, создаем заказ только из данных 1C
+                    console.log(`Заказ из 1С ${orderId1C} не найден в MongoDB, добавляем как отдельный заказ`);
+                    
+                    // Создаем позиции из данных 1С
+                    const positions = [];
+                    if (order1C.positions && Array.isArray(order1C.positions)) {
+                        order1C.positions.forEach(pos => {
+                            positions.push({
+                                id: pos.ID_NOM,
+                                name: pos.NAME || 'Неизвестный товар',
+                                quantity: pos.AMOUNT || 0,
+                                price: 0, // Цена неизвестна из данных 1С
+                                legal_entity: 1 // Значение по умолчанию
+                            });
+                        });
+                    }
+                    
+                    // Формируем дату из данных 1С
+                    let created_at = 'Неизвестно';
+                    if (order1C.DATE) {
+                        try {
+                            const date = new Date(order1C.DATE);
+                            created_at = date.toLocaleDateString('ru-RU');
+                        } catch (e) {
+                            console.warn(`Ошибка форматирования даты: ${order1C.DATE}`, e);
+                        }
+                    }
+                    
+                    // Создаем заказ из данных 1С
+                    const order1COnly = {
+                        order_ID: order1C.ID_ORDER,
+                        created_at: created_at,
+                        status: 'Выполнен', // Предполагаем, что заказы из 1С уже выполнены
+                        positions: positions,
+                        order1C: order1C,
+                        source: '1C' // Метка, что заказ только из 1С
+                    };
+                    
+                    matchedOrders.push(order1COnly);
                 }
             }
             
@@ -503,6 +584,7 @@
             for (const orderMongo of ordersMongo) {
                 if (!processedMongoIds.has(orderMongo.order_ID)) {
                     console.log(`Добавляем заказ только из MongoDB: ID ${orderMongo.order_ID}`);
+                    orderMongo.source = 'MongoDB'; // Метка, что заказ только из MongoDB
                     matchedOrders.push(orderMongo);
                 }
             }
@@ -523,18 +605,56 @@
                 return;
             }
             
+            // Отладочная информация
+            console.log(`Отображаем ${orders.length} заказов:`, orders);
+            
             // Сортируем заказы по дате (от новых к старым)
             orders.sort((a, b) => {
-                const dateA = new Date(a.created_at || '2000-01-01');
-                const dateB = new Date(b.created_at || '2000-01-01');
+                // Пробуем получить дату в различных форматах
+                let dateA, dateB;
+                
+                // Для заказов из 1С
+                if (a.order1C && a.order1C.DATE_UNIX) {
+                    dateA = new Date(parseInt(a.order1C.DATE_UNIX) * 1000);
+                } else if (a.created_at) {
+                    dateA = new Date(a.created_at);
+                } else {
+                    dateA = new Date(0);
+                }
+                
+                if (b.order1C && b.order1C.DATE_UNIX) {
+                    dateB = new Date(parseInt(b.order1C.DATE_UNIX) * 1000);
+                } else if (b.created_at) {
+                    dateB = new Date(b.created_at);
+                } else {
+                    dateB = new Date(0);
+                }
+                
                 return dateB - dateA;
             });
             
             let ordersHTML = '';
             
             orders.forEach((order, index) => {
-                const date = order.created_at || 'Неизвестно';
-                const status = order.status || 'В обработке';
+                // Определяем дату и статус в зависимости от источника заказа
+                let date, status, orderSource;
+                
+                if (order.source === '1C') {
+                    // Заказ только из 1С
+                    date = order.created_at || 'Неизвестно';
+                    status = 'Выполнен';
+                    orderSource = '<span class="order-source order-source-1c">1C</span>';
+                } else if (order.source === 'MongoDB') {
+                    // Заказ только из MongoDB
+                    date = order.created_at || 'Неизвестно';
+                    status = order.status || 'В обработке';
+                    orderSource = '<span class="order-source order-source-mongo">Локальный</span>';
+                } else {
+                    // Комбинированный заказ
+                    date = order.created_at || 'Неизвестно';
+                    status = order.status || 'В обработке';
+                    orderSource = '<span class="order-source order-source-combined">Комбинированный</span>';
+                }
                 
                 // Считаем общую сумму заказа
                 let totalPrice = 0;
@@ -559,9 +679,10 @@
                 // Добавляем дополнительную информацию из 1С, если есть
                 let order1CInfo = '';
                 if (order.order1C) {
+                    const nomerOrder = order.order1C.NOMER_ORDER || 'Не указан';
                     order1CInfo = `
                         <div class="order-1c-info">
-                            <p>Номер заказа в 1С: ${order.order1C.NOMER_ORDER || 'Не указан'}</p>
+                            <p>Номер заказа в 1С: ${nomerOrder}</p>
                         </div>
                     `;
                 }
@@ -569,7 +690,7 @@
                 ordersHTML += `
                     <div class="order-card">
                         <div class="order-header">
-                            <div class="order-date">Заказ от ${date}</div>
+                            <div class="order-date">Заказ от ${date} ${orderSource}</div>
                             <div class="order-status">${status}</div>
                         </div>
                         <div class="order-info">
@@ -582,7 +703,7 @@
                         <div id="order-details-${index}" class="order-details">
                             ${generateProductsHTMLFromMongo(order.positions || [])}
                         </div>
-                        <button class="repeat-order" onclick="repeatOrderFromMongo(${index})">Повторить заказ</button>
+                        ${order.source !== '1C' ? `<button class="repeat-order" onclick="repeatOrderFromMongo(${index})">Повторить заказ</button>` : ''}
                     </div>
                 `;
             });

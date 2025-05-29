@@ -1154,8 +1154,16 @@ def get_orders_from_1c():
                 else:
                     # Обычный JSON
                     try:
-                        orders_data = response.json()
-                        logger.debug(f"Успешно обработан стандартный JSON. Найдено заказов: {len(orders_data)}")
+                        json_data = response.json()
+                        logger.debug(f"Успешно обработан стандартный JSON. Тип данных: {type(json_data)}")
+                        
+                        # Проверяем, является ли ответ словарем с ключом "orders"
+                        if isinstance(json_data, dict) and 'orders' in json_data:
+                            orders_data = json_data['orders']
+                            logger.debug(f"Извлечены заказы из ключа 'orders'. Найдено заказов: {len(orders_data)}")
+                        else:
+                            orders_data = json_data
+                            logger.debug(f"Используем данные как есть. Найдено заказов: {len(orders_data) if isinstance(orders_data, list) else 1}")
                     except Exception as e:
                         logger.error(f"Ошибка декодирования стандартного JSON: {str(e)}")
                         return jsonify({"error": f"Не удалось обработать ответ: {str(e)}"}), 500
@@ -1163,7 +1171,12 @@ def get_orders_from_1c():
                 # Проверяем, что данные правильно обработаны
                 if not isinstance(orders_data, list):
                     logger.error(f"Ответ не является списком: {type(orders_data)}")
-                    return jsonify({"error": "Неверный формат данных (ожидался список)"}), 500
+                    # Преобразуем в список, если это не список
+                    if isinstance(orders_data, dict):
+                        orders_data = [orders_data]
+                        logger.debug(f"Преобразовали словарь в список из одного элемента")
+                    else:
+                        return jsonify({"error": "Неверный формат данных (ожидался список)"}), 500
                 
                 # Отдаем данные клиенту
                 return jsonify({"success": True, "orders": orders_data})
@@ -1204,9 +1217,17 @@ def save_combined_order():
             position_key = f"Position_{index}"
             # Используем тот же UID, что и при запросе цен
             uid = item.get('uid') or None
+            # Преобразуем UID в строку, если он есть
+            if uid is not None:
+                uid = str(uid)
+            
+            beer_id = item.get('id')
+            # Преобразуем Beer_ID в строку, если он есть
+            if beer_id is not None:
+                beer_id = str(beer_id)
             
             all_positions[position_key] = {
-                'Beer_ID': item.get('id'),
+                'Beer_ID': beer_id,
                 'Beer_Name': item.get('name', ''),
                 'Legal_Entity': item.get('legalEntity'),
                 'Beer_Count': int(item.get('quantity', 0)),
@@ -1221,8 +1242,10 @@ def save_combined_order():
         for order_data in data.get('orders', []):
             if order_data.get('success'):
                 # Добавляем UID заказа в словарь ordersUID
-                orders_uid[str(order_index)] = order_data.get('order', {}).get('UID', '')
-                order_index += 1
+                order_uid = order_data.get('order', {}).get('UID', '')
+                if order_uid:
+                    orders_uid[str(order_index)] = str(order_uid)
+                    order_index += 1
         
         # Общая информация о заказе
         user_id = data.get('userId')
