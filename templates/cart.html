@@ -286,6 +286,11 @@
                     ...item,
                     quantity: parseInt(item.quantity) || 0
                 }));
+                console.log('[TARA_DEBUG] Загружена корзина из хранилища. Количество товаров:', cart.length);
+                // Проверяем, есть ли товары с TARA в загруженной корзине
+                const taraInCart = cart.filter(item => item.TARA === true);
+                console.log(`[TARA_DEBUG] В загруженной корзине ${taraInCart.length} товаров с TARA=true:`, 
+                    taraInCart.map(item => `${item.name} (ID: ${item.id})`));
             }
         } catch (error) {
             console.error('Ошибка при загрузке корзины:', error);
@@ -505,24 +510,32 @@
                 cartItems.innerHTML = '';
                 let totalSum = 0;
                 
-                console.log('Рендеринг товаров в корзине:', cart);
+                console.log('[TARA_DEBUG] Начинаем рендеринг товаров в корзине. Всего товаров:', cart.length);
+                
+                // Проверка перед рендерингом
+                const taraItemsBeforeRender = cart.filter(item => item.TARA === true);
+                console.log(`[TARA_DEBUG] Перед рендерингом в корзине ${taraItemsBeforeRender.length} товаров с TARA=true:`, 
+                    taraItemsBeforeRender.map(item => `${item.name} (ID: ${item.id})`));
                 
                 cart.forEach((item, index) => {
                     if (index >= itemsToShow) return;
                     
                     // Убедимся, что price является числом
                     const price = parseFloat(item.price) || 0;
-                    console.log(`Товар ${item.name}, цена: ${price}`);
+                    console.log(`[TARA_DEBUG] Рендерим товар: "${item.name}", цена: ${price}, TARA: ${item.TARA === true ? 'да' : 'нет'}`);
                     
                     const itemTotal = price * (parseInt(item.quantity) || 0);
                     totalSum += itemTotal;
                     
                     const itemElement = document.createElement('div');
                     // Проверяем, является ли товар тарой
-                    itemElement.className = `cart-item${item.TARA ? ' tara-item' : ''}`;
+                    const cssClass = `cart-item${item.TARA === true ? ' tara-item' : ''}`;
+                    itemElement.className = cssClass;
+                    console.log(`[TARA_DEBUG] Применяем CSS класс к товару "${item.name}": ${cssClass}`);
                     
                     // Создаем метку ТАРА, если товар является тарой
-                    const taraLabel = item.TARA ? '<span class="tara-badge">ТАРА</span>' : '';
+                    const taraLabel = item.TARA === true ? '<span class="tara-badge">ТАРА</span>' : '';
+                    console.log(`[TARA_DEBUG] Добавляем метку TARA к товару "${item.name}": ${taraLabel ? 'да' : 'нет'}`);
                     
                     itemElement.innerHTML = `
                         <div class="cart-item-info">
@@ -948,38 +961,64 @@
         
         // Получаем список всех товаров для проверки TARA
         function loadInitialProducts() {
-            console.log('Загружаем каталог товаров для проверки TARA...');
+            console.log('[TARA_DEBUG] Начинаем загрузку каталога товаров для проверки TARA...');
             fetch(`/api/get-products?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         window.initialProducts = data.products || [];
-                        console.log(`Загружено ${window.initialProducts.length} товаров из каталога`);
+                        console.log(`[TARA_DEBUG] Загружено ${window.initialProducts.length} товаров из каталога`);
                         
                         // Находим товары с TARA=true
                         const taraProducts = window.initialProducts.filter(p => p.TARA === true);
-                        console.log(`Найдено ${taraProducts.length} товаров с TARA=true:`, taraProducts.map(p => p.name));
+                        console.log(`[TARA_DEBUG] В каталоге найдено ${taraProducts.length} товаров с TARA=true:`);
+                        
+                        // Выводим подробную информацию о товарах с TARA=true
+                        taraProducts.forEach(product => {
+                            console.log(`[TARA_DEBUG] Товар с TARA=true в каталоге: "${product.name}", ID: ${product.id}, UID: ${product.UID || 'нет'}`);
+                        });
                         
                         // Применяем TARA к товарам в корзине
+                        console.log('[TARA_DEBUG] Начинаем применять TARA к товарам в корзине...');
+                        let taraAppliedCount = 0;
+                        
                         cart.forEach(item => {
+                            console.log(`[TARA_DEBUG] Проверяем товар корзины: "${item.name}", ID: ${item.id}`);
+                            
                             // Ищем товар в каталоге по ID
                             const catalogItem = window.initialProducts.find(p => 
                                 p.id.toString() === item.id.toString() || 
                                 (p.UID && item.id && p.UID.toString() === item.id.toString())
                             );
                             
-                            if (catalogItem && catalogItem.TARA === true) {
-                                console.log(`Товар ${item.name} (ID: ${item.id}) отмечен как TARA из каталога`);
-                                item.TARA = true;
+                            if (catalogItem) {
+                                console.log(`[TARA_DEBUG] Найден товар в каталоге: "${catalogItem.name}", ID: ${catalogItem.id}, TARA: ${catalogItem.TARA}`);
+                                
+                                if (catalogItem.TARA === true) {
+                                    console.log(`[TARA_DEBUG] Товар "${item.name}" (ID: ${item.id}) отмечен как TARA из каталога`);
+                                    item.TARA = true;
+                                    taraAppliedCount++;
+                                } else {
+                                    console.log(`[TARA_DEBUG] Товар "${item.name}" (ID: ${item.id}) НЕ является TARA`);
+                                }
+                            } else {
+                                console.log(`[TARA_DEBUG] Не найден товар "${item.name}" (ID: ${item.id}) в каталоге`);
                             }
                         });
+                        
+                        console.log(`[TARA_DEBUG] Применено TARA к ${taraAppliedCount} товарам из ${cart.length}`);
+                        
+                        // Проверка после применения TARA
+                        const taraItemsAfter = cart.filter(item => item.TARA === true);
+                        console.log(`[TARA_DEBUG] После обработки в корзине ${taraItemsAfter.length} товаров с TARA=true:`, 
+                            taraItemsAfter.map(item => `${item.name} (ID: ${item.id})`));
                         
                         // Перерисовываем корзину с учетом TARA
                         renderCartItems();
                     }
                 })
                 .catch(error => {
-                    console.error('Ошибка при загрузке каталога товаров:', error);
+                    console.error('[TARA_DEBUG] Ошибка при загрузке каталога товаров:', error);
                 });
         }
         
