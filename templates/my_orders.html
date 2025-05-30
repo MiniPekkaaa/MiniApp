@@ -437,11 +437,16 @@
         function loadOrders() {
             showLoading();
             
+            // Добавляем замер времени
+            const startTime = performance.now();
+            console.log('Начало загрузки заказов:', new Date().toISOString());
+            
             // Загружаем заказы из 1С
             fetch(`/api/get-orders-from-1c?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data1C => {
-                    console.log('Получены данные из 1С:', data1C);
+                    const time1C = performance.now() - startTime;
+                    console.log(`Получены данные из 1С за ${time1C.toFixed(2)} мс:`, data1C);
                     
                     if (!data1C.success) {
                         console.error('Ошибка при получении данных из 1С:', data1C.error);
@@ -452,7 +457,8 @@
                     return fetch(`/api/get-orders?user_id=${userId}`)
                         .then(response => response.json())
                         .then(dataMongo => {
-                            console.log('Получены данные из MongoDB:', dataMongo);
+                            const timeMongo = performance.now() - startTime - time1C;
+                            console.log(`Получены данные из MongoDB за ${timeMongo.toFixed(2)} мс:`, dataMongo);
                             
                             if (!dataMongo.success) {
                                 console.error('Ошибка при получении данных из MongoDB:', dataMongo.error);
@@ -462,22 +468,39 @@
                             // Объединяем данные из 1С и MongoDB
                             return { 
                                 orders1C: data1C.orders,
-                                ordersMongo: dataMongo.orders
+                                ordersMongo: dataMongo.orders,
+                                time1C,
+                                timeMongo
                             };
                         });
                 })
                 .then(combinedData => {
                     // Комбинируем данные из 1С и MongoDB
+                    const timeBeforeMatching = performance.now() - startTime;
+                    console.log(`Начало обработки данных через ${timeBeforeMatching.toFixed(2)} мс`);
+                    
                     const matchedOrders = matchOrdersFromBothSources(combinedData.orders1C, combinedData.ordersMongo);
+                    
+                    const timeAfterMatching = performance.now() - startTime;
+                    console.log(`Сопоставление заказов завершено за ${(timeAfterMatching - timeBeforeMatching).toFixed(2)} мс`);
+                    
                     return processOrderStatuses(matchedOrders);
                 })
                 .then(ordersWithStatuses => {
+                    const timeAfterStatuses = performance.now() - startTime;
+                    console.log(`Обработка статусов завершена за ${timeAfterStatuses.toFixed(2)} мс`);
+                    
                     hideLoading();
                     displayMatchedOrders(ordersWithStatuses);
+                    
+                    const totalTime = performance.now() - startTime;
+                    console.log(`Общее время загрузки заказов: ${totalTime.toFixed(2)} мс`);
                 })
                 .catch(error => {
+                    const errorTime = performance.now() - startTime;
+                    console.error(`Ошибка при загрузке заказов через ${errorTime.toFixed(2)} мс:`, error);
+                    
                     hideLoading();
-                    console.error('Ошибка при загрузке заказов:', error);
                     document.getElementById('orders-list').innerHTML = `
                         <div class="no-orders">
                             <p>Не удалось загрузить заказы: ${error.message}</p>
@@ -590,6 +613,7 @@
             // Обработка статусов для заказов с ordersUID
             for (let i = 0; i < processedOrders.length; i++) {
                 const order = processedOrders[i];
+                const startStatusTime = performance.now();
                 
                 // Проверяем, есть ли у заказа ordersUID
                 if (order.ordersUID && Object.keys(order.ordersUID).length > 0 && order.order_ID) {
@@ -601,7 +625,8 @@
                         const statusData = await response.json();
                         
                         if (statusData.success) {
-                            console.log(`Получен статус для заказа ID ${order.order_ID}: ${statusData.status}`);
+                            const timeElapsed = performance.now() - startStatusTime;
+                            console.log(`Получен статус для заказа ID ${order.order_ID}: ${statusData.status} за ${timeElapsed.toFixed(2)} мс`);
                             // Обновляем статус заказа
                             processedOrders[i].status = statusData.status;
                         } else {
@@ -630,7 +655,8 @@
                                 status = statusData.status.STATUS;
                             }
                             
-                            console.log(`Получен прямой статус для заказа из 1С ID ${order.order1C.ID_ORDER}: ${status}`);
+                            const timeElapsed = performance.now() - startStatusTime;
+                            console.log(`Получен прямой статус для заказа из 1С ID ${order.order1C.ID_ORDER}: ${status} за ${timeElapsed.toFixed(2)} мс`);
                             // Обновляем статус заказа
                             processedOrders[i].status = status;
                         } else {
@@ -790,13 +816,14 @@
                 return;
             }
             
-            // Создаем временную корзину с товарами из заказа
+            // Создаем временную корзину с товарами из заказа, но без цен
             const cartItems = order.positions.map(position => ({
                 id: position.id,
                 name: position.name,
                 quantity: position.quantity,
-                price: position.price,
-                legalEntity: position.legal_entity
+                legalEntity: position.legal_entity,
+                // Удаляем цену, чтобы она пересчиталась при загрузке корзины
+                price: 0
             }));
             
             // Сохраняем корзину в sessionStorage

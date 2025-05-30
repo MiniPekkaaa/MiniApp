@@ -1217,6 +1217,17 @@ def save_combined_order():
             position_key = f"Position_{index}"
             # Используем тот же UID, что и при запросе цен
             uid = item.get('uid') or None
+            
+            # Если UID все еще null, попробуем найти его в каталоге
+            if uid is None:
+                # Найдем товар в каталоге по id
+                beer_id = item.get('id')
+                if beer_id is not None:
+                    catalog_item = mongo.cx.Pivo.catalog.find_one({'id': int(beer_id) if str(beer_id).isdigit() else beer_id})
+                    if catalog_item and 'UID' in catalog_item and catalog_item['UID']:
+                        uid = catalog_item['UID']
+                        logger.debug(f"Найден UID в каталоге для товара с ID {beer_id}: {uid}")
+            
             # Преобразуем UID в строку, если он есть
             if uid is not None:
                 uid = str(uid)
