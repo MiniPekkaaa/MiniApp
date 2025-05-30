@@ -1789,5 +1789,44 @@ def get_batch_order_statuses():
         logger.error(f"Ошибка при получении batch-статусов заказов: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/check-tara', methods=['POST'])
+def check_tara():
+    try:
+        data = request.json
+        uids = data.get('uids', [])
+        
+        logger.debug(f"Получен запрос на проверку TARA для UID: {uids}")
+        
+        # Результаты проверки TARA
+        tara_data = {}
+        
+        # Подключаемся к MongoDB
+        catalog = mongo.cx.Pivo.catalog
+        
+        # Поиск документов по UID
+        for uid in uids:
+            # Ищем документ по полю UID
+            document = catalog.find_one({"UID": uid})
+            
+            if document:
+                logger.debug(f"Найден документ в MongoDB для UID {uid}: TARA={document.get('TARA', False)}")
+                tara_data[uid] = bool(document.get('TARA', False))
+            else:
+                logger.debug(f"Документ для UID {uid} не найден в MongoDB")
+                tara_data[uid] = False
+        
+        logger.debug(f"Результаты проверки TARA: {tara_data}")
+        
+        return jsonify({
+            'success': True,
+            'tara_data': tara_data
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при проверке TARA: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
