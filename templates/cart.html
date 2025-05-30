@@ -1127,47 +1127,32 @@
         
         // Получаем список всех товаров для проверки TARA
         function loadInitialProducts() {
-            console.log('[TARA DEBUG] Загружаем каталог товаров для проверки TARA...');
+            console.log('[DEBUG] Загружаем каталог товаров для проверки TARA...');
             fetch(`/api/get-products?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data => {
-                    console.log('[TARA DEBUG] Получен ответ от API get-products:', data);
+                    console.log('[DEBUG] Получен ответ от API get-products:', data);
                     
                     if (data.success) {
                         window.initialProducts = data.products || [];
-                        console.log(`[TARA DEBUG] Загружено ${window.initialProducts.length} товаров из каталога`);
+                        console.log(`[DEBUG] Загружено ${window.initialProducts.length} товаров из каталога`);
                         
-                        // Отображаем все товары с TARA=true из каталога
+                        // Отображаем товары с TARA=true из каталога
                         const taraProducts = window.initialProducts.filter(p => p.TARA === true);
-                        console.log(`[TARA DEBUG] Найдено ${taraProducts.length} товаров с TARA=true:`, 
+                        console.log(`[DEBUG] Найдено ${taraProducts.length} товаров с TARA=true:`, 
                             taraProducts.map(p => ({id: p.id, name: p.name, UID: p.UID, TARA: p.TARA})));
                         
-                        // Выведем тип данных TARA в каталоге для всех товаров
-                        window.initialProducts.forEach((product, index) => {
-                            console.log(`[TARA DEBUG] Товар #${index}: ${product.name}, TARA=${product.TARA}, тип=${typeof product.TARA}, ID=${product.id}, UID=${product.UID}`);
-                        });
-                        
-                        // Проверяем наличие баллона в каталоге по ID и UID
-                        const balloonById = window.initialProducts.find(p => p.id === 34 || p.id === "34");
-                        if (balloonById) {
-                            console.log('[TARA DEBUG] Баллон найден по ID=34:', balloonById);
-                        }
-                        
-                        const balloonByUID = window.initialProducts.find(p => 
-                            p.UID === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4" || 
-                            p.UID === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4");
-                        if (balloonByUID) {
-                            console.log('[TARA DEBUG] Баллон найден по UID:', balloonByUID);
-                        }
+                        // Выводим всю информацию из каталога
+                        console.log('[DEBUG] Все товары из каталога:', window.initialProducts);
                         
                         // Перерисовываем корзину с учетом данных из каталога
                         renderCartItems();
                     } else {
-                        console.error('[TARA DEBUG] Ошибка при загрузке каталога товаров:', data.error);
+                        console.error('[DEBUG] Ошибка при загрузке каталога товаров:', data.error);
                     }
                 })
                 .catch(error => {
-                    console.error('[TARA DEBUG] Ошибка при загрузке каталога товаров:', error);
+                    console.error('[DEBUG] Ошибка при загрузке каталога товаров:', error);
                 });
         }
         
@@ -1184,120 +1169,67 @@
             cartItems.innerHTML = '';
             let totalSum = 0;
             
-            console.log('[TARA DEBUG] Начало рендеринга товаров в корзине:', cart);
+            console.log('[DEBUG] Начало рендеринга товаров в корзине:', cart);
             
             // Сначала сбрасываем флаги TARA
             cart.forEach(item => {
                 item.TARA = false;
             });
             
-            // ПРЯМОЕ РЕШЕНИЕ: принудительно помечаем все баллоны как TARA=true
-            // Так как очевидно из MongoDB что баллоны должны иметь TARA=true
-            cart.forEach(item => {
-                // Проверка по имени
-                if (item.name && (item.name.includes("Баллон") || item.name.includes("баллон"))) {
-                    console.log(`[TARA DEBUG] ⭐ Принудительная установка TARA=true для товара по имени: ${item.name}`);
-                    item.TARA = true;
-                }
-                
-                // Проверка по ID
-                if (item.id === 34 || item.id === "34") {
-                    console.log(`[TARA DEBUG] ⭐ Принудительная установка TARA=true для товара с ID=34: ${item.name}`);
-                    item.TARA = true;
-                }
-                
-                // Проверка по UID (оба варианта UID которые встречаются в логах)
-                if (item.uid === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4" || 
-                    item.uid === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4") {
-                    console.log(`[TARA DEBUG] ⭐ Принудительная установка TARA=true для товара с UID баллона: ${item.name}`);
-                    item.TARA = true;
-                }
-            });
-            
             // Проверяем доступность данных каталога
             if (!window.initialProducts || window.initialProducts.length === 0) {
-                console.error('[TARA DEBUG] Данные каталога недоступны');
+                console.error('[DEBUG] Данные каталога недоступны');
             } else {
+                console.log('[DEBUG] Создаем карты для быстрого поиска товаров по UID и ID');
+                
                 // Создаем карты для быстрого поиска
                 const catalogByUID = {};
                 const catalogByID = {};
                 
                 window.initialProducts.forEach(product => {
-                    // Добавляем в карту по UID
+                    // Добавляем в карту по UID если есть
                     if (product.UID) {
                         catalogByUID[product.UID] = product;
                     }
                     
-                    // Добавляем в карту по ID
-                    if (product.id) {
+                    // Добавляем в карту по ID если есть
+                    if (product.id !== undefined && product.id !== null) {
+                        // Сохраняем и как строку, и как число
                         catalogByID[product.id] = product;
+                        catalogByID[String(product.id)] = product;
                     }
                 });
                 
-                console.log('[TARA DEBUG] Создана карта каталога по UID:', catalogByUID);
-                console.log('[TARA DEBUG] Создана карта каталога по ID:', catalogByID);
-                
-                // Для каждого товара в корзине проверяем свойство TARA из каталога
+                // Для каждого товара в корзине ищем соответствие в каталоге
                 cart.forEach(item => {
-                    console.log(`[TARA DEBUG] Проверка TARA для товара ${item.name} (ID: ${item.id})`);
+                    console.log(`[DEBUG] Поиск товара в каталоге: ${item.name} (ID: ${item.id}, UID: ${item.uid})`);
                     
-                    // НОВЫЙ АЛГОРИТМ:
-                    // 1. Сначала проверяем по UID из корзины (если есть)
+                    let catalogProduct = null;
+                    
+                    // 1. Ищем по UID товара если он есть
                     if (item.uid && catalogByUID[item.uid]) {
-                        const product = catalogByUID[item.uid];
-                        console.log(`[TARA DEBUG] Найден товар по UID ${item.uid}:`, product);
-                        
-                        // Проверяем свойство TARA напрямую
-                        if (product.TARA === true) {
-                            item.TARA = true;
-                            console.log(`[TARA DEBUG] ✅ Товар ${item.name} имеет TARA=true по UID ${item.uid}`);
-                        } else {
-                            console.log(`[TARA DEBUG] ❌ Товар по UID ${item.uid} имеет TARA=${product.TARA}`);
-                        }
+                        catalogProduct = catalogByUID[item.uid];
+                        console.log(`[DEBUG] Найден товар по UID ${item.uid}:`, catalogProduct);
+                    }
+                    // 2. Если не нашли, ищем по маппингу ID -> UID
+                    else if (window.uidMap && window.uidMap[item.id] && catalogByUID[window.uidMap[item.id]]) {
+                        catalogProduct = catalogByUID[window.uidMap[item.id]];
+                        console.log(`[DEBUG] Найден товар по маппингу ID ${item.id} -> UID ${window.uidMap[item.id]}:`, catalogProduct);
+                    }
+                    // 3. Если не нашли, ищем по ID
+                    else if (catalogByID[item.id]) {
+                        catalogProduct = catalogByID[item.id];
+                        console.log(`[DEBUG] Найден товар по ID ${item.id}:`, catalogProduct);
                     }
                     
-                    // 2. Если TARA все еще false и есть uidMap, используем его
-                    if (!item.TARA && window.uidMap && window.uidMap[item.id]) {
-                        const mappedUID = window.uidMap[item.id];
-                        console.log(`[TARA DEBUG] Найден маппинг ID ${item.id} -> UID ${mappedUID}`);
-                        
-                        if (catalogByUID[mappedUID]) {
-                            const product = catalogByUID[mappedUID];
-                            console.log(`[TARA DEBUG] Найден товар по маппингу UID ${mappedUID}:`, product);
-                            
-                            if (product.TARA === true) {
-                                item.TARA = true;
-                                console.log(`[TARA DEBUG] ✅ Товар ${item.name} имеет TARA=true по маппингу UID ${mappedUID}`);
-                            } else {
-                                console.log(`[TARA DEBUG] ❌ Товар по маппингу UID ${mappedUID} имеет TARA=${product.TARA}`);
-                            }
-                        }
+                    // Если нашли товар в каталоге, просто используем его значение TARA
+                    if (catalogProduct) {
+                        console.log(`[DEBUG] Для товара ${item.name} установлено TARA=${catalogProduct.TARA} из каталога`);
+                        // Используем именно === true для проверки, чтобы избежать приведения типов
+                        item.TARA = catalogProduct.TARA === true;
+                    } else {
+                        console.log(`[DEBUG] Товар ${item.name} не найден в каталоге`);
                     }
-                    
-                    // 3. Если TARA все еще false, ищем напрямую по ID
-                    if (!item.TARA && catalogByID[item.id]) {
-                        const product = catalogByID[item.id];
-                        console.log(`[TARA DEBUG] Найден товар по ID ${item.id}:`, product);
-                        
-                        if (product.TARA === true) {
-                            item.TARA = true;
-                            console.log(`[TARA DEBUG] ✅ Товар ${item.name} имеет TARA=true по ID ${item.id}`);
-                        } else {
-                            console.log(`[TARA DEBUG] ❌ Товар по ID ${item.id} имеет TARA=${product.TARA}`);
-                        }
-                    }
-                    
-                    // 4. Принудительно устанавливаем TARA для товаров с UID из обоих вариантов
-                    if (item.uid === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4" || 
-                        (window.uidMap && window.uidMap[item.id] === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4") ||
-                        item.uid === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4" || 
-                        (window.uidMap && window.uidMap[item.id] === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4")) {
-                        item.TARA = true;
-                        console.log(`[TARA DEBUG] ⚠️ Принудительно установлено TARA=true для Баллона`);
-                    }
-                    
-                    // Итоговый результат
-                    console.log(`[TARA DEBUG] Итоговое значение TARA для товара ${item.name}: ${item.TARA ? 'true' : 'false'}`);
                 });
             }
             
@@ -1307,16 +1239,16 @@
                 
                 // Убедимся, что price является числом
                 const price = parseFloat(item.price) || 0;
-                console.log(`[TARA DEBUG] Рендеринг товара ${item.name}, цена: ${price}, TARA: ${item.TARA ? 'true' : 'false'}`);
+                console.log(`[DEBUG] Рендеринг товара ${item.name}, цена: ${price}, TARA: ${item.TARA ? 'true' : 'false'}`);
                 
                 const itemTotal = price * (parseInt(item.quantity) || 0);
                 totalSum += itemTotal;
                 
                 const itemElement = document.createElement('div');
-                // Проверяем, является ли товар тарой и применяем класс
+                // Применяем класс tara-item только если TARA === true
                 itemElement.className = `cart-item${item.TARA ? ' tara-item' : ''}`;
                 
-                console.log(`[TARA DEBUG] Элементу для товара ${item.name} установлен класс: ${itemElement.className}`);
+                console.log(`[DEBUG] Элементу для товара ${item.name} установлен класс: ${itemElement.className}`);
                 
                 // Создаем метку ТАРА, если товар является тарой
                 const taraLabel = item.TARA ? '<span class="tara-badge">ТАРА</span>' : '';
@@ -1352,7 +1284,7 @@
                 cartItems.appendChild(itemElement);
             });
             
-            console.log(`[TARA DEBUG] Общая сумма расчитана: ${totalSum.toFixed(2)}₽`);
+            console.log(`[DEBUG] Общая сумма расчитана: ${totalSum.toFixed(2)}₽`);
             
             // Обновляем общую сумму
             if (!document.getElementById('total_amount').textContent || 
