@@ -195,9 +195,24 @@ def get_products():
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
 
+        # Получаем каталог товаров из MongoDB
         products = list(mongo.cx.Pivo.catalog.find())
+        
+        logger.debug(f"Получено {len(products)} товаров из каталога")
+        if len(products) > 0:
+            sample_product = products[0]
+            logger.debug(f"Пример товара: {sample_product}")
+            logger.debug(f"Тип свойства TARA: {type(sample_product.get('TARA'))}, значение: {sample_product.get('TARA')}")
+        
+        # Форматируем данные для передачи на клиент
         formatted_products = []
         for product in products:
+            # Обеспечиваем корректное представление TARA как булева значения
+            tara_value = product.get('TARA')
+            # Если TARA строка "true" или "false", преобразуем в булево значение
+            if isinstance(tara_value, str):
+                tara_value = tara_value.lower() == 'true'
+            
             formatted_product = {
                 'id': product.get('id', ''),
                 '_id': str(product.get('_id', '')),
@@ -205,13 +220,22 @@ def get_products():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'legalEntity': int(product.get('legalEntity', 1) or 1),
-                'TARA': bool(product.get('TARA', False))
+                'UID': product.get('UID', ''),
+                'TARA': bool(tara_value)  # Гарантируем, что это булево значение
             }
             formatted_products.append(formatted_product)
         
-        return jsonify(formatted_products)
+        logger.debug(f"Подготовлено {len(formatted_products)} отформатированных товаров")
+        # Выводим пример товаров с TARA=true
+        tara_products = [p for p in formatted_products if p['TARA']]
+        logger.debug(f"Найдено {len(tara_products)} товаров с TARA=true: {tara_products[:3]}")
+        
+        return jsonify({
+            'success': True,
+            'products': formatted_products
+        })
     except Exception as e:
-        logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
+        logger.error(f"Ошибка при получении товаров: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/create-order', methods=['POST'])
@@ -384,32 +408,8 @@ def get_orders():
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
 
-        # Проверяем, есть ли кешированные данные
-        cache_key = f'orders_cache:{org_id}'
-        cached_data = redis_client.get(cache_key)
+        # Удалено кеширование - всегда получаем актуальные данные
         
-        if cached_data:
-            try:
-                # Если есть кешированные данные и они не старше 5 минут, используем их
-                cached_orders = json.loads(cached_data)
-                cache_time = redis_client.get(f'{cache_key}:time')
-                
-                if cache_time:
-                    cache_timestamp = float(cache_time)
-                    current_timestamp = datetime.now().timestamp()
-                    
-                    # Если кеш не старше 5 минут, используем его
-                    if current_timestamp - cache_timestamp < 300:  # 5 минут в секундах
-                        logger.debug(f'Использованы кешированные данные заказов из Redis, возраст: {current_timestamp - cache_timestamp:.1f} сек')
-                        return jsonify({
-                            'success': True,
-                            'orders': cached_orders,
-                            'cached': True
-                        })
-            except Exception as e:
-                logger.error(f'Ошибка при получении данных из кеша: {str(e)}')
-                # В случае ошибки продолжаем получать данные из MongoDB
-
         # Получаем 5 последних заказов из MongoDB по org_ID, сортированных по дате
         # Указываем только нужные поля для ускорения запроса
         query_time_start = datetime.now()
@@ -464,22 +464,6 @@ def get_orders():
 
         format_time_end = datetime.now()
         logger.debug(f'Форматирование заказов выполнено за: {(format_time_end - query_time_end).total_seconds():.3f} сек')
-        
-        # Кешируем результаты в Redis
-        try:
-            redis_client.setex(
-                cache_key,
-                3600,  # Храним 1 час
-                json.dumps(formatted_orders)
-            )
-            redis_client.setex(
-                f'{cache_key}:time',
-                3600,  # Храним 1 час
-                str(datetime.now().timestamp())
-            )
-            logger.debug(f'Данные заказов кешированы в Redis')
-        except Exception as e:
-            logger.error(f'Ошибка при кешировании данных: {str(e)}')
         
         end_time = datetime.now()
         logger.debug(f'Общее время выполнения get_orders: {(end_time - start_time).total_seconds():.3f} сек')
