@@ -1153,7 +1153,9 @@
                             console.log('[TARA DEBUG] Баллон найден по ID=34:', balloonById);
                         }
                         
-                        const balloonByUID = window.initialProducts.find(p => p.UID === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4");
+                        const balloonByUID = window.initialProducts.find(p => 
+                            p.UID === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4" || 
+                            p.UID === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4");
                         if (balloonByUID) {
                             console.log('[TARA DEBUG] Баллон найден по UID:', balloonByUID);
                         }
@@ -1187,6 +1189,29 @@
             // Сначала сбрасываем флаги TARA
             cart.forEach(item => {
                 item.TARA = false;
+            });
+            
+            // ПРЯМОЕ РЕШЕНИЕ: принудительно помечаем все баллоны как TARA=true
+            // Так как очевидно из MongoDB что баллоны должны иметь TARA=true
+            cart.forEach(item => {
+                // Проверка по имени
+                if (item.name && (item.name.includes("Баллон") || item.name.includes("баллон"))) {
+                    console.log(`[TARA DEBUG] ⭐ Принудительная установка TARA=true для товара по имени: ${item.name}`);
+                    item.TARA = true;
+                }
+                
+                // Проверка по ID
+                if (item.id === 34 || item.id === "34") {
+                    console.log(`[TARA DEBUG] ⭐ Принудительная установка TARA=true для товара с ID=34: ${item.name}`);
+                    item.TARA = true;
+                }
+                
+                // Проверка по UID (оба варианта UID которые встречаются в логах)
+                if (item.uid === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4" || 
+                    item.uid === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4") {
+                    console.log(`[TARA DEBUG] ⭐ Принудительная установка TARA=true для товара с UID баллона: ${item.name}`);
+                    item.TARA = true;
+                }
             });
             
             // Проверяем доступность данных каталога
@@ -1262,9 +1287,11 @@
                         }
                     }
                     
-                    // Принудительно устанавливаем TARA для товаров с UID c46435b8-ce40-11ef-a721-50ebf6b0a0c4 (Баллон)
+                    // 4. Принудительно устанавливаем TARA для товаров с UID из обоих вариантов
                     if (item.uid === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4" || 
-                        (window.uidMap && window.uidMap[item.id] === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4")) {
+                        (window.uidMap && window.uidMap[item.id] === "c46435b8-ce40-11ef-a721-50ebf6b0a0c4") ||
+                        item.uid === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4" || 
+                        (window.uidMap && window.uidMap[item.id] === "db8c3457-ce40-11ef-a721-50ebf6b0a0c4")) {
                         item.TARA = true;
                         console.log(`[TARA DEBUG] ⚠️ Принудительно установлено TARA=true для Баллона`);
                     }
