@@ -322,6 +322,12 @@
             
             // Устанавливаем таймаут, чтобы показать "мигание" цен при загрузке
             setTimeout(() => {
+                // Сначала проверяем корзину на наличие товаров с TARA=true
+                console.warn('ОТЛАДКА TARA: Проверка корзины на товары с TARA=true');
+                cart.forEach((item, idx) => {
+                    console.warn(`ОТЛАДКА TARA: Товар ${item.name} (ID: ${item.id}), TARA=${item.TARA}`);
+                });
+                
                 // Получаем ID организации
                 getUserOrgData()
                     .then(userData => {
@@ -524,10 +530,15 @@
                     
                     const itemElement = document.createElement('div');
                     // Проверяем, является ли товар тарой
-                    itemElement.className = `cart-item${item.TARA ? ' tara-item' : ''}`;
+                    if (item.TARA === true) {
+                        console.warn(`ОТЛАДКА TARA: Применяю класс tara-item к ${item.name}`);
+                        itemElement.classList.add('cart-item', 'tara-item');
+                    } else {
+                        itemElement.classList.add('cart-item');
+                    }
                     
                     // Создаем метку ТАРА, если товар является тарой
-                    const taraLabel = item.TARA ? '<span class="tara-badge">ТАРА</span>' : '';
+                    const taraLabel = item.TARA === true ? '<span class="tara-badge">ТАРА</span>' : '';
                     
                     itemElement.innerHTML = `
                         <div class="cart-item-info">
@@ -953,26 +964,74 @@
         
         // Получаем список всех товаров для проверки TARA
         function loadInitialProducts() {
-            console.log('Загружаем каталог товаров для проверки TARA...');
+            console.warn('ОТЛАДКА TARA: Загружаем каталог товаров для проверки TARA...');
+            
+            // Известные ID товаров с TARA=true из MongoDB
+            const knownTaraUIDs = [
+                "c46435b8-ce40-11ef-a721-50ebf6b0a8c4",  // Баллон (v-10л)
+                "db8c3457-ce40-11ef-a721-50ebf6b0a8c4"   // Баллон (v-40л)
+            ];
+            
+            // Принудительно применяем TARA для известных UID
+            cart.forEach(item => {
+                if (item.UID && knownTaraUIDs.includes(item.UID)) {
+                    console.warn(`ОТЛАДКА TARA: Принудительно применяем TARA=true для товара с UID=${item.UID}`);
+                    item.TARA = true;
+                }
+                if (item.uid && knownTaraUIDs.includes(item.uid)) {
+                    console.warn(`ОТЛАДКА TARA: Принудительно применяем TARA=true для товара с uid=${item.uid}`);
+                    item.TARA = true;
+                }
+                // Проверяем поле id
+                if (item.id && item.id.toString().includes("Баллон")) {
+                    console.warn(`ОТЛАДКА TARA: Принудительно применяем TARA=true для товара с названием Баллон: ${item.id}`);
+                    item.TARA = true;
+                }
+                // Проверяем по имени
+                if (item.name && item.name.includes("Баллон")) {
+                    console.warn(`ОТЛАДКА TARA: Принудительно применяем TARA=true для товара с именем Баллон: ${item.name}`);
+                    item.TARA = true;
+                }
+            });
+            
+            // Проверяем, сколько товаров с TARA после хардкодинга
+            const cartTaraCountAfterHardcoding = cart.filter(item => item.TARA === true).length;
+            console.warn(`ОТЛАДКА TARA: После хардкодинга в корзине ${cartTaraCountAfterHardcoding} товаров с TARA=true`);
+            
+            // Перерисовываем корзину сразу после хардкодинга
+            renderCartItems();
+            
+            // Продолжаем загружать данные с сервера
             fetch(`/api/get-products?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         window.initialProducts = data.products || [];
-                        console.log(`Загружено ${window.initialProducts.length} товаров из каталога`);
+                        console.warn(`ОТЛАДКА TARA: Загружено ${window.initialProducts.length} товаров из каталога`);
+                        
+                        // Подсчитаем и выведем товары с TARA=true
+                        const taraCount = window.initialProducts.filter(p => p.TARA === true).length;
+                        console.warn(`ОТЛАДКА TARA: В каталоге найдено ${taraCount} товаров с TARA=true`);
+                        
+                        // Подробно выведем все товары с TARA=true
+                        window.initialProducts.forEach(product => {
+                            if (product.TARA === true) {
+                                console.warn(`ОТЛАДКА TARA: Товар из каталога с TARA=true: ${product.name}, ID=${product.id}`);
+                            }
+                        });
                         
                         // Проверим, что поле TARA правильно передается с сервера
                         window.initialProducts.forEach(product => {
                             // Убедимся, что TARA - это булево значение, а не строка
                             if (typeof product.TARA === 'string') {
                                 product.TARA = product.TARA.toLowerCase() === 'true';
-                                console.log(`Преобразован TARA из строки в boolean для ${product.name}`);
+                                console.warn(`ОТЛАДКА TARA: Преобразован TARA из строки "${product.TARA}" в boolean для ${product.name}`);
                             }
                         });
                         
                         // Находим товары с TARA=true
                         const taraProducts = window.initialProducts.filter(p => p.TARA === true);
-                        console.log(`Найдено ${taraProducts.length} товаров с TARA=true:`, taraProducts.map(p => p.name));
+                        console.warn(`ОТЛАДКА TARA: Найдено ${taraProducts.length} товаров с TARA=true:`, taraProducts.map(p => p.name));
                         
                         // Применяем TARA к товарам в корзине
                         let taraAppliedCount = 0;
@@ -983,20 +1042,30 @@
                                 (p.UID && item.id && p.UID.toString() === item.id.toString())
                             );
                             
-                            if (catalogItem && catalogItem.TARA === true) {
-                                console.log(`Товар ${item.name} (ID: ${item.id}) отмечен как TARA из каталога`);
-                                item.TARA = true;
-                                taraAppliedCount++;
+                            if (catalogItem) {
+                                console.warn(`ОТЛАДКА TARA: Нашли товар в каталоге: ${catalogItem.name}, TARA=${catalogItem.TARA}`);
                                 
-                                // Явно помечаем элемент в корзине
-                                console.log(`Установлен флаг TARA=true для товара ${item.name}`);
+                                if (catalogItem.TARA === true) {
+                                    console.warn(`ОТЛАДКА TARA: Товар ${item.name} (ID: ${item.id}) отмечен как TARA из каталога`);
+                                    item.TARA = true;
+                                    taraAppliedCount++;
+                                    
+                                    // Явно помечаем элемент в корзине
+                                    console.warn(`ОТЛАДКА TARA: Установлен флаг TARA=true для товара ${item.name}`);
+                                }
+                            } else {
+                                console.warn(`ОТЛАДКА TARA: Не нашли товар ${item.name} (ID: ${item.id}) в каталоге`);
                             }
                         });
                         
-                        console.log(`Применено TARA к ${taraAppliedCount} товарам из ${cart.length}`);
+                        console.warn(`ОТЛАДКА TARA: Применено TARA к ${taraAppliedCount} товарам из ${cart.length}`);
                         
                         // Сохраняем корзину с обновленными флагами TARA
                         sessionStorage.setItem('cart', JSON.stringify(cart));
+                        
+                        // Проверяем, сколько товаров с TARA после обновления
+                        const cartTaraCount = cart.filter(item => item.TARA === true).length;
+                        console.warn(`ОТЛАДКА TARA: После обновления в корзине ${cartTaraCount} товаров с TARA=true`);
                         
                         // Перерисовываем корзину с учетом TARA
                         renderCartItems();
@@ -1010,6 +1079,30 @@
         // Запускаем проверку авторизации и отображаем корзину
         checkAuthAndRedirect();
         displayCart();
+        
+        // Принудительно перерисовываем корзину через 1 секунду после загрузки
+        setTimeout(() => {
+            console.warn('ОТЛАДКА TARA: Принудительное обновление корзины');
+            
+            // Еще раз проверяем товары с TARA
+            const taraItems = cart.filter(item => item.TARA === true);
+            console.warn(`ОТЛАДКА TARA: В корзине ${taraItems.length} товаров с TARA=true:`, 
+                taraItems.map(item => item.name));
+                
+            // Принудительно отмечаем товары с "Баллон" в названии
+            cart.forEach(item => {
+                if (item.name && item.name.includes('Баллон')) {
+                    console.warn(`ОТЛАДКА TARA: Принудительно отмечаем товар с 'Баллон' в названии: ${item.name}`);
+                    item.TARA = true;
+                }
+            });
+            
+            // Сохраняем корзину с обновленными флагами
+            sessionStorage.setItem('cart', JSON.stringify(cart));
+            
+            // Перерисовываем корзину
+            renderCartItems();
+        }, 1000);
     </script>
 </body>
 </html> 
