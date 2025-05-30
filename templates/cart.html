@@ -363,23 +363,14 @@
                             console.error('Ошибка API:', priceData);
                             showNotification('Ошибка API: ' + priceData);
                             
-                            // Используем тестовые данные
-                            const testData = getTestPriceData();
+                            // Используем цены из API даже если ошибка
+                            // Устанавливаем общую сумму из ответа API, если доступна
+                            if (priceData.Summa !== undefined) {
+                                document.getElementById('total_amount').textContent = parseFloat(priceData.Summa).toFixed(2);
+                                console.log(`Установлена общая сумма из API: ${priceData.Summa}`);
+                            }
                             
-                            // Добавляем информацию о тестовых ценах в объекты корзины
-                            testData.Korzina.forEach(priceItem => {
-                                const cartItem = cart.find(item => item.id === priceItem.ID_product);
-                                if (cartItem) {
-                                    cartItem.price = priceItem.Price;
-                                    console.log(`Установлена тестовая цена ${priceItem.Price} для товара ${cartItem.name}`);
-                                }
-                            });
-                            
-                            // Обновляем отображение корзины с тестовыми ценами
                             renderCartItems();
-                            
-                            // Устанавливаем общую сумму
-                            document.getElementById('total_amount').textContent = testData.Summa.toFixed(2);
                             return;
                         }
                         
@@ -493,24 +484,14 @@
                     .catch(error => {
                         console.error('Ошибка при получении цен:', error);
                         
-                        // В случае ошибки используем тестовые данные
-                        console.log('Используем тестовые данные для цен');
-                        const testData = getTestPriceData();
+                        // В случае ошибки показываем уведомление
+                        showNotification('Ошибка при получении цен: ' + error.message);
                         
-                        // Добавляем информацию о ценах в объекты корзины
-                        testData.Korzina.forEach(priceItem => {
-                            const cartItem = cart.find(item => item.id === priceItem.ID_product);
-                            if (cartItem) {
-                                cartItem.price = priceItem.Price;
-                                console.log(`Установлена тестовая цена ${priceItem.Price} для товара ${cartItem.name}`);
-                            }
-                        });
-                        
-                        // Обновляем отображение корзины с тестовыми ценами
+                        // Обновляем отображение корзины с нулевыми ценами
                         renderCartItems();
                         
-                        // Устанавливаем общую сумму
-                        document.getElementById('total_amount').textContent = testData.Summa.toFixed(2);
+                        // Устанавливаем нулевую общую сумму
+                        document.getElementById('total_amount').textContent = '0.00';
                     });
             }, 300);
             
@@ -963,41 +944,6 @@
             
             console.warn(`Товар с UID ${uid} не найден в корзине`);
             return null;
-        }
-        
-        // Функция для тестовых данных
-        function getTestPriceData() {
-            const testData = {
-                Summa: 0,
-                Korzina: []
-            };
-            
-            // Фиксированные цены по ID товаров
-            const fixedPrices = {
-                "e2154633-a7ca-11ef-a719-50ebf6b0a0c4": 3860.4, // Рыцарь Приморья
-                "e2154634-a7ca-11ef-a719-50ebf6b0a0c4": 3996.3, // Белый медведь
-                "9349": 3860.4, // По ID товара
-                "9350": 3996.3  // По ID товара
-            };
-            
-            // Используем разные фиксированные цены для разных товаров
-            cart.forEach((item, index) => {
-                // Пробуем найти цену по ID или UID
-                let price = fixedPrices[item.id] || 
-                           (window.uidMap && fixedPrices[window.uidMap[item.id]]) || 
-                           (3800 + (index * 100)); // Разные цены по индексу, если ничего не найдено
-                
-                console.log(`Тестовая цена для ${item.name}: ${price}`);
-                
-                testData.Korzina.push({
-                    ID_product: item.id,
-                    Price: price
-                });
-                
-                testData.Summa += price * item.quantity;
-            });
-            
-            return testData;
         }
         
         // Получаем список всех товаров для проверки TARA
