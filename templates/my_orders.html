@@ -807,9 +807,6 @@
             // Сохраняем корзину в sessionStorage
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
             
-            // Устанавливаем флаг, что нужно показать рекомендацию
-            sessionStorage.setItem('recommendation', 'Создан новый заказ на основе предыдущего. Цены будут обновлены при загрузке корзины.');
-            
             // Перенаправляем на страницу корзины
             window.location.href = `/cart?user_id=${userId}`;
         }
