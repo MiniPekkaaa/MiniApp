@@ -195,9 +195,24 @@ def get_products():
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
 
+        # Получаем каталог товаров из MongoDB
         products = list(mongo.cx.Pivo.catalog.find())
+        
+        logger.debug(f"Получено {len(products)} товаров из каталога")
+        if len(products) > 0:
+            sample_product = products[0]
+            logger.debug(f"Пример товара: {sample_product}")
+            logger.debug(f"Тип свойства TARA: {type(sample_product.get('TARA'))}, значение: {sample_product.get('TARA')}")
+        
+        # Форматируем данные для передачи на клиент
         formatted_products = []
         for product in products:
+            # Обеспечиваем корректное представление TARA как булева значения
+            tara_value = product.get('TARA')
+            # Если TARA строка "true" или "false", преобразуем в булево значение
+            if isinstance(tara_value, str):
+                tara_value = tara_value.lower() == 'true'
+            
             formatted_product = {
                 'id': product.get('id', ''),
                 '_id': str(product.get('_id', '')),
@@ -205,13 +220,22 @@ def get_products():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'legalEntity': int(product.get('legalEntity', 1) or 1),
-                'TARA': bool(product.get('TARA', False))
+                'UID': product.get('UID', ''),
+                'TARA': bool(tara_value)  # Гарантируем, что это булево значение
             }
             formatted_products.append(formatted_product)
         
-        return jsonify(formatted_products)
+        logger.debug(f"Подготовлено {len(formatted_products)} отформатированных товаров")
+        # Выводим пример товаров с TARA=true
+        tara_products = [p for p in formatted_products if p['TARA']]
+        logger.debug(f"Найдено {len(tara_products)} товаров с TARA=true: {tara_products[:3]}")
+        
+        return jsonify({
+            'success': True,
+            'products': formatted_products
+        })
     except Exception as e:
-        logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
+        logger.error(f"Ошибка при получении товаров: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/create-order', methods=['POST'])
@@ -378,6 +402,11 @@ def get_orders():
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
 
+<<<<<<< HEAD
+=======
+        # Удалено кеширование - всегда получаем актуальные данные
+        
+>>>>>>> parent of 359a81e (некорретное отображение пост запроса)
         # Получаем 5 последних заказов из MongoDB по org_ID, сортированных по дате
         orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1).limit(5))
         
@@ -414,6 +443,15 @@ def get_orders():
             }
             formatted_orders.append(formatted_order)
 
+<<<<<<< HEAD
+=======
+        format_time_end = datetime.now()
+        logger.debug(f'Форматирование заказов выполнено за: {(format_time_end - query_time_end).total_seconds():.3f} сек')
+        
+        end_time = datetime.now()
+        logger.debug(f'Общее время выполнения get_orders: {(end_time - start_time).total_seconds():.3f} сек')
+
+>>>>>>> parent of 359a81e (некорретное отображение пост запроса)
         return jsonify({
             'success': True,
             'orders': formatted_orders
