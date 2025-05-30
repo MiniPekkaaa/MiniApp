@@ -1603,14 +1603,47 @@ def get_batch_order_statuses():
         mongo_ids = []
         order_uids = []
         
-        # Разделяем запросы по типам
+        # Проверяем кеш статусов
+        cache_hits = 0
+        cache_start = datetime.now()
+        
+        # Разделяем запросы по типам и проверяем кеш
         for order in orders:
             if 'mongo_id' in order:
+                # Проверяем кеш для MongoDB ID
+                cache_key = f'order_status:{order["mongo_id"]}'
+                cached_status = redis_client.get(cache_key)
+                
+                if cached_status:
+                    try:
+                        status_data = json.loads(cached_status)
+                        if 'status' in status_data:
+                            results[order["mongo_id"]] = status_data
+                            cache_hits += 1
+                            continue
+                    except:
+                        pass
+                
                 mongo_ids.append(order['mongo_id'])
             elif 'order_uid' in order:
+                # Проверяем кеш для UID
+                cache_key = f'order_status:{order["order_uid"]}'
+                cached_status = redis_client.get(cache_key)
+                
+                if cached_status:
+                    try:
+                        status_data = json.loads(cached_status)
+                        if 'status' in status_data:
+                            results[order["order_uid"]] = status_data
+                            cache_hits += 1
+                            continue
+                    except:
+                        pass
+                
                 order_uids.append(order['order_uid'])
         
-        logger.debug(f"Подготовлено запросов: {len(mongo_ids)} для MongoDB, {len(order_uids)} для 1C")
+        cache_end = datetime.now()
+        logger.debug(f"Проверка кеша статусов выполнена за: {(cache_end - cache_start).total_seconds():.3f} сек, найдено {cache_hits} кешированных статусов")
         
         # Получаем статусы из MongoDB
         mongo_start = datetime.now()
@@ -1619,7 +1652,7 @@ def get_batch_order_statuses():
                 # Получаем заказы из MongoDB
                 mongo_orders = list(mongo.cx.Pivo.Orders.find(
                     {'_id': {'$in': [ObjectId(id) for id in mongo_ids]}},
-                    {'ordersUID': 1, '_id': 1}
+                    {'ordersUID': 1, '_id': 1, 'date': 1}
                 ))
                 
                 logger.debug(f"Получено {len(mongo_orders)} заказов из MongoDB")
@@ -1627,6 +1660,40 @@ def get_batch_order_statuses():
                 # Создаем список запросов к 1C для заказов из MongoDB
                 for order in mongo_orders:
                     order_id = str(order.get('_id'))
+                    
+                    # Пропускаем старые заказы (старше 30 дней)
+                    try:
+                        if 'date' in order:
+                            # Парсим дату
+                            date_str = order.get('date', '')
+                            if date_str:
+                                date_parts = date_str.split(' ')
+                                if len(date_parts) == 2:
+                                    date_part = date_parts[0].split('.')
+                                    if len(date_part) == 3:
+                                        day = int(date_part[0])
+                                        month = int(date_part[1])
+                                        year = 2000 + int(date_part[2])  # Предполагаем, что год в формате YY
+                                        order_date = datetime(year, month, day)
+                                        
+                                        # Если заказ старше 30 дней, используем кешированный статус или просто "Выполнен"
+                                        if (datetime.now() - order_date).days > 30:
+                                            results[order_id] = {
+                                                'status': 'Выполнен',
+                                                'cached': True,
+                                                'note': 'Старый заказ'
+                                            }
+                                            
+                                            # Кешируем статус на длительное время
+                                            redis_client.setex(
+                                                f'order_status:{order_id}',
+                                                86400 * 30,  # 30 дней
+                                                json.dumps({'status': 'Выполнен', 'cached': True})
+                                            )
+                                            continue
+                    except Exception as e:
+                        logger.warning(f"Ошибка при анализе даты заказа {order_id}: {str(e)}")
+                    
                     if 'ordersUID' in order and order['ordersUID']:
                         # Получаем первый UID из ordersUID
                         first_uid = next(iter(order['ordersUID'].values()))
@@ -1671,10 +1738,28 @@ def get_batch_order_statuses():
                             'status': status
                         }
                         
+                        # Кешируем статус (на разное время в зависимости от статуса)
+                        cache_ttl = 300  # 5 минут по умолчанию
+                        if status.lower() in ['выполнен', 'доставлен', 'отменен']:
+                            cache_ttl = 86400  # 24 часа для финальных статусов
+                        
+                        redis_client.setex(
+                            f'order_status:{uid}',
+                            cache_ttl,
+                            json.dumps({'status': status})
+                        )
+                        
                         # Также обновляем статус для связанных заказов из MongoDB
                         for mongo_id, data in results.items():
                             if 'linked_uid' in data and data['linked_uid'] == uid:
                                 results[mongo_id]['status'] = status
+                                
+                                # Кешируем статус для MongoDB ID
+                                redis_client.setex(
+                                    f'order_status:{mongo_id}',
+                                    cache_ttl,
+                                    json.dumps({'status': status})
+                                )
                     except:
                         logger.warning(f"Ошибка при обработке ответа статуса для UID {uid}")
                         results[uid] = {'status': 'Ошибка данных'}
@@ -1693,7 +1778,12 @@ def get_batch_order_statuses():
         
         return jsonify({
             "success": True,
-            "statuses": results
+            "statuses": results,
+            "stats": {
+                "total_requests": len(orders),
+                "cache_hits": cache_hits,
+                "actual_requests": len(order_uids)
+            }
         })
     except Exception as e:
         logger.error(f"Ошибка при получении batch-статусов заказов: {str(e)}")

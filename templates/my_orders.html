@@ -489,7 +489,37 @@
                     const timeAfterMatchingTime = new Date();
                     console.log(`[${formatTime(timeAfterMatchingTime)}] Сопоставление заказов завершено за ${((timeAfterMatching - timeBeforeMatching)/1000).toFixed(2)} сек`);
                     
-                    return processOrderStatuses(matchedOrders);
+                    // Сортируем заказы по дате (от новых к старым)
+                    matchedOrders.sort((a, b) => {
+                        // Пробуем получить дату в различных форматах
+                        let dateA, dateB;
+                        
+                        // Для заказов из 1С
+                        if (a.order1C && a.order1C.DATE_UNIX) {
+                            dateA = new Date(parseInt(a.order1C.DATE_UNIX) * 1000);
+                        } else if (a.created_at) {
+                            dateA = new Date(a.created_at);
+                        } else {
+                            dateA = new Date(0);
+                        }
+                        
+                        if (b.order1C && b.order1C.DATE_UNIX) {
+                            dateB = new Date(parseInt(b.order1C.DATE_UNIX) * 1000);
+                        } else if (b.created_at) {
+                            dateB = new Date(b.created_at);
+                        } else {
+                            dateB = new Date(0);
+                        }
+                        
+                        return dateB - dateA;
+                    });
+                    
+                    // Ограничиваем до 5 последних заказов ПЕРЕД запросом статусов
+                    const limitedOrders = matchedOrders.slice(0, 5);
+                    console.log(`[${formatTime(new Date())}] Ограничили список до ${limitedOrders.length} заказов для получения статусов`);
+                    
+                    // Получаем статусы только для этих 5 заказов
+                    return processOrderStatuses(limitedOrders);
                 })
                 .then(ordersWithStatuses => {
                     const timeAfterStatuses = performance.now() - startTime;
@@ -680,37 +710,10 @@
                 return;
             }
             
-            // Сортируем заказы по дате (от новых к старым)
-            orders.sort((a, b) => {
-                // Пробуем получить дату в различных форматах
-                let dateA, dateB;
-                
-                // Для заказов из 1С
-                if (a.order1C && a.order1C.DATE_UNIX) {
-                    dateA = new Date(parseInt(a.order1C.DATE_UNIX) * 1000);
-                } else if (a.created_at) {
-                    dateA = new Date(a.created_at);
-                } else {
-                    dateA = new Date(0);
-                }
-                
-                if (b.order1C && b.order1C.DATE_UNIX) {
-                    dateB = new Date(parseInt(b.order1C.DATE_UNIX) * 1000);
-                } else if (b.created_at) {
-                    dateB = new Date(b.created_at);
-                } else {
-                    dateB = new Date(0);
-                }
-                
-                return dateB - dateA;
-            });
-            
-            // Ограничиваем до 5 последних заказов
-            const limitedOrders = orders.slice(0, 5);
-            
+            // Заказы уже отсортированы и ограничены в loadOrders
             let ordersHTML = '';
             
-            limitedOrders.forEach((order, index) => {
+            orders.forEach((order, index) => {
                 // Определяем дату и статус в зависимости от источника заказа
                 let date = order.created_at || 'Неизвестно';
                 let status = order.status || 'in work';
@@ -752,7 +755,7 @@
             ordersList.innerHTML = ordersHTML;
             
             // Сохраняем заказы в глобальной переменной для последующего использования
-            window.mongoOrdersData = limitedOrders;
+            window.mongoOrdersData = orders;
         }
 
         function generateProductsHTMLFromMongo(positions) {
