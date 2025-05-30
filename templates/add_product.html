@@ -249,13 +249,6 @@
                 opacity: 1;
             }
         }
-
-        .empty-message {
-            text-align: center;
-            padding: 20px;
-            color: var(--tg-theme-hint-color);
-            font-style: italic;
-        }
     </style>
 </head>
 <body>
@@ -437,42 +430,22 @@
                         const container = document.getElementById('last_orders_products');
                         container.innerHTML = ''; // Очищаем контейнер
 
-                        if (!data.positions || data.positions.length === 0) {
-                            // Если нет позиций, показываем сообщение
-                            const emptyMessage = document.createElement('div');
-                            emptyMessage.className = 'empty-message';
-                            emptyMessage.textContent = 'Нет данных из предыдущих заказов';
-                            container.appendChild(emptyMessage);
-                            showContent();
-                            return;
-                        }
-
                         data.positions.forEach(position => {
-                            // Проверяем наличие необходимых данных
-                            if (!position.Beer_ID || !position.Beer_Name) {
-                                console.warn('Пропускаем позицию с неполными данными:', position);
-                                return;
-                            }
-
-                            // Преобразуем ID в строку
-                            const beerId = String(position.Beer_ID);
-                            const legalEntity = position.Legal_Entity;
-                            const beerName = position.Beer_Name;
-
+                            // Добавляем позицию в массив remainders
+                            const product = {
+                                id: position.Beer_ID.toString(),
+                                name: position.Beer_Name,
+                                legalEntity: position.Legal_Entity,
+                                quantity: 1
+                            };
+                            
                             // Добавляем в remainders только если такой позиции еще нет
                             const existingItemIndex = remainders.findIndex(item => 
-                                item.id === beerId && 
-                                item.legalEntity === legalEntity
+                                item.id === product.id && 
+                                item.legalEntity === product.legalEntity
                             );
                             
                             if (existingItemIndex === -1) {
-                                // Добавляем позицию в массив remainders
-                                const product = {
-                                    id: beerId,
-                                    name: beerName,
-                                    legalEntity: legalEntity,
-                                    quantity: 1
-                                };
                                 remainders.push(product);
                             }
 
@@ -481,7 +454,7 @@
                             
                             productDiv.innerHTML = `
                                 <div class="product-info">
-                                    ${beerName}
+                                    ${position.Beer_Name}
                                 </div>
                                 <div class="product-controls">
                                     <input type="number" 
@@ -491,8 +464,8 @@
                                            step="0.5" 
                                            class="quantity-input" 
                                            style="width: 80px; text-align: center; padding: 8px;"
-                                           onchange="addLastOrderProduct('${beerId}', '${beerName.replace(/'/g, "\\'")}', ${legalEntity}, this.value)">
-                                    <button onclick="deleteRemainder('${beerId}', ${legalEntity}, this.closest('.product-item'))"
+                                           onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
+                                    <button onclick="deleteRemainder('${position.Beer_ID}', ${position.Legal_Entity}, this.closest('.product-item'))"
                                             class="delete-button">
                                         Удалить
                                     </button>
@@ -556,45 +529,28 @@
         }
 
         function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
-            try {
-                // Убедимся, что все параметры имеют правильный тип
-                beerId = String(beerId);
-                beerName = String(beerName);
-                legalEntity = parseInt(legalEntity) || 1;
-                quantity = parseFloat(quantity) || 1;
-                
-                const product = {
-                    id: beerId,
-                    name: beerName,
-                    legalEntity: legalEntity,
-                    quantity: quantity
-                };
+            const product = {
+                id: beerId.toString(),
+                name: beerName,
+                legalEntity: legalEntity,
+                quantity: parseFloat(quantity)
+            };
 
-                const existingItemIndex = remainders.findIndex(item => 
-                    item.id === beerId && 
-                    item.legalEntity === legalEntity
-                );
-                
-                if (existingItemIndex !== -1) {
-                    // Обновляем количество существующего элемента
-                    remainders[existingItemIndex].quantity = quantity;
-                    console.log(`Обновлено количество для ${beerName} на ${quantity}`);
-                } else {
-                    // Добавляем новый элемент
-                    remainders.push(product);
-                    console.log(`Добавлен новый товар ${beerName} с количеством ${quantity}`);
-                }
-            } catch (error) {
-                console.error('Ошибка при добавлении товара:', error);
-                tg.showAlert('Не удалось добавить товар: ' + error.message);
+            const existingItemIndex = remainders.findIndex(item => 
+                item.id === product.id && 
+                item.legalEntity === product.legalEntity
+            );
+            
+            if (existingItemIndex !== -1) {
+                remainders[existingItemIndex].quantity = product.quantity;
+            } else {
+                remainders.push(product);
             }
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
             try {
-                // Убедимся, что ID правильного типа
-                beerId = String(beerId);
-                legalEntity = parseInt(legalEntity) || 1;
+                beerId = beerId.toString();
                 
                 // Удаляем из массива remainders
                 const index = remainders.findIndex(item => 
@@ -603,7 +559,6 @@
                 );
                 
                 if (index !== -1) {
-                    console.log(`Удаляем позицию ${remainders[index].name} из остатков`);
                     remainders.splice(index, 1);
                 }
                 
@@ -618,7 +573,6 @@
                 }
             } catch (error) {
                 console.error('Ошибка при удалении позиции:', error);
-                tg.showAlert('Не удалось удалить позицию: ' + error.message);
             }
         }
         
@@ -665,7 +619,7 @@
                            step="0.5" 
                            class="quantity-input" 
                            style="width: 80px; text-align: center; padding: 8px;"
-                           onchange="addLastOrderProduct('${product.id}', '${product.name.replace(/'/g, "\\'")}', ${product.legalEntity}, this.value)">
+                           onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
                     <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
                             class="delete-button">
                         Удалить
@@ -681,17 +635,17 @@
         }
 
         function submitRemainders() {
-            hideContent();
-            
-            // Получаем дату следующего заказа
-            const nextOrderDateInput = document.getElementById('next_order_date');
-            let nextOrderDate = '';
-            
-            if (nextOrderDateInput && nextOrderDateInput.value) {
-                nextOrderDate = nextOrderDateInput.value;
+            const nextOrderDate = document.getElementById('next_order_date').value;
+            if (!nextOrderDate) {
+                tg.showAlert("Пожалуйста, выберите дату следующего заказа");
+                return;
             }
-            
-            // Собираем все данные из DOM
+
+            // Показываем загрузочный экран
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('content').classList.add('hidden');
+
+            // Собираем все позиции из списка
             const container = document.getElementById('last_orders_products');
             const items = container.querySelectorAll('.product-item');
             const allRemainders = [];
@@ -703,13 +657,13 @@
                 const deleteButton = item.querySelector('.delete-button');
                 // Получаем beer_id и legal_entity из атрибутов кнопки удаления
                 const onclick = deleteButton.getAttribute('onclick');
-                const matches = onclick.match(/deleteRemainder\(['"]([^'"]+)['"]\s*,\s*(\d+)/);
+                const matches = onclick.match(/deleteRemainder\((\d+),\s*(\d+)/);
                 if (matches) {
                     const [_, beerId, legalEntity] = matches;
                     allRemainders.push({
                         id: beerId,
                         name: name,
-                        legalEntity: parseInt(legalEntity) || 1,
+                        legalEntity: parseInt(legalEntity),
                         quantity: quantity
                     });
                 }
@@ -822,8 +776,7 @@
                                 name: product.name,
                                 quantity: parseInt(position.quantity) || 0,
                                 price: parseFloat(product.price) || 0,
-                                legalEntity: parseInt(product.legalEntity) || 1,
-                                uid: product.UID || null  // Добавляем UID для работы с новым форматом заказов
+                                legalEntity: parseInt(product.legalEntity) || 1
                             };
                         } else {
                             console.warn(`Товар не найден: ${position.name}`);
@@ -832,8 +785,7 @@
                                 name: position.name,
                                 quantity: parseInt(position.quantity) || 0,
                                 price: 0,
-                                legalEntity: 1,
-                                uid: null
+                                legalEntity: 1
                             };
                         }
                     });
@@ -868,8 +820,7 @@
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
                         price: parseFloat(product.price) || 0,
-                        legalEntity: parseInt(product.legalEntity) || 1,
-                        uid: product.UID || null  // Добавляем UID для работы с новым форматом заказов
+                        legalEntity: parseInt(product.legalEntity) || 1
                     });
                 } else {
                     console.warn(`Товар не найден: ${item.name}`);
@@ -878,8 +829,7 @@
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
                         price: 0,
-                        legalEntity: item.legalEntity || 1,
-                        uid: null
+                        legalEntity: item.legalEntity || 1
                     });
                 }
             });
