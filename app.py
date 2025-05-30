@@ -309,11 +309,15 @@ def get_last_orders():
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 400
 
-        # Получаем последние 3 ВЫПОЛНЕННЫХ заказа организации, отсортированные по дате
+        # Получаем последние 3 заказа организации, отсортированные по дате
+        # Ищем как выполненные заказы, так и комбинированные заказы с ordersUID
         orders = list(mongo.cx.Pivo.Orders.find(
             {
                 "org_ID": org_id,
-                "status": "Выполнен"  # Только выполненные заказы
+                "$or": [
+                    {"status": "Выполнен"},  # Старый формат - выполненные заказы
+                    {"ordersUID": {"$exists": True, "$ne": {}}}  # Новый формат - комбинированные заказы
+                ]
             },
             {"Positions": 1, "_id": 0}
         ).sort("date", -1).limit(3))
@@ -325,18 +329,21 @@ def get_last_orders():
             for position in positions.values():
                 beer_id = position.get('Beer_ID')
                 legal_entity = position.get('Legal_Entity')
-                beer_count = position.get('Beer_Count')
+                beer_name = position.get('Beer_Name', '')
                 
-                if beer_id is None or legal_entity is None:
+                if not beer_id or not legal_entity:
                     continue
+                
+                # Преобразуем ID в строку для единообразия
+                beer_id = str(beer_id)
                 
                 position_key = f"{beer_id}_{legal_entity}"
                 if position_key not in unique_positions:
                     unique_positions[position_key] = {
                         'Beer_ID': beer_id,
-                        'Beer_Name': position.get('Beer_Name', ''),
+                        'Beer_Name': beer_name,
                         'Legal_Entity': legal_entity,
-                        'Beer_Count': beer_count if beer_count is not None else 0
+                        'Beer_Count': 1  # Устанавливаем значение 1 для всех товаров
                     }
 
         # Преобразуем в список
@@ -348,6 +355,8 @@ def get_last_orders():
             "positions": result,
             "org_ID": org_id
         }
+        
+        logger.debug(f"Найдено {len(result)} уникальных позиций из последних заказов для организации {org_id}")
         
         return jsonify(response_data)
 
