@@ -350,11 +350,17 @@
                                 console.log(`Используем ID товара ${item.name}: ${productId}`);
                             }
                             
-                            // Очищаем ID от возможных пробелов
-                            productId = String(productId).trim();
+                            // Нормализуем ID (очищаем от пробелов)
+                            productId = normalizeProductID(productId);
                             
                             // Сохраняем соответствие UID -> индекс товара
                             window.uidToCartItemMap[productId] = index;
+                            
+                            // Также сохраняем соответствие с ID в нижнем регистре
+                            if (productId) {
+                                window.uidToCartItemMap[productId.toLowerCase()] = index;
+                            }
+                            
                             console.log(`Сопоставление UID ${productId} -> товар ${item.name} (индекс ${index})`);
                             
                             return {
@@ -401,8 +407,32 @@
                             return;
                         }
                         
+                        // Проверяем формат данных, если это строка - пробуем распарсить
+                        if (typeof priceData === 'string') {
+                            try {
+                                priceData = JSON.parse(priceData);
+                                console.log('Данные получены как строка, распарсили:', priceData);
+                            } catch (e) {
+                                console.error('Ошибка при разборе строки JSON:', e);
+                                // Продолжаем с тем, что есть
+                            }
+                        }
+                        
+                        // Проверяем структуру ответа
+                        if (!priceData || typeof priceData !== 'object') {
+                            console.error('Неверный формат ответа API:', priceData);
+                            // Используем тестовые данные вместо невалидных
+                            priceData = getTestPriceData();
+                        }
+                        
+                        // Проверяем наличие корзины в ответе
+                        if (!Array.isArray(priceData.Korzina)) {
+                            console.error('В ответе отсутствует массив Korzina:', priceData);
+                            priceData.Korzina = [];
+                        }
+                        
                         // Добавляем информацию о ценах в объекты корзины
-                        if (priceData && priceData.Korzina) {
+                        if (priceData && priceData.Korzina && priceData.Korzina.length > 0) {
                             console.log('Получены данные о ценах:', priceData);
                             
                             // Выводим подробную информацию о товарах в корзине и их ID
@@ -433,10 +463,19 @@
                                 console.log(`[${index}] ID_product: ${priceItem.ID_product}, Price: ${priceItem.Price}`);
                             });
                             
+                            // Подробное логирование для отладки
+                            console.log('Детальное логирование для отладки сопоставления ID:');
+                            console.log('ID товаров в корзине:', cart.map(item => item.id));
+                            console.log('Карта UID:', window.uidMap ? JSON.stringify(window.uidMap, null, 2) : 'отсутствует');
+                            console.log('ID товаров из API:', priceData.Korzina.map(item => item.ID_product));
+                            console.log('Карта соответствия UID -> индекс товара:', JSON.stringify(window.uidToCartItemMap || {}, null, 2));
+                            
                             // Сначала создаем карту цен по UID
                             const priceMap = {};
                             priceData.Korzina.forEach(priceItem => {
+                                // Сохраняем цену и для оригинального ID, и для версии в нижнем регистре
                                 priceMap[priceItem.ID_product] = priceItem.Price;
+                                priceMap[priceItem.ID_product.toLowerCase()] = priceItem.Price;
                             });
                             
                             // Отдельно сохраняем все цены по индексу
@@ -445,53 +484,75 @@
                             // Применяем цены к товарам в корзине
                             let appliedCount = 0;
                             
-                            // Подробное логирование для отладки
-                            console.log('Карта цен из API:', priceMap);
-                            console.log('Текущие товары в корзине:', JSON.stringify(cart, null, 2));
-                            console.log('Карта UID:', window.uidMap ? JSON.stringify(window.uidMap, null, 2) : 'отсутствует');
-                            
-                            // Проверяем, есть ли карта UID
-                            if (window.uidMap) {
-                                console.log('Применяем цены по карте UID');
-                                cart.forEach((item, index) => {
-                                    const itemUid = window.uidMap[item.id];
-                                    if (itemUid && priceMap[itemUid]) {
-                                        const price = priceMap[itemUid];
-                                        console.log(`✅ По UID: Установлена цена ${price} для товара ${item.name} (ID: ${item.id}, UID: ${itemUid})`);
-                                        item.price = price;
+                            // ПРЯМОЕ СОПОСТАВЛЕНИЕ ПО ID_product из API
+                            priceData.Korzina.forEach(priceItem => {
+                                const apiID = normalizeProductID(priceItem.ID_product);
+                                const price = priceItem.Price;
+                                
+                                // Флаг для отслеживания, применили ли мы цену
+                                let applied = false;
+                                
+                                // 1. Сначала проверяем прямое совпадение с ID товара
+                                for (let i = 0; i < cart.length; i++) {
+                                    if (compareProductIDs(cart[i].id, apiID)) {
+                                        cart[i].price = price;
+                                        console.log(`✅ Прямое совпадение: Установлена цена ${price} для товара ${cart[i].name} (ID: ${cart[i].id})`);
                                         appliedCount++;
-                                    } else {
-                                        console.log(`❌ Не найдена цена по UID для товара ${item.name} (ID: ${item.id}, UID: ${itemUid || 'не найден'})`);
+                                        applied = true;
+                                        break;
                                     }
-                                });
-                            }
-                            
-                            // Если остались товары без цен, пробуем прямое сопоставление по ID
-                            cart.forEach((item, index) => {
-                                if (!item.price) {
-                                    // Прямое сопоставление по ID
-                                    if (priceMap[item.id]) {
-                                        const price = priceMap[item.id];
-                                        console.log(`✅ По ID: Установлена цена ${price} для товара ${item.name} (ID: ${item.id})`);
-                                        item.price = price;
-                                        appliedCount++;
-                                    } 
-                                    // Если у товара есть поле uid, пробуем использовать его
-                                    else if (item.uid && priceMap[item.uid]) {
-                                        const price = priceMap[item.uid];
-                                        console.log(`✅ По полю uid: Установлена цена ${price} для товара ${item.name} (uid: ${item.uid})`);
-                                        item.price = price;
-                                        appliedCount++;
+                                }
+                                
+                                // 2. Если не нашли, проверяем через uidMap
+                                if (!applied && window.uidMap) {
+                                    // Ищем товар, у которого UID в карте соответствует apiID
+                                    for (const [itemId, uid] of Object.entries(window.uidMap)) {
+                                        if (compareProductIDs(uid, apiID)) {
+                                            // Находим товар с этим ID
+                                            const cartItem = cart.find(item => item.id === itemId);
+                                            if (cartItem) {
+                                                cartItem.price = price;
+                                                console.log(`✅ Через uidMap: Установлена цена ${price} для товара ${cartItem.name} (ID: ${itemId}, UID: ${uid})`);
+                                                appliedCount++;
+                                                applied = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    // Проверяем, может быть цена есть для UID в нижнем регистре
-                                    else if (item.id && priceMap[item.id.toLowerCase()]) {
-                                        const price = priceMap[item.id.toLowerCase()];
-                                        console.log(`✅ По ID (lowercase): Установлена цена ${price} для товара ${item.name} (ID: ${item.id})`);
-                                        item.price = price;
-                                        appliedCount++;
+                                }
+                                
+                                // 3. Если все еще не нашли, проверяем через обратную карту uidToCartItemMap
+                                if (!applied && window.uidToCartItemMap) {
+                                    for (const [mapUid, index] of Object.entries(window.uidToCartItemMap)) {
+                                        if (compareProductIDs(mapUid, apiID) && cart[index]) {
+                                            cart[index].price = price;
+                                            console.log(`✅ Через uidToCartItemMap: Установлена цена ${price} для товара ${cart[index].name} (индекс: ${index})`);
+                                            appliedCount++;
+                                            applied = true;
+                                            break;
+                                        }
                                     }
-                                    else {
-                                        console.log(`❌ Не найдена цена по прямому сопоставлению для товара ${item.name} (ID: ${item.id})`);
+                                }
+                                
+                                // 4. Если у товаров есть поле uid, проверяем его
+                                if (!applied) {
+                                    for (let i = 0; i < cart.length; i++) {
+                                        if (cart[i].uid && compareProductIDs(cart[i].uid, apiID)) {
+                                            cart[i].price = price;
+                                            console.log(`✅ По полю uid: Установлена цена ${price} для товара ${cart[i].name} (uid: ${cart[i].uid})`);
+                                            appliedCount++;
+                                            applied = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (!applied) {
+                                    console.log(`❌ Не удалось сопоставить цену для товара с ID_product: ${apiID}`);
+                                    // Выводим все имеющиеся ID для отладки
+                                    console.log('Доступные ID товаров в корзине:', cart.map(item => item.id));
+                                    if (window.uidMap) {
+                                        console.log('Доступные UID в карте:', Object.values(window.uidMap));
                                     }
                                 }
                             });
@@ -503,11 +564,12 @@
                                 cart[0].price = price;
                                 appliedCount++;
                             }
-                            // Если все еще есть товары без цен, и количество товаров совпадает - присваиваем по индексу
-                            else if (appliedCount < cart.length && cart.length === priceData.Korzina.length) {
+                            
+                            // Если всё еще не применены цены и количество товаров совпадает - применяем по индексу
+                            if (appliedCount < cart.length && cart.length === priceData.Korzina.length) {
                                 console.log('Применяем цены по индексу (количество товаров совпадает)');
                                 cart.forEach((item, index) => {
-                                    if (!item.price && priceByIndex[index]) {
+                                    if (!item.price && priceByIndex[index] !== undefined) {
                                         const price = priceByIndex[index];
                                         console.log(`✅ По индексу: Установлена цена ${price} для товара ${item.name} (индекс: ${index})`);
                                         item.price = price;
@@ -1015,6 +1077,31 @@
             
             console.warn(`Товар с UID ${uid} не найден в корзине`);
             return null;
+        }
+        
+        // Функция для нормализации ID товаров
+        function normalizeProductID(id) {
+            if (!id) return '';
+            
+            // Убираем пробелы и приводим к строке
+            return String(id).trim();
+        }
+        
+        // Функция для сравнения ID товаров (учитывает различные форматы)
+        function compareProductIDs(id1, id2) {
+            if (!id1 || !id2) return false;
+            
+            // Нормализуем ID
+            const normalizedID1 = normalizeProductID(id1);
+            const normalizedID2 = normalizeProductID(id2);
+            
+            // Проверяем прямое совпадение
+            if (normalizedID1 === normalizedID2) return true;
+            
+            // Проверяем совпадение в нижнем регистре
+            if (normalizedID1.toLowerCase() === normalizedID2.toLowerCase()) return true;
+            
+            return false;
         }
         
         // Функция для тестовых данных
