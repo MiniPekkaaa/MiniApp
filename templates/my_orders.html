@@ -437,18 +437,11 @@
         function loadOrders() {
             showLoading();
             
-            // Добавляем замер времени
-            const startTime = performance.now();
-            const timeStart = new Date();
-            console.log(`[${formatTime(timeStart)}] Начало загрузки заказов`);
-            
             // Загружаем заказы из 1С
             fetch(`/api/get-orders-from-1c?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data1C => {
-                    const time1C = performance.now() - startTime;
-                    const time1CEnd = new Date();
-                    console.log(`[${formatTime(time1CEnd)}] Получены данные из 1С за ${(time1C/1000).toFixed(2)} сек:`, data1C);
+                    console.log('Получены данные из 1С:', data1C);
                     
                     if (!data1C.success) {
                         console.error('Ошибка при получении данных из 1С:', data1C.error);
@@ -459,9 +452,7 @@
                     return fetch(`/api/get-orders?user_id=${userId}`)
                         .then(response => response.json())
                         .then(dataMongo => {
-                            const timeMongo = performance.now() - startTime - time1C;
-                            const timeMongoEnd = new Date();
-                            console.log(`[${formatTime(timeMongoEnd)}] Получены данные из MongoDB за ${(timeMongo/1000).toFixed(2)} сек:`, dataMongo);
+                            console.log('Получены данные из MongoDB:', dataMongo);
                             
                             if (!dataMongo.success) {
                                 console.error('Ошибка при получении данных из MongoDB:', dataMongo.error);
@@ -471,85 +462,28 @@
                             // Объединяем данные из 1С и MongoDB
                             return { 
                                 orders1C: data1C.orders,
-                                ordersMongo: dataMongo.orders,
-                                time1C,
-                                timeMongo
+                                ordersMongo: dataMongo.orders
                             };
                         });
                 })
                 .then(combinedData => {
                     // Комбинируем данные из 1С и MongoDB
-                    const timeBeforeMatching = performance.now() - startTime;
-                    const timeBeforeMatchingTime = new Date();
-                    console.log(`[${formatTime(timeBeforeMatchingTime)}] Начало обработки данных через ${(timeBeforeMatching/1000).toFixed(2)} сек`);
-                    
                     const matchedOrders = matchOrdersFromBothSources(combinedData.orders1C, combinedData.ordersMongo);
-                    
-                    const timeAfterMatching = performance.now() - startTime;
-                    const timeAfterMatchingTime = new Date();
-                    console.log(`[${formatTime(timeAfterMatchingTime)}] Сопоставление заказов завершено за ${((timeAfterMatching - timeBeforeMatching)/1000).toFixed(2)} сек`);
-                    
-                    // Сортируем заказы по дате (от новых к старым)
-                    matchedOrders.sort((a, b) => {
-                        // Пробуем получить дату в различных форматах
-                        let dateA, dateB;
-                        
-                        // Для заказов из 1С
-                        if (a.order1C && a.order1C.DATE_UNIX) {
-                            dateA = new Date(parseInt(a.order1C.DATE_UNIX) * 1000);
-                        } else if (a.created_at) {
-                            dateA = new Date(a.created_at);
-                        } else {
-                            dateA = new Date(0);
-                        }
-                        
-                        if (b.order1C && b.order1C.DATE_UNIX) {
-                            dateB = new Date(parseInt(b.order1C.DATE_UNIX) * 1000);
-                        } else if (b.created_at) {
-                            dateB = new Date(b.created_at);
-                        } else {
-                            dateB = new Date(0);
-                        }
-                        
-                        return dateB - dateA;
-                    });
-                    
-                    // Ограничиваем до 5 последних заказов ПЕРЕД запросом статусов
-                    const limitedOrders = matchedOrders.slice(0, 5);
-                    console.log(`[${formatTime(new Date())}] Ограничили список до ${limitedOrders.length} заказов для получения статусов`);
-                    
-                    // Получаем статусы только для этих 5 заказов
-                    return processOrderStatuses(limitedOrders);
+                    return processOrderStatuses(matchedOrders);
                 })
                 .then(ordersWithStatuses => {
-                    const timeAfterStatuses = performance.now() - startTime;
-                    const timeAfterStatusesTime = new Date();
-                    console.log(`[${formatTime(timeAfterStatusesTime)}] Обработка статусов завершена за ${(timeAfterStatuses/1000).toFixed(2)} сек`);
-                    
                     hideLoading();
                     displayMatchedOrders(ordersWithStatuses);
-                    
-                    const totalTime = performance.now() - startTime;
-                    const totalTimeEnd = new Date();
-                    console.log(`[${formatTime(totalTimeEnd)}] Общее время загрузки заказов: ${(totalTime/1000).toFixed(2)} сек`);
                 })
                 .catch(error => {
-                    const errorTime = performance.now() - startTime;
-                    const errorTimeEnd = new Date();
-                    console.error(`[${formatTime(errorTimeEnd)}] Ошибка при загрузке заказов через ${(errorTime/1000).toFixed(2)} сек:`, error);
-                    
                     hideLoading();
+                    console.error('Ошибка при загрузке заказов:', error);
                     document.getElementById('orders-list').innerHTML = `
                         <div class="no-orders">
                             <p>Не удалось загрузить заказы: ${error.message}</p>
                         </div>
                     `;
                 });
-        }
-        
-        // Функция для форматирования времени
-        function formatTime(date) {
-            return date.toISOString().split('T')[1].split('.')[0];
         }
         
         // Функция для сопоставления заказов из 1С и MongoDB
@@ -647,55 +581,90 @@
             return matchedOrders;
         }
         
-        // Функция для получения статусов заказов с параллельными запросами
+        // Функция для получения статусов заказов
         async function processOrderStatuses(orders) {
-            const statusStartTime = performance.now();
-            const statusStartDate = new Date();
-            console.log(`[${formatTime(statusStartDate)}] Начало обработки статусов заказов: ${orders.length}`);
+            console.log('Обработка статусов заказов:', orders.length);
             
-            // Создаем копию массива заказов
             const processedOrders = [...orders];
             
-            try {
-                // Используем новую функцию для пакетного получения статусов
-                const ordersWithStatuses = await getBatchOrderStatuses(processedOrders);
+            // Обработка статусов для заказов с ordersUID
+            for (let i = 0; i < processedOrders.length; i++) {
+                const order = processedOrders[i];
                 
-                // Фильтруем дубликаты заказов (для надежности)
-                const uniqueOrderIds = new Set();
-                const uniqueOrders = [];
-                
-                for (const order of ordersWithStatuses) {
-                    // Создаем уникальный идентификатор для заказа
-                    let orderId = order.order_ID;
-                    
-                    // Если есть ID_ORDER из 1С, используем его для заказов из 1С
-                    if (order.order1C && order.order1C.ID_ORDER) {
-                        orderId = order.order1C.ID_ORDER;
-                    }
-                    
-                    if (!uniqueOrderIds.has(orderId)) {
-                        uniqueOrderIds.add(orderId);
-                        uniqueOrders.push(order);
-                    } else {
-                        console.log(`[${formatTime(new Date())}] Пропускаем дубликат заказа: ${orderId}`);
+                // Проверяем, есть ли у заказа ordersUID
+                if (order.ordersUID && Object.keys(order.ordersUID).length > 0 && order.order_ID) {
+                    try {
+                        console.log(`Запрос статуса для заказа ID: ${order.order_ID}`);
+                        
+                        // Получаем комбинированный статус
+                        const response = await fetch(`/api/get-combined-order-status?order_id=${order.order_ID}`);
+                        const statusData = await response.json();
+                        
+                        if (statusData.success) {
+                            console.log(`Получен статус для заказа ID ${order.order_ID}: ${statusData.status}`);
+                            // Обновляем статус заказа
+                            processedOrders[i].status = statusData.status;
+                        } else {
+                            console.error(`Ошибка получения статуса для заказа ID ${order.order_ID}: ${statusData.error}`);
+                        }
+                    } catch (error) {
+                        console.error(`Ошибка при запросе статуса для заказа ID ${order.order_ID}:`, error);
                     }
                 }
-                
-                const statusEndTime = performance.now();
-                const totalDuration = (statusEndTime - statusStartTime) / 1000;
-                console.log(`[${formatTime(new Date())}] Все статусы получены за ${totalDuration.toFixed(2)} сек, удалено ${processedOrders.length - uniqueOrders.length} дубликатов`);
-                
-                return uniqueOrders;
-            } catch (error) {
-                console.error(`[${formatTime(new Date())}] Ошибка при обработке статусов:`, error);
-                
-                // В случае ошибки возвращаем исходные заказы
-                const statusEndTime = performance.now();
-                const totalDuration = (statusEndTime - statusStartTime) / 1000;
-                console.log(`[${formatTime(new Date())}] Обработка статусов завершена с ошибкой за ${totalDuration.toFixed(2)} сек`);
-                
-                return processedOrders;
+                // Если это заказ напрямую из 1С (без MongoDB), проверяем его статус напрямую
+                else if (order.order1C && order.order1C.ID_ORDER && !order.ordersUID) {
+                    try {
+                        console.log(`Запрос прямого статуса для заказа из 1С ID: ${order.order1C.ID_ORDER}`);
+                        
+                        // Получаем статус напрямую
+                        const response = await fetch(`/api/get-order-status?order_uid=${order.order1C.ID_ORDER}`);
+                        const statusData = await response.json();
+                        
+                        if (statusData.success && statusData.status) {
+                            let status = "В обработке";
+                            
+                            // Проверяем различные форматы ответа
+                            if (typeof statusData.status === 'string') {
+                                status = statusData.status;
+                            } else if (typeof statusData.status === 'object' && statusData.status.STATUS) {
+                                status = statusData.status.STATUS;
+                            }
+                            
+                            console.log(`Получен прямой статус для заказа из 1С ID ${order.order1C.ID_ORDER}: ${status}`);
+                            // Обновляем статус заказа
+                            processedOrders[i].status = status;
+                        } else {
+                            console.error(`Ошибка получения прямого статуса для заказа из 1С ID ${order.order1C.ID_ORDER}`);
+                        }
+                    } catch (error) {
+                        console.error(`Ошибка при запросе прямого статуса для заказа из 1С ID ${order.order1C.ID_ORDER}:`, error);
+                    }
+                }
             }
+            
+            // Фильтруем дубликаты заказов (для надежности)
+            const uniqueOrderIds = new Set();
+            const uniqueOrders = [];
+            
+            for (const order of processedOrders) {
+                // Создаем уникальный идентификатор для заказа
+                let orderId = order.order_ID;
+                
+                // Если есть ID_ORDER из 1С, используем его для заказов из 1С
+                if (order.order1C && order.order1C.ID_ORDER) {
+                    orderId = order.order1C.ID_ORDER;
+                }
+                
+                if (!uniqueOrderIds.has(orderId)) {
+                    uniqueOrderIds.add(orderId);
+                    uniqueOrders.push(order);
+                } else {
+                    console.log(`Пропускаем дубликат заказа: ${orderId}`);
+                }
+            }
+            
+            console.log(`Удалено ${processedOrders.length - uniqueOrders.length} дубликатов заказов`);
+            return uniqueOrders;
         }
         
         function displayMatchedOrders(orders) {
@@ -710,10 +679,37 @@
                 return;
             }
             
-            // Заказы уже отсортированы и ограничены в loadOrders
+            // Сортируем заказы по дате (от новых к старым)
+            orders.sort((a, b) => {
+                // Пробуем получить дату в различных форматах
+                let dateA, dateB;
+                
+                // Для заказов из 1С
+                if (a.order1C && a.order1C.DATE_UNIX) {
+                    dateA = new Date(parseInt(a.order1C.DATE_UNIX) * 1000);
+                } else if (a.created_at) {
+                    dateA = new Date(a.created_at);
+                } else {
+                    dateA = new Date(0);
+                }
+                
+                if (b.order1C && b.order1C.DATE_UNIX) {
+                    dateB = new Date(parseInt(b.order1C.DATE_UNIX) * 1000);
+                } else if (b.created_at) {
+                    dateB = new Date(b.created_at);
+                } else {
+                    dateB = new Date(0);
+                }
+                
+                return dateB - dateA;
+            });
+            
+            // Ограничиваем до 5 последних заказов
+            const limitedOrders = orders.slice(0, 5);
+            
             let ordersHTML = '';
             
-            orders.forEach((order, index) => {
+            limitedOrders.forEach((order, index) => {
                 // Определяем дату и статус в зависимости от источника заказа
                 let date = order.created_at || 'Неизвестно';
                 let status = order.status || 'in work';
@@ -755,7 +751,7 @@
             ordersList.innerHTML = ordersHTML;
             
             // Сохраняем заказы в глобальной переменной для последующего использования
-            window.mongoOrdersData = orders;
+            window.mongoOrdersData = limitedOrders;
         }
 
         function generateProductsHTMLFromMongo(positions) {
@@ -794,21 +790,17 @@
                 return;
             }
             
-            // Создаем временную корзину с товарами из заказа, но без цен
+            // Создаем временную корзину с товарами из заказа
             const cartItems = order.positions.map(position => ({
                 id: position.id,
                 name: position.name,
                 quantity: position.quantity,
-                legalEntity: position.legal_entity,
-                // Удаляем цену, чтобы она пересчиталась при загрузке корзины
-                price: 0
+                price: position.price,
+                legalEntity: position.legal_entity
             }));
             
             // Сохраняем корзину в sessionStorage
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
-            
-            // Устанавливаем флаг, что нужно показать рекомендацию
-            sessionStorage.setItem('recommendation', 'Создан новый заказ на основе предыдущего. Цены будут обновлены при загрузке корзины.');
             
             // Перенаправляем на страницу корзины
             window.location.href = `/cart?user_id=${userId}`;
@@ -898,81 +890,6 @@
             });
             
             document.getElementById('order_total').textContent = totalSum.toFixed(2);
-        }
-
-        // Функция для параллельного получения статусов нескольких заказов за один запрос
-        async function getBatchOrderStatuses(orders) {
-            // Получаем все MongoDB ID и/или UID заказов
-            const orderRequests = [];
-            
-            for (const order of orders) {
-                if (order.ordersUID && Object.keys(order.ordersUID).length > 0 && order.order_ID) {
-                    // Если есть ordersUID, добавляем MongoDB ID
-                    orderRequests.push({
-                        mongo_id: order.order_ID,
-                        type: 'MongoDB'
-                    });
-                } else if (order.order1C && order.order1C.ID_ORDER) {
-                    // Если нет ordersUID, но есть 1C ID, добавляем UID
-                    orderRequests.push({
-                        order_uid: order.order1C.ID_ORDER,
-                        type: '1C'
-                    });
-                }
-            }
-            
-            if (orderRequests.length === 0) {
-                console.log('[getBatchOrderStatuses] Нет заказов для запроса статусов');
-                return orders;
-            }
-            
-            console.log(`[${formatTime(new Date())}] Запрос batch статусов для ${orderRequests.length} заказов`);
-            
-            try {
-                // Отправляем один запрос на получение всех статусов
-                const batchStart = performance.now();
-                
-                const response = await fetch('/api/get-batch-order-statuses', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        orders: orderRequests
-                    })
-                });
-                
-                const data = await response.json();
-                const batchDuration = (performance.now() - batchStart) / 1000;
-                
-                console.log(`[${formatTime(new Date())}] Получены batch статусы за ${batchDuration.toFixed(2)} сек:`, data);
-                
-                if (data.success && data.statuses) {
-                    // Применяем полученные статусы к заказам
-                    for (let i = 0; i < orders.length; i++) {
-                        const order = orders[i];
-                        let statusApplied = false;
-                        
-                        // Проверяем статус по MongoDB ID
-                        if (order.order_ID && data.statuses[order.order_ID]) {
-                            orders[i].status = data.statuses[order.order_ID].status;
-                            statusApplied = true;
-                            console.log(`[${formatTime(new Date())}] Применен статус для заказа MongoDB ID ${order.order_ID}: ${orders[i].status}`);
-                        }
-                        
-                        // Проверяем статус по 1C ID
-                        if (!statusApplied && order.order1C && order.order1C.ID_ORDER && data.statuses[order.order1C.ID_ORDER]) {
-                            orders[i].status = data.statuses[order.order1C.ID_ORDER].status;
-                            console.log(`[${formatTime(new Date())}] Применен статус для заказа 1C ID ${order.order1C.ID_ORDER}: ${orders[i].status}`);
-                        }
-                    }
-                }
-                
-                return orders;
-            } catch (error) {
-                console.error(`[${formatTime(new Date())}] Ошибка при получении batch статусов:`, error);
-                return orders;
-            }
         }
     </script>
 </body>

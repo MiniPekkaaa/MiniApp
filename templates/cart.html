@@ -698,9 +698,6 @@
                             }
                         }
                         
-                        // Добавляем UID в объект товара для последующего использования
-                        item.uid = uid;
-                        
                         // Если UID так и не найден, добавляем особое логирование
                         if (!uid) {
                             console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
@@ -1016,14 +1013,13 @@
                         
                         // Применяем TARA к товарам в корзине
                         cart.forEach(item => {
-                            // Ищем товар в каталоге по ID
                             const catalogItem = window.initialProducts.find(p => 
                                 p.id.toString() === item.id.toString() || 
                                 (p.UID && item.id && p.UID.toString() === item.id.toString())
                             );
                             
                             if (catalogItem && catalogItem.TARA === true) {
-                                console.log(`Товар ${item.name} (ID: ${item.id}) отмечен как TARA из каталога`);
+                                console.log(`Товар ${item.name} (ID: ${item.id}) отмечен как TARA`);
                                 item.TARA = true;
                             }
                         });
