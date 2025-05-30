@@ -195,24 +195,9 @@ def get_products():
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Получаем каталог товаров из MongoDB
         products = list(mongo.cx.Pivo.catalog.find())
-        
-        logger.debug(f"Получено {len(products)} товаров из каталога")
-        if len(products) > 0:
-            sample_product = products[0]
-            logger.debug(f"Пример товара: {sample_product}")
-            logger.debug(f"Тип свойства TARA: {type(sample_product.get('TARA'))}, значение: {sample_product.get('TARA')}")
-        
-        # Форматируем данные для передачи на клиент
         formatted_products = []
         for product in products:
-            # Обеспечиваем корректное представление TARA как булева значения
-            tara_value = product.get('TARA')
-            # Если TARA строка "true" или "false", преобразуем в булево значение
-            if isinstance(tara_value, str):
-                tara_value = tara_value.lower() == 'true'
-            
             formatted_product = {
                 'id': product.get('id', ''),
                 '_id': str(product.get('_id', '')),
@@ -220,22 +205,13 @@ def get_products():
                 'fullName': product.get('fullName', ''),
                 'volume': float(product.get('volume', 0) or 0),
                 'legalEntity': int(product.get('legalEntity', 1) or 1),
-                'UID': product.get('UID', ''),
-                'TARA': bool(tara_value)  # Гарантируем, что это булево значение
+                'TARA': bool(product.get('TARA', False))
             }
             formatted_products.append(formatted_product)
         
-        logger.debug(f"Подготовлено {len(formatted_products)} отформатированных товаров")
-        # Выводим пример товаров с TARA=true
-        tara_products = [p for p in formatted_products if p['TARA']]
-        logger.debug(f"Найдено {len(tara_products)} товаров с TARA=true: {tara_products[:3]}")
-        
-        return jsonify({
-            'success': True,
-            'products': formatted_products
-        })
+        return jsonify(formatted_products)
     except Exception as e:
-        logger.error(f"Ошибка при получении товаров: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_products route: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/create-order', methods=['POST'])
@@ -393,22 +369,65 @@ def get_orders():
         return jsonify({'success': False, 'error': 'User ID is required'}), 400
 
     try:
+        start_time = datetime.now()
+        logger.debug(f'Начало получения заказов для пользователя {user_id}: {start_time.strftime("%H:%M:%S.%f")[:-3]}')
+        
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         if not user_data:
             return jsonify({'success': False, 'error': 'User not found in Redis'}), 404
 
+        redis_time = datetime.now()
+        logger.debug(f'Получены данные из Redis: {(redis_time - start_time).total_seconds():.3f} сек')
+
         org_id = user_data.get('org_ID')
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
 
-<<<<<<< HEAD
-=======
-        # Удалено кеширование - всегда получаем актуальные данные
+        # Проверяем, есть ли кешированные данные
+        cache_key = f'orders_cache:{org_id}'
+        cached_data = redis_client.get(cache_key)
         
->>>>>>> parent of 359a81e (некорретное отображение пост запроса)
+        if cached_data:
+            try:
+                # Если есть кешированные данные и они не старше 5 минут, используем их
+                cached_orders = json.loads(cached_data)
+                cache_time = redis_client.get(f'{cache_key}:time')
+                
+                if cache_time:
+                    cache_timestamp = float(cache_time)
+                    current_timestamp = datetime.now().timestamp()
+                    
+                    # Если кеш не старше 5 минут, используем его
+                    if current_timestamp - cache_timestamp < 300:  # 5 минут в секундах
+                        logger.debug(f'Использованы кешированные данные заказов из Redis, возраст: {current_timestamp - cache_timestamp:.1f} сек')
+                        return jsonify({
+                            'success': True,
+                            'orders': cached_orders,
+                            'cached': True
+                        })
+            except Exception as e:
+                logger.error(f'Ошибка при получении данных из кеша: {str(e)}')
+                # В случае ошибки продолжаем получать данные из MongoDB
+
         # Получаем 5 последних заказов из MongoDB по org_ID, сортированных по дате
-        orders = list(mongo.cx.Pivo.Orders.find({'org_ID': org_id}).sort('date', -1).limit(5))
+        # Указываем только нужные поля для ускорения запроса
+        query_time_start = datetime.now()
+        logger.debug(f'Начало запроса к MongoDB: {(query_time_start - start_time).total_seconds():.3f} сек')
+        
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {'org_ID': org_id},
+            {
+                'date': 1, 
+                'status': 1, 
+                'Positions': 1, 
+                'ordersUID': 1, 
+                '_id': 1
+            }
+        ).sort('date', -1).limit(5))
+        
+        query_time_end = datetime.now()
+        logger.debug(f'Запрос к MongoDB выполнен за: {(query_time_end - query_time_start).total_seconds():.3f} сек, получено {len(orders)} заказов')
         
         # Преобразуем заказы в нужный формат
         formatted_orders = []
@@ -443,15 +462,28 @@ def get_orders():
             }
             formatted_orders.append(formatted_order)
 
-<<<<<<< HEAD
-=======
         format_time_end = datetime.now()
         logger.debug(f'Форматирование заказов выполнено за: {(format_time_end - query_time_end).total_seconds():.3f} сек')
+        
+        # Кешируем результаты в Redis
+        try:
+            redis_client.setex(
+                cache_key,
+                3600,  # Храним 1 час
+                json.dumps(formatted_orders)
+            )
+            redis_client.setex(
+                f'{cache_key}:time',
+                3600,  # Храним 1 час
+                str(datetime.now().timestamp())
+            )
+            logger.debug(f'Данные заказов кешированы в Redis')
+        except Exception as e:
+            logger.error(f'Ошибка при кешировании данных: {str(e)}')
         
         end_time = datetime.now()
         logger.debug(f'Общее время выполнения get_orders: {(end_time - start_time).total_seconds():.3f} сек')
 
->>>>>>> parent of 359a81e (некорретное отображение пост запроса)
         return jsonify({
             'success': True,
             'orders': formatted_orders
@@ -1119,26 +1151,61 @@ def get_order_history():
 @app.route('/api/get-orders-from-1c')
 def get_orders_from_1c():
     try:
+        start_time = datetime.now()
         user_id = request.args.get('user_id')
+        
         if not user_id:
             return jsonify({"error": "User ID is required"}), 400
+        
+        logger.debug(f'Начало получения заказов из 1С для пользователя {user_id}: {start_time.strftime("%H:%M:%S.%f")[:-3]}')
             
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         if not user_data:
             return jsonify({"error": "User not found"}), 404
+        
+        redis_time = datetime.now()
+        logger.debug(f'Данные пользователя получены из Redis за: {(redis_time - start_time).total_seconds():.3f} сек')
             
         # Получаем информацию об организации для получения organizationId
         org_id = user_data.get('org_ID')
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 404
             
-        logger.debug(f"Получение истории заказов из 1С для организации: {org_id}")
+        logger.debug(f'Получение истории заказов из 1С для организации: {org_id}')
+        
+        # Проверяем кеш в Redis
+        cache_key = f'orders_1c_cache:{org_id}'
+        cached_data = redis_client.get(cache_key)
+        
+        if cached_data:
+            try:
+                # Если есть кешированные данные и они не старше 5 минут, используем их
+                cached_orders = json.loads(cached_data)
+                cache_time = redis_client.get(f'{cache_key}:time')
+                
+                if cache_time:
+                    cache_timestamp = float(cache_time)
+                    current_timestamp = datetime.now().timestamp()
+                    
+                    # Если кеш не старше 5 минут, используем его
+                    if current_timestamp - cache_timestamp < 300:  # 5 минут в секундах
+                        logger.debug(f'Использованы кешированные данные заказов из 1C, возраст: {current_timestamp - cache_timestamp:.1f} сек')
+                        return jsonify({
+                            "success": True,
+                            "orders": cached_orders,
+                            "cached": True
+                        })
+            except Exception as e:
+                logger.error(f'Ошибка при получении данных из кеша 1C: {str(e)}')
         
         # Получаем историю заказов из 1С используя новый эндпоинт
         try:
             api_url = f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}'
-            logger.debug(f"Отправка запроса: GET {api_url}")
+            logger.debug(f"Отправка запроса к API 1C: GET {api_url}")
+            
+            api_request_start = datetime.now()
+            logger.debug(f'Начало запроса к API 1C: {(api_request_start - start_time).total_seconds():.3f} сек')
             
             response = requests.get(
                 api_url,
@@ -1147,14 +1214,15 @@ def get_orders_from_1c():
                 timeout=10
             )
             
-            logger.debug(f"Статус ответа от API истории заказов: {response.status_code}")
-            logger.debug(f"Ответ от API истории заказов (первые 200 символов): {response.text[:200]}...")
+            api_request_end = datetime.now()
+            logger.debug(f"Ответ получен от API 1C за: {(api_request_end - api_request_start).total_seconds():.3f} сек, статус: {response.status_code}")
             
             if response.status_code != 200:
                 logger.error(f"Ошибка API истории заказов: {response.status_code}, {response.text}")
                 return jsonify({"error": f"API error: {response.status_code}"}), 500
                 
             # Обработка ответа
+            process_start = datetime.now()
             try:
                 # Проверяем содержимое ответа
                 response_text = response.text.strip()
@@ -1173,7 +1241,6 @@ def get_orders_from_1c():
                     
                     # Преобразуем в JSON
                     try:
-                        import json
                         orders_data = json.loads(clean_text)
                         logger.debug(f"Успешно обработан экранированный JSON. Найдено заказов: {len(orders_data)}")
                     except json.JSONDecodeError as e:
@@ -1216,6 +1283,28 @@ def get_orders_from_1c():
                     else:
                         return jsonify({"error": "Неверный формат данных (ожидался список)"}), 500
                 
+                process_end = datetime.now()
+                logger.debug(f"Обработка ответа API 1C выполнена за: {(process_end - process_start).total_seconds():.3f} сек")
+                
+                # Кешируем результаты в Redis
+                try:
+                    redis_client.setex(
+                        cache_key,
+                        3600,  # Храним 1 час
+                        json.dumps(orders_data)
+                    )
+                    redis_client.setex(
+                        f'{cache_key}:time',
+                        3600,  # Храним 1 час
+                        str(datetime.now().timestamp())
+                    )
+                    logger.debug(f'Данные заказов из 1C кешированы в Redis')
+                except Exception as e:
+                    logger.error(f'Ошибка при кешировании данных 1C: {str(e)}')
+                
+                end_time = datetime.now()
+                logger.debug(f'Общее время выполнения get_orders_from_1c: {(end_time - start_time).total_seconds():.3f} сек')
+                
                 # Отдаем данные клиенту
                 return jsonify({"success": True, "orders": orders_data})
                 
@@ -1255,6 +1344,17 @@ def save_combined_order():
             position_key = f"Position_{index}"
             # Используем тот же UID, что и при запросе цен
             uid = item.get('uid') or None
+            
+            # Если UID все еще null, попробуем найти его в каталоге
+            if uid is None:
+                # Найдем товар в каталоге по id
+                beer_id = item.get('id')
+                if beer_id is not None:
+                    catalog_item = mongo.cx.Pivo.catalog.find_one({'id': int(beer_id) if str(beer_id).isdigit() else beer_id})
+                    if catalog_item and 'UID' in catalog_item and catalog_item['UID']:
+                        uid = catalog_item['UID']
+                        logger.debug(f"Найден UID в каталоге для товара с ID {beer_id}: {uid}")
+            
             # Преобразуем UID в строку, если он есть
             if uid is not None:
                 uid = str(uid)
@@ -1482,6 +1582,212 @@ def determine_highest_status(statuses):
     
     return highest_status
 
+@app.route('/api/get-batch-order-statuses', methods=['POST'])
+def get_batch_order_statuses():
+    try:
+        start_time = datetime.now()
+        data = request.json
+        
+        # Проверяем наличие необходимых полей
+        if not data or not isinstance(data, dict) or 'orders' not in data:
+            return jsonify({"error": "Отсутствуют данные о заказах"}), 400
+            
+        orders = data.get('orders', [])
+        if not orders or not isinstance(orders, list):
+            return jsonify({"error": "Некорректный формат списка заказов"}), 400
+            
+        logger.debug(f"Получен запрос на получение статусов для {len(orders)} заказов")
+        
+        # Подготавливаем результаты
+        results = {}
+        mongo_ids = []
+        order_uids = []
+        
+        # Проверяем кеш статусов
+        cache_hits = 0
+        cache_start = datetime.now()
+        
+        # Разделяем запросы по типам и проверяем кеш
+        for order in orders:
+            if 'mongo_id' in order:
+                # Проверяем кеш для MongoDB ID
+                cache_key = f'order_status:{order["mongo_id"]}'
+                cached_status = redis_client.get(cache_key)
+                
+                if cached_status:
+                    try:
+                        status_data = json.loads(cached_status)
+                        if 'status' in status_data:
+                            results[order["mongo_id"]] = status_data
+                            cache_hits += 1
+                            continue
+                    except:
+                        pass
+                
+                mongo_ids.append(order['mongo_id'])
+            elif 'order_uid' in order:
+                # Проверяем кеш для UID
+                cache_key = f'order_status:{order["order_uid"]}'
+                cached_status = redis_client.get(cache_key)
+                
+                if cached_status:
+                    try:
+                        status_data = json.loads(cached_status)
+                        if 'status' in status_data:
+                            results[order["order_uid"]] = status_data
+                            cache_hits += 1
+                            continue
+                    except:
+                        pass
+                
+                order_uids.append(order['order_uid'])
+        
+        cache_end = datetime.now()
+        logger.debug(f"Проверка кеша статусов выполнена за: {(cache_end - cache_start).total_seconds():.3f} сек, найдено {cache_hits} кешированных статусов")
+        
+        # Получаем статусы из MongoDB
+        mongo_start = datetime.now()
+        if mongo_ids:
+            try:
+                # Получаем заказы из MongoDB
+                mongo_orders = list(mongo.cx.Pivo.Orders.find(
+                    {'_id': {'$in': [ObjectId(id) for id in mongo_ids]}},
+                    {'ordersUID': 1, '_id': 1, 'date': 1}
+                ))
+                
+                logger.debug(f"Получено {len(mongo_orders)} заказов из MongoDB")
+                
+                # Создаем список запросов к 1C для заказов из MongoDB
+                for order in mongo_orders:
+                    order_id = str(order.get('_id'))
+                    
+                    # Пропускаем старые заказы (старше 30 дней)
+                    try:
+                        if 'date' in order:
+                            # Парсим дату
+                            date_str = order.get('date', '')
+                            if date_str:
+                                date_parts = date_str.split(' ')
+                                if len(date_parts) == 2:
+                                    date_part = date_parts[0].split('.')
+                                    if len(date_part) == 3:
+                                        day = int(date_part[0])
+                                        month = int(date_part[1])
+                                        year = 2000 + int(date_part[2])  # Предполагаем, что год в формате YY
+                                        order_date = datetime(year, month, day)
+                                        
+                                        # Если заказ старше 30 дней, используем кешированный статус или просто "Выполнен"
+                                        if (datetime.now() - order_date).days > 30:
+                                            results[order_id] = {
+                                                'status': 'Выполнен',
+                                                'cached': True,
+                                                'note': 'Старый заказ'
+                                            }
+                                            
+                                            # Кешируем статус на длительное время
+                                            redis_client.setex(
+                                                f'order_status:{order_id}',
+                                                86400 * 30,  # 30 дней
+                                                json.dumps({'status': 'Выполнен', 'cached': True})
+                                            )
+                                            continue
+                    except Exception as e:
+                        logger.warning(f"Ошибка при анализе даты заказа {order_id}: {str(e)}")
+                    
+                    if 'ordersUID' in order and order['ordersUID']:
+                        # Получаем первый UID из ordersUID
+                        first_uid = next(iter(order['ordersUID'].values()))
+                        if first_uid:
+                            order_uids.append(first_uid)
+                            # Сохраняем соответствие для последующего маппинга
+                            results[order_id] = {
+                                'status': 'Запрошен',
+                                'linked_uid': first_uid
+                            }
+            except Exception as e:
+                logger.error(f"Ошибка при получении заказов из MongoDB: {str(e)}")
+        
+        mongo_end = datetime.now()
+        logger.debug(f"Запросы к MongoDB выполнены за: {(mongo_end - mongo_start).total_seconds():.3f} сек")
+        
+        # Получаем статусы из 1C
+        c1_start = datetime.now()
+        for uid in order_uids:
+            try:
+                # Запрашиваем статус в 1C
+                api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+                response = requests.get(
+                    api_url,
+                    auth=('int2', 'pcKnE8GqXn'),
+                    headers={'Content-Type': 'application/json'},
+                    timeout=5  # Уменьшаем тайм-аут для ускорения
+                )
+                
+                if response.status_code == 200:
+                    try:
+                        status_data = response.json()
+                        status = "В обработке"
+                        
+                        if isinstance(status_data, str):
+                            status = status_data
+                        elif isinstance(status_data, dict) and 'STATUS' in status_data:
+                            status = status_data['STATUS']
+                            
+                        # Добавляем статус в результаты
+                        results[uid] = {
+                            'status': status
+                        }
+                        
+                        # Кешируем статус (на разное время в зависимости от статуса)
+                        cache_ttl = 300  # 5 минут по умолчанию
+                        if status.lower() in ['выполнен', 'доставлен', 'отменен']:
+                            cache_ttl = 86400  # 24 часа для финальных статусов
+                        
+                        redis_client.setex(
+                            f'order_status:{uid}',
+                            cache_ttl,
+                            json.dumps({'status': status})
+                        )
+                        
+                        # Также обновляем статус для связанных заказов из MongoDB
+                        for mongo_id, data in results.items():
+                            if 'linked_uid' in data and data['linked_uid'] == uid:
+                                results[mongo_id]['status'] = status
+                                
+                                # Кешируем статус для MongoDB ID
+                                redis_client.setex(
+                                    f'order_status:{mongo_id}',
+                                    cache_ttl,
+                                    json.dumps({'status': status})
+                                )
+                    except:
+                        logger.warning(f"Ошибка при обработке ответа статуса для UID {uid}")
+                        results[uid] = {'status': 'Ошибка данных'}
+                else:
+                    logger.warning(f"Ошибка API при получении статуса для UID {uid}: {response.status_code}")
+                    results[uid] = {'status': 'Ошибка API'}
+            except Exception as e:
+                logger.error(f"Ошибка при запросе статуса для UID {uid}: {str(e)}")
+                results[uid] = {'status': 'Ошибка запроса'}
+        
+        c1_end = datetime.now()
+        logger.debug(f"Запросы к 1C выполнены за: {(c1_end - c1_start).total_seconds():.3f} сек")
+        
+        end_time = datetime.now()
+        logger.debug(f"Общее время выполнения batch-статусов: {(end_time - start_time).total_seconds():.3f} сек")
+        
+        return jsonify({
+            "success": True,
+            "statuses": results,
+            "stats": {
+                "total_requests": len(orders),
+                "cache_hits": cache_hits,
+                "actual_requests": len(order_uids)
+            }
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении batch-статусов заказов: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
