@@ -1016,6 +1016,14 @@
                         
                         // Применяем TARA к товарам в корзине
                         cart.forEach(item => {
+                            // Проверка по названию (содержит "Баллон")
+                            if (item.name && item.name.toLowerCase().includes('баллон')) {
+                                console.log(`Товар ${item.name} (ID: ${item.id}) отмечен как TARA по названию`);
+                                item.TARA = true;
+                                return;
+                            }
+                            
+                            // Существующая логика поиска по каталогу
                             const catalogItem = window.initialProducts.find(p => 
                                 p.id.toString() === item.id.toString() || 
                                 (p.UID && item.id && p.UID.toString() === item.id.toString())
