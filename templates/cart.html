@@ -365,7 +365,7 @@
                             
                             // Используем цены из API даже если ошибка
                             // Устанавливаем общую сумму из ответа API, если доступна
-                            if (priceData.Summa !== undefined) {
+                            if (priceData && priceData.Summa !== undefined) {
                                 document.getElementById('total_amount').textContent = parseFloat(priceData.Summa).toFixed(2);
                                 console.log(`Установлена общая сумма из API: ${priceData.Summa}`);
                             }
@@ -463,35 +463,32 @@
                                 console.warn(`⚠️ ${itemsWithoutPrice} товаров не получили цены`);
                             }
                             
-                            // Устанавливаем общую сумму из ответа API
-                            if (priceData.Summa !== undefined) {
+                            console.log(`Итог: Успешно применено ${appliedCount} цен из ${priceData.Korzina.length} возможных для ${cart.length} товаров`);
+                            
+                            // Отладочная информация о товарах после обработки цен
+                            console.log('Товары в корзине после обработки цен:', JSON.stringify(cart, null, 2));
+                            
+                            // Обновляем отображение корзины с ценами
+                            renderCartItems();
+                            
+                            // Устанавливаем общую сумму из ответа API - всегда берем из API, если доступно
+                            if (priceData && priceData.Summa !== undefined) {
                                 document.getElementById('total_amount').textContent = parseFloat(priceData.Summa).toFixed(2);
                                 console.log(`Установлена общая сумма из API: ${priceData.Summa}`);
                             }
-                            
-                            console.log(`Итог: Успешно применено ${appliedCount} цен из ${priceData.Korzina.length} возможных для ${cart.length} товаров`);
                         } else {
                             console.warn('В ответе API отсутствуют данные о ценах');
+                            renderCartItems();
                         }
-                        
-                        // Отладочная информация о товарах после обработки цен
-                        console.log('Товары в корзине после обработки цен:', JSON.stringify(cart, null, 2));
-                        updateProcessIndicator('Этап: обновление отображения корзины');
-                        
-                        // Обновляем отображение корзины с ценами
-                        renderCartItems();
                     })
                     .catch(error => {
                         console.error('Ошибка при получении цен:', error);
                         
                         // В случае ошибки показываем уведомление
-                        showNotification('Ошибка при получении цен: ' + error.message);
+                        showNotification('Ошибка при получении цен: ' + error.message, 5000);
                         
-                        // Обновляем отображение корзины с нулевыми ценами
+                        // Обновляем отображение корзины с имеющимися ценами
                         renderCartItems();
-                        
-                        // Устанавливаем нулевую общую сумму
-                        document.getElementById('total_amount').textContent = '0.00';
                     });
             }, 300);
             
@@ -565,6 +562,9 @@
                     document.getElementById('total_amount').textContent === '0.00' ||
                     document.getElementById('total_amount').textContent === '0') {
                     document.getElementById('total_amount').textContent = totalSum.toFixed(2);
+                    console.log(`Установлена локально рассчитанная сумма: ${totalSum.toFixed(2)}`);
+                } else {
+                    console.log(`Используется сумма из API: ${document.getElementById('total_amount').textContent}`);
                 }
             }
         }
