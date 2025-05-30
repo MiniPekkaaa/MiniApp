@@ -325,11 +325,86 @@
                 // Получаем ID организации
                 getUserOrgData()
                     .then(userData => {
-                        console.log('Данные организации получены успешно:', userData);
+                        console.log('[TARA_DEBUG] Данные организации получены успешно:', userData);
                         
                         // Сохраняем карту UID для последующего использования
                         window.uidMap = userData.uid_map || {};
-                        console.log('Карта UID товаров:', window.uidMap);
+                        console.log('[TARA_DEBUG] Карта UID товаров:', window.uidMap);
+                        
+                        // Проверяем TARA по UID из MongoDB
+                        console.log('[TARA_DEBUG] Начинаем проверку TARA напрямую из MongoDB...');
+                        const uidsToCheck = [];
+                        
+                        // Собираем UID товаров из корзины
+                        cart.forEach((item, index) => {
+                            // Получаем UID товара из карты или используем ID
+                            const uid = userData.uid_map && userData.uid_map[item.id] ? 
+                                      userData.uid_map[item.id] : item.id;
+                            
+                            if (uid) {
+                                uidsToCheck.push(uid);
+                                console.log(`[TARA_DEBUG] Добавлен UID для проверки TARA: ${uid}, товар: ${item.name}`);
+                            }
+                        });
+                        
+                        if (uidsToCheck.length > 0) {
+                            // Делаем запрос к API для проверки TARA по UID
+                            console.log(`[TARA_DEBUG] Отправляем запрос на проверку TARA для ${uidsToCheck.length} товаров`);
+                            
+                            fetch('/api/check-tara', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    uids: uidsToCheck
+                                })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log('[TARA_DEBUG] Получен ответ о TARA из MongoDB:', data);
+                                
+                                if (data.success) {
+                                    // Применяем полученные данные о TARA к товарам в корзине
+                                    console.log(`[TARA_DEBUG] Получены данные о TARA для ${Object.keys(data.tara_data).length} товаров`);
+                                    
+                                    let appliedCount = 0;
+                                    cart.forEach(item => {
+                                        // Проверяем по UID из карты
+                                        const itemUid = userData.uid_map && userData.uid_map[item.id] ? 
+                                                      userData.uid_map[item.id] : item.id;
+                                        
+                                        if (itemUid && data.tara_data[itemUid] !== undefined) {
+                                            const isTara = data.tara_data[itemUid];
+                                            console.log(`[TARA_DEBUG] Товар "${item.name}" (UID: ${itemUid}): TARA=${isTara}`);
+                                            
+                                            // Устанавливаем флаг TARA
+                                            item.TARA = isTara;
+                                            
+                                            if (isTara) {
+                                                appliedCount++;
+                                                console.log(`[TARA_DEBUG] Установлен флаг TARA=true для товара "${item.name}"`);
+                                            }
+                                        } else {
+                                            console.log(`[TARA_DEBUG] Не найдены данные о TARA для товара "${item.name}" (UID: ${itemUid})`);
+                                        }
+                                    });
+                                    
+                                    console.log(`[TARA_DEBUG] Применены данные о TARA к ${appliedCount} товарам из ${cart.length}`);
+                                    
+                                    // Сохраняем обновленную корзину
+                                    sessionStorage.setItem('cart', JSON.stringify(cart));
+                                    
+                                    // Перерисовываем корзину с учетом TARA
+                                    renderCartItems();
+                                } else {
+                                    console.error('[TARA_DEBUG] Ошибка при получении данных о TARA:', data.error);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('[TARA_DEBUG] Ошибка при запросе данных о TARA:', error);
+                            });
+                        }
                         
                         // Создаем обратную карту: UID -> индекс товара в корзине
                         window.uidToCartItemMap = {};

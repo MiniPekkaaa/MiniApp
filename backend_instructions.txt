@@ -1,0 +1,78 @@
+# Инструкции по добавлению API для проверки TARA
+
+Необходимо добавить новый API-эндпоинт в файл app.py:
+
+```python
+@app.route('/api/check-tara', methods=['POST'])
+def check_tara():
+    try:
+        data = request.json
+        uids = data.get('uids', [])
+        
+        app.logger.debug(f"Получен запрос на проверку TARA для UID: {uids}")
+        
+        # Результаты проверки TARA
+        tara_data = {}
+        
+        # Подключаемся к MongoDB
+        catalog = mongo.db.catalog
+        
+        # Поиск документов по UID
+        for uid in uids:
+            # Ищем документ по полю UID
+            document = catalog.find_one({"UID": uid})
+            
+            if document:
+                app.logger.debug(f"Найден документ в MongoDB для UID {uid}: TARA={document.get('TARA', False)}")
+                tara_data[uid] = bool(document.get('TARA', False))
+            else:
+                app.logger.debug(f"Документ для UID {uid} не найден в MongoDB")
+                tara_data[uid] = False
+        
+        app.logger.debug(f"Результаты проверки TARA: {tara_data}")
+        
+        return jsonify({
+            'success': True,
+            'tara_data': tara_data
+        })
+    except Exception as e:
+        app.logger.error(f"Ошибка при проверке TARA: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+```
+
+## Дополнительные замечания:
+
+1. Если в MongoDB используется другое название поля вместо "UID", замените его на соответствующее.
+
+2. Если в вашей системе есть несколько коллекций каталогов, укажите правильную коллекцию для поиска.
+
+3. Убедитесь, что запрос к MongoDB имеет соответствующие индексы для быстрого поиска.
+
+4. Добавьте необходимые импорты в начало файла, если их нет:
+   ```python
+   from flask import request, jsonify
+   ```
+
+5. Если UID хранится в другом формате (например, с префиксом), добавьте соответствующую обработку.
+
+## Тестирование:
+
+Чтобы протестировать API, выполните следующий запрос:
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"uids": ["c46435b8-ce40-11ef-a721-50ebf6b0a0c4", "db8c3457-ce40-11ef-a721-50ebf6b0a0c4"]}' http://localhost:5000/api/check-tara
+```
+
+Ожидаемый ответ:
+```json
+{
+  "success": true,
+  "tara_data": {
+    "c46435b8-ce40-11ef-a721-50ebf6b0a0c4": true,
+    "db8c3457-ce40-11ef-a721-50ebf6b0a0c4": true
+  }
+}
+``` 
