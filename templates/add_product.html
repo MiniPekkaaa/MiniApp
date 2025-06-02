@@ -471,7 +471,7 @@
                     container.innerHTML += 
                         '<div class="alert-message" style="background-color: rgba(76, 175, 80, 0.1); border-left-color: #4CAF50;">' +
                         '<p><strong>Это товары из ваших последних отгруженных заказов.</strong></p>' +
-                        '<p>Укажите актуальные остатки и нажмите "Добавить" для каждой позиции.</p>' +
+                        '<p>Укажите актуальные остатки для каждой позиции.</p>' +
                         '</div>';
                     
                     // Сортируем позиции по названию для удобства
@@ -498,6 +498,7 @@
                         const legalEntity = position.Legal_Entity || 1;
                         const quantity = position.Beer_Count || 1;
                         
+                        // Используем точно такой же формат, как при ручном добавлении в addToRemainders()
                         productDiv.innerHTML = `
                             <div class="product-info">
                                 ${beerName}
@@ -510,17 +511,19 @@
                                        step="0.5" 
                                        class="quantity-input" 
                                        style="width: 80px; text-align: center; padding: 8px;"
-                                       data-id="${beerId}" 
-                                       data-name="${beerName}" 
-                                       data-legal="${legalEntity}">
-                                <button class="add-button" 
-                                        onclick="addProductFromInput(this.previousElementSibling)">
-                                    Добавить
+                                       onchange="addLastOrderProduct('${beerId}', '${beerName}', ${legalEntity}, this.value)">
+                                <button onclick="deleteRemainder('${beerId}', ${legalEntity}, this.closest('.product-item'))"
+                                        class="delete-button">
+                                    Удалить
                                 </button>
                             </div>
                         `;
                         
                         container.appendChild(productDiv);
+                        
+                        // Сразу добавляем товар в массив remainders
+                        addLastOrderProduct(beerId, beerName, legalEntity, quantity);
+                        
                         console.log(`[${formatTime(new Date())}] Добавлена позиция #${index} на страницу: ${beerName}`);
                     });
                     
