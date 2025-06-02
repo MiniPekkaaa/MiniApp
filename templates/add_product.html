@@ -471,21 +471,11 @@
                     container.innerHTML += 
                         '<div class="alert-message" style="background-color: rgba(76, 175, 80, 0.1); border-left-color: #4CAF50;">' +
                         '<p><strong>Это товары из ваших последних отгруженных заказов.</strong></p>' +
-                        '<p>Укажите актуальные остатки для каждой позиции.</p>' +
+                        '<p>Укажите актуальные остатки и нажмите "Добавить" для каждой позиции.</p>' +
                         '</div>';
                     
-                    // Фильтруем позиции, исключая те, у которых TARA=true
-                    const filteredPositions = data.positions.filter(position => {
-                        const beerId = position.Beer_ID.toString();
-                        // Проверяем, есть ли товар с таким ID в каталоге и имеет ли он TARA=true
-                        const product = initialProducts.find(p => p.id.toString() === beerId);
-                        return !(product && product.TARA === true);
-                    });
-                    
-                    console.log(`[${formatTime(new Date())}] Отфильтровано ${data.positions.length - filteredPositions.length} позиций с TARA=true`);
-                    
                     // Сортируем позиции по названию для удобства
-                    const sortedPositions = [...filteredPositions].sort((a, b) => 
+                    const sortedPositions = [...data.positions].sort((a, b) => 
                         a.Beer_Name.localeCompare(b.Beer_Name)
                     );
 
@@ -508,7 +498,6 @@
                         const legalEntity = position.Legal_Entity || 1;
                         const quantity = position.Beer_Count || 1;
                         
-                        // Используем тот же формат, что и в displayRemainders() для карточек
                         productDiv.innerHTML = `
                             <div class="product-info">
                                 ${beerName}
@@ -521,19 +510,17 @@
                                        step="0.5" 
                                        class="quantity-input" 
                                        style="width: 80px; text-align: center; padding: 8px;"
-                                       onchange="addLastOrderProduct('${beerId}', '${beerName}', ${legalEntity}, this.value)">
-                                <button onclick="deleteRemainder('${beerId}', ${legalEntity}, this.closest('.product-item'))"
-                                        class="delete-button">
-                                    Удалить
+                                       data-id="${beerId}" 
+                                       data-name="${beerName}" 
+                                       data-legal="${legalEntity}">
+                                <button class="add-button" 
+                                        onclick="addProductFromInput(this.previousElementSibling)">
+                                    Добавить
                                 </button>
                             </div>
                         `;
                         
                         container.appendChild(productDiv);
-                        
-                        // Сразу добавляем товар в массив remainders
-                        addLastOrderProduct(beerId, beerName, legalEntity, quantity);
-                        
                         console.log(`[${formatTime(new Date())}] Добавлена позиция #${index} на страницу: ${beerName}`);
                     });
                     
