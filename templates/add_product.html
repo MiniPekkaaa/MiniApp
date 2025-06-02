@@ -497,12 +497,16 @@
                         const legalEntity = position.Legal_Entity || 1;
                         const quantity = position.Beer_Count || 1;
                         
+                        // Получаем объем товара из каталога
+                        const volume = productInCatalog ? productInCatalog.volume : null;
+                        
                         // Сразу добавляем товар в массив remainders без отображения в last_orders_products
                         const productToAdd = {
                             id: beerId,
                             name: beerName,
                             legalEntity: parseInt(legalEntity) || 1,
-                            quantity: parseFloat(quantity) || 0
+                            quantity: parseFloat(quantity) || 0,
+                            volume: volume // Добавляем объем
                         };
                         
                         const existingItemIndex = remainders.findIndex(item => 
@@ -513,6 +517,10 @@
                         if (existingItemIndex !== -1) {
                             // Обновляем количество в массиве
                             remainders[existingItemIndex].quantity = productToAdd.quantity;
+                            // Обновляем объем, если он не был сохранен ранее
+                            if (!remainders[existingItemIndex].volume && productToAdd.volume) {
+                                remainders[existingItemIndex].volume = productToAdd.volume;
+                            }
                         } else {
                             // Добавляем новый товар в массив
                             remainders.push(productToAdd);
@@ -564,9 +572,14 @@
                 const remainderDiv = document.createElement('div');
                 remainderDiv.className = 'product-item';
                 
+                // Находим данные о продукте в каталоге для получения объема
+                const productInCatalog = initialProducts.find(p => p.id.toString() === remainder.id.toString());
+                const volume = productInCatalog ? productInCatalog.volume : '';
+                const volumeDisplay = volume ? ` (${volume}л)` : '';
+                
                 remainderDiv.innerHTML = `
                     <div class="product-info">
-                        ${remainder.name}
+                        ${remainder.name}${volumeDisplay}
                     </div>
                     <div class="product-controls">
                         <input type="number" value="${remainder.quantity}" min="1" class="quantity-input" 
@@ -640,7 +653,8 @@
                 id: selectedProduct.id,
                 name: selectedProduct.name,
                 legalEntity: parseInt(selectedProduct.legalEntity),
-                quantity: quantity
+                quantity: quantity,
+                volume: selectedProduct.volume // Сохраняем объем для передачи в корзину
             };
             
             const existingItemIndex = remainders.findIndex(item => 
@@ -650,6 +664,10 @@
             
             if (existingItemIndex !== -1) {
                 remainders[existingItemIndex].quantity = quantity;
+                // Обновляем объем, если он не был сохранен ранее
+                if (!remainders[existingItemIndex].volume && product.volume) {
+                    remainders[existingItemIndex].volume = product.volume;
+                }
             } else {
                 remainders.push(product);
             }
@@ -659,9 +677,12 @@
             const productDiv = document.createElement('div');
             productDiv.className = 'product-item';
             
+            // Отображаем объем товара
+            const volumeDisplay = product.volume ? ` (${product.volume}л)` : '';
+            
             productDiv.innerHTML = `
                 <div class="product-info">
-                    ${product.name}
+                    ${product.name}${volumeDisplay}
                 </div>
                 <div class="product-controls">
                     <input type="number" 
@@ -712,11 +733,17 @@
                 const matches = onclick.match(/deleteRemainder\((\d+),\s*(\d+)/);
                 if (matches) {
                     const [_, beerId, legalEntity] = matches;
+                    
+                    // Получаем объем товара из каталога
+                    const productInCatalog = initialProducts.find(p => p.id.toString() === beerId);
+                    const volume = productInCatalog ? productInCatalog.volume : null;
+                    
                     allRemainders.push({
                         id: beerId,
-                        name: name,
+                        name: name.replace(/\s*\(\d+\.?\d*л\)$/, ''), // Удаляем объем из названия
                         legalEntity: parseInt(legalEntity),
-                        quantity: quantity
+                        quantity: quantity,
+                        volume: volume // Добавляем объем
                     });
                 }
             });
@@ -732,7 +759,8 @@
                         id: remainder.id,
                         name: remainder.name,
                         legalEntity: remainder.legalEntity,
-                        quantity: remainder.quantity
+                        quantity: remainder.quantity,
+                        volume: remainder.volume // Добавляем объем
                     });
                 }
             });
@@ -827,7 +855,8 @@
                                 id: product.id,
                                 name: product.name,
                                 quantity: parseInt(position.quantity) || 0,
-                                legalEntity: parseInt(product.legalEntity) || 1
+                                legalEntity: parseInt(product.legalEntity) || 1,
+                                volume: product.volume // Добавляем объем
                             };
                         } else {
                             console.warn(`Товар не найден: ${position.name}`);
@@ -835,7 +864,8 @@
                                 id: '',
                                 name: position.name,
                                 quantity: parseInt(position.quantity) || 0,
-                                legalEntity: 1
+                                legalEntity: 1,
+                                volume: null // Добавляем null для объема
                             };
                         }
                     });
@@ -869,7 +899,8 @@
                         id: product.id,
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
-                        legalEntity: parseInt(product.legalEntity) || 1
+                        legalEntity: parseInt(product.legalEntity) || 1,
+                        volume: product.volume // Добавляем объем
                     });
                 } else {
                     console.warn(`Товар не найден: ${item.name}`);
@@ -877,7 +908,8 @@
                         id: item.id || '',
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
-                        legalEntity: item.legalEntity || 1
+                        legalEntity: item.legalEntity || 1,
+                        volume: item.volume || null // Используем объем из item или null
                     });
                 }
             });

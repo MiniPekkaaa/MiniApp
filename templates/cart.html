@@ -612,9 +612,23 @@
                     const taraLabel = item.TARA === true ? '<span class="tara-badge">ТАРА</span>' : '';
                     console.log(`[TARA_DEBUG] Добавляем метку TARA к товару "${item.name}": ${taraLabel ? 'да' : 'нет'}`);
                     
+                    // Получаем объем товара
+                    let volumeDisplay = '';
+                    if (item.volume) {
+                        volumeDisplay = ` (${item.volume}л)`;
+                    } else {
+                        // Ищем объем в каталоге товаров, если он не был сохранен в корзине
+                        const productInCatalog = window.initialProducts ? window.initialProducts.find(p => p.id.toString() === item.id.toString()) : null;
+                        if (productInCatalog && productInCatalog.volume) {
+                            volumeDisplay = ` (${productInCatalog.volume}л)`;
+                            // Сохраняем объем в корзине для будущего использования
+                            item.volume = productInCatalog.volume;
+                        }
+                    }
+                    
                     itemElement.innerHTML = `
                         <div class="cart-item-info">
-                            <h3 class="cart-item-name">${item.name}${taraLabel}</h3>
+                            <h3 class="cart-item-name">${item.name}${volumeDisplay}${taraLabel}</h3>
                             <div class="cart-item-details">
                                 <p>Количество: ${item.quantity}</p>
                                 <p>Цена: ${price.toFixed(2)}₽</p>
