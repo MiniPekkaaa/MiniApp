@@ -456,6 +456,13 @@
                             return;
                         }
                         
+                        // Добавляем информационное сообщение о позициях из отгруженных заказов
+                        container.innerHTML += 
+                            '<div class="alert-message" style="background-color: rgba(76, 175, 80, 0.1); border-left-color: #4CAF50;">' +
+                            '<p><strong>Это товары из ваших последних отгруженных заказов.</strong></p>' +
+                            '<p>Укажите актуальные остатки и нажмите "Добавить" для каждой позиции.</p>' +
+                            '</div>';
+                        
                         // Сортируем позиции по названию для удобства
                         const sortedPositions = [...data.positions].sort((a, b) => 
                             a.Beer_Name.localeCompare(b.Beer_Name)

@@ -311,11 +311,11 @@ def get_last_orders():
 
         logger.debug(f"Получение последних заказов для организации {org_id}")
 
-        # Получаем последние 5 заказов организации, отсортированные по дате создания
+        # Получаем последние 10 заказов организации, отсортированные по дате создания
         orders = list(mongo.cx.Pivo.Orders.find(
             {"org_ID": org_id},
             {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
-        ).sort([("createdAt", -1), ("date", -1)]).limit(5))
+        ).sort([("createdAt", -1), ("date", -1)]).limit(10))
         
         logger.debug(f"Найдено {len(orders)} последних заказов")
 
@@ -360,16 +360,21 @@ def get_last_orders():
             logger.error(f"Ошибка при получении batch-статусов: {str(e)}")
             # Продолжаем выполнение с имеющимися статусами
         
-        # Фильтруем только заказы со статусом "Отгружен"
+        # Фильтруем только заказы со статусом "Отгружен" и подобными
         shipped_orders = []
         for order in orders:
-            status = order.get('status', '').lower()
-            if status == "отгружен" or status == "отгружено" or "отгруж" in status:
-                logger.debug(f"Добавляем отгруженный заказ {order.get('_id')} в список")
+            status = str(order.get('status', '')).lower()
+            # Расширяем список возможных вариантов статуса "отгружен"
+            if (status == "отгружен" or status == "отгружено" or 
+                "отгруж" in status or "выполнен" in status or 
+                "доставлен" in status or "выдан" in status):
+                logger.debug(f"Добавляем отгруженный заказ {order.get('_id')} в список, статус: {status}")
                 shipped_orders.append(order)
+            else:
+                logger.debug(f"Пропускаем заказ {order.get('_id')} со статусом: {status}")
         
-        # Берем только 3 последних отгруженных заказа
-        shipped_orders = shipped_orders[:3]
+        # Берем только 5 последних отгруженных заказов
+        shipped_orders = shipped_orders[:5]
         logger.debug(f"Отфильтровано {len(shipped_orders)} отгруженных заказов")
 
         # Если не нашли отгруженных заказов, возвращаем пустой результат
@@ -426,11 +431,11 @@ def get_last_orders():
         if not result:
             logger.debug("Не найдено ни одной позиции в отгруженных заказах, ищем в каталоге")
             
-            # Получаем несколько позиций из каталога для примера
+            # Получаем популярные позиции из каталога (до 10 позиций)
             catalog_items = list(mongo.cx.Pivo.catalog.find(
                 {"TARA": {"$ne": True}},  # Исключаем тару
                 {"id": 1, "name": 1, "legalEntity": 1}
-            ).limit(5))
+            ).limit(10))
             
             for item in catalog_items:
                 beer_id = item.get('id')
