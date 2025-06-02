@@ -730,8 +730,8 @@
                 return;
             }
             
-            // Проверяем, что все товары имеют цены
-            const itemsWithoutPrice = cart.filter(item => !item.price || item.price <= 0);
+            // Проверяем, что все товары имеют цены (исключая ТАРА)
+            const itemsWithoutPrice = cart.filter(item => !item.TARA && (!item.price || item.price <= 0));
             if (itemsWithoutPrice.length > 0) {
                 tg.showAlert("Не все товары имеют цены. Дождитесь расчета цен или обновите страницу.");
                 return;

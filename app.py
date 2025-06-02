@@ -317,30 +317,41 @@ def get_last_orders():
             },
             {"Positions": 1, "_id": 0}
         ).sort("date", -1).limit(3))
+        
+        logger.debug(f"Найдено {len(orders)} последних выполненных заказов")
 
-        # Собираем все уникальные позиции
-        unique_positions = {}
-        for order in orders:
+        # Создаем словарь для отслеживания позиций из заказов
+        # Ключ: beer_id_legalEntity, Значение: {информация о позиции}
+        seen_positions = {}
+        result = []
+
+        # Обрабатываем каждый заказ в порядке от новых к старым
+        for order_index, order in enumerate(orders):
             positions = order.get('Positions', {})
-            for position in positions.values():
+            logger.debug(f"Заказ #{order_index+1} содержит {len(positions)} позиций")
+            
+            # Для каждой позиции в текущем заказе
+            for position_key, position in positions.items():
                 beer_id = position.get('Beer_ID')
                 legal_entity = position.get('Legal_Entity')
-                beer_count = position.get('Beer_Count')
                 
                 if beer_id is None or legal_entity is None:
                     continue
                 
-                position_key = f"{beer_id}_{legal_entity}"
-                if position_key not in unique_positions:
-                    unique_positions[position_key] = {
+                # Создаем уникальный ключ для этой позиции
+                unique_key = f"{beer_id}_{legal_entity}"
+                
+                # Если эта позиция не была добавлена ранее, добавляем ее в результат
+                if unique_key not in seen_positions:
+                    seen_positions[unique_key] = True
+                    result.append({
                         'Beer_ID': beer_id,
                         'Beer_Name': position.get('Beer_Name', ''),
                         'Legal_Entity': legal_entity,
-                        'Beer_Count': beer_count if beer_count is not None else 0
-                    }
-
-        # Преобразуем в список
-        result = list(unique_positions.values())
+                        'Beer_Count': position.get('Beer_Count', 0) if position.get('Beer_Count') is not None else 0
+                    })
+        
+        logger.debug(f"Собрано {len(result)} уникальных позиций из заказов")
         
         # Добавляем org_ID в ответ для n8n
         response_data = {
@@ -383,32 +394,6 @@ def get_orders():
         org_id = user_data.get('org_ID')
         if not org_id:
             return jsonify({'success': False, 'error': 'Organization ID not found'}), 404
-
-        # Проверяем, есть ли кешированные данные
-        cache_key = f'orders_cache:{org_id}'
-        cached_data = redis_client.get(cache_key)
-        
-        if cached_data:
-            try:
-                # Если есть кешированные данные и они не старше 5 минут, используем их
-                cached_orders = json.loads(cached_data)
-                cache_time = redis_client.get(f'{cache_key}:time')
-                
-                if cache_time:
-                    cache_timestamp = float(cache_time)
-                    current_timestamp = datetime.now().timestamp()
-                    
-                    # Если кеш не старше 5 минут, используем его
-                    if current_timestamp - cache_timestamp < 300:  # 5 минут в секундах
-                        logger.debug(f'Использованы кешированные данные заказов из Redis, возраст: {current_timestamp - cache_timestamp:.1f} сек')
-                        return jsonify({
-                            'success': True,
-                            'orders': cached_orders,
-                            'cached': True
-                        })
-            except Exception as e:
-                logger.error(f'Ошибка при получении данных из кеша: {str(e)}')
-                # В случае ошибки продолжаем получать данные из MongoDB
 
         # Получаем 5 последних заказов из MongoDB по org_ID, сортированных по дате
         # Указываем только нужные поля для ускорения запроса
@@ -464,22 +449,6 @@ def get_orders():
 
         format_time_end = datetime.now()
         logger.debug(f'Форматирование заказов выполнено за: {(format_time_end - query_time_end).total_seconds():.3f} сек')
-        
-        # Кешируем результаты в Redis
-        try:
-            redis_client.setex(
-                cache_key,
-                3600,  # Храним 1 час
-                json.dumps(formatted_orders)
-            )
-            redis_client.setex(
-                f'{cache_key}:time',
-                3600,  # Храним 1 час
-                str(datetime.now().timestamp())
-            )
-            logger.debug(f'Данные заказов кешированы в Redis')
-        except Exception as e:
-            logger.error(f'Ошибка при кешировании данных: {str(e)}')
         
         end_time = datetime.now()
         logger.debug(f'Общее время выполнения get_orders: {(end_time - start_time).total_seconds():.3f} сек')
@@ -1174,31 +1143,6 @@ def get_orders_from_1c():
             
         logger.debug(f'Получение истории заказов из 1С для организации: {org_id}')
         
-        # Проверяем кеш в Redis
-        cache_key = f'orders_1c_cache:{org_id}'
-        cached_data = redis_client.get(cache_key)
-        
-        if cached_data:
-            try:
-                # Если есть кешированные данные и они не старше 5 минут, используем их
-                cached_orders = json.loads(cached_data)
-                cache_time = redis_client.get(f'{cache_key}:time')
-                
-                if cache_time:
-                    cache_timestamp = float(cache_time)
-                    current_timestamp = datetime.now().timestamp()
-                    
-                    # Если кеш не старше 5 минут, используем его
-                    if current_timestamp - cache_timestamp < 300:  # 5 минут в секундах
-                        logger.debug(f'Использованы кешированные данные заказов из 1C, возраст: {current_timestamp - cache_timestamp:.1f} сек')
-                        return jsonify({
-                            "success": True,
-                            "orders": cached_orders,
-                            "cached": True
-                        })
-            except Exception as e:
-                logger.error(f'Ошибка при получении данных из кеша 1C: {str(e)}')
-        
         # Получаем историю заказов из 1С используя новый эндпоинт
         try:
             api_url = f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}'
@@ -1285,22 +1229,6 @@ def get_orders_from_1c():
                 
                 process_end = datetime.now()
                 logger.debug(f"Обработка ответа API 1C выполнена за: {(process_end - process_start).total_seconds():.3f} сек")
-                
-                # Кешируем результаты в Redis
-                try:
-                    redis_client.setex(
-                        cache_key,
-                        3600,  # Храним 1 час
-                        json.dumps(orders_data)
-                    )
-                    redis_client.setex(
-                        f'{cache_key}:time',
-                        3600,  # Храним 1 час
-                        str(datetime.now().timestamp())
-                    )
-                    logger.debug(f'Данные заказов из 1C кешированы в Redis')
-                except Exception as e:
-                    logger.error(f'Ошибка при кешировании данных 1C: {str(e)}')
                 
                 end_time = datetime.now()
                 logger.debug(f'Общее время выполнения get_orders_from_1c: {(end_time - start_time).total_seconds():.3f} сек')
