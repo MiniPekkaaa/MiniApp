@@ -337,21 +337,63 @@
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
+        const tg = window.Telegram.WebApp;
         tg.expand();
-
-        // Получаем user_id из URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('user_id');
         
-        if (!userId) {
-            console.error('User ID not found in URL parameters');
-            tg.showAlert('Ошибка: ID пользователя не найден в параметрах URL');
-        } else {
-            console.log('User ID loaded:', userId);
-        }
-
+        let userId = null;
         let currentOrderId = null;
+
+        function init() {
+            tg.initData = window.Telegram.WebApp.initData || '';
+            tg.initDataUnsafe = window.Telegram.WebApp.initDataUnsafe || {};
+            
+            userId = tg.initDataUnsafe?.user?.id;
+            if (!userId) {
+                // Получаем из URL, если нет в Telegram WebApp
+                const urlParams = new URLSearchParams(window.location.search);
+                userId = urlParams.get('user_id');
+                
+                // Если ID все еще нет, но есть в Telegram WebApp
+                if (!userId && tg.initDataUnsafe?.user?.id) {
+                    userId = tg.initDataUnsafe.user.id;
+                    // Перезагружаем страницу с ID в URL
+                    window.location.href = `${window.location.pathname}?user_id=${userId}`;
+                    return;
+                }
+                
+                // Если ID пользователя все еще не найден
+                if (!userId) {
+                    console.error('User ID not found');
+                    tg.showAlert('Ошибка: ID пользователя не найден');
+                    return;
+                }
+            }
+            
+            // Обработчик события для перезагрузки списка заказов при открытии страницы
+            tg.onEvent('viewportChanged', function() {
+                console.log('Viewport changed, reloading orders...');
+                loadOrders();
+            });
+            
+            // Если есть данные из DialogMessage, выводим их
+            const dialogData = tg.initDataUnsafe?.start_param;
+            if (dialogData) {
+                try {
+                    const decodedData = atob(dialogData);
+                    const parsedData = JSON.parse(decodedData);
+                    
+                    if (parsedData && parsedData.message) {
+                        document.getElementById('dialog-message').textContent = parsedData.message;
+                        document.getElementById('dialog-container').style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error('Failed to parse dialog data:', e);
+                }
+            }
+            
+            // Инициализируем список заказов
+            loadOrders();
+        }
 
         function showContent() {
             document.getElementById('loading').classList.remove('visible');
@@ -819,7 +861,7 @@
         }
 
         // Загружаем заказы при загрузке страницы
-        document.addEventListener('DOMContentLoaded', loadOrders);
+        document.addEventListener('DOMContentLoaded', init);
 
         // Добавляю код для отображения информации о заказах в 1С
         function renderOrder(order) {

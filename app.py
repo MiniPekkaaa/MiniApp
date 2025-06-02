@@ -400,6 +400,7 @@ def get_orders():
         query_time_start = datetime.now()
         logger.debug(f'Начало запроса к MongoDB: {(query_time_start - start_time).total_seconds():.3f} сек')
         
+        # Убираем любое кеширование, всегда запрашиваем актуальные данные
         orders = list(mongo.cx.Pivo.Orders.find(
             {'org_ID': org_id},
             {
