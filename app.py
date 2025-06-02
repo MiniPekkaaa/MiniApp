@@ -309,19 +309,28 @@ def get_last_orders():
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 400
 
+        logger.debug(f"Получение последних 3 выполненных заказов для организации {org_id}")
+
         # Получаем последние 3 ВЫПОЛНЕННЫХ заказа организации, отсортированные по дате
         orders = list(mongo.cx.Pivo.Orders.find(
             {
                 "org_ID": org_id,
                 "status": "Выполнен"  # Только выполненные заказы
             },
-            {"Positions": 1, "_id": 0}
-        ).sort("date", -1).limit(3))
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(3))
         
         logger.debug(f"Найдено {len(orders)} последних выполненных заказов")
+        
+        # Логируем информацию о найденных заказах
+        for i, order in enumerate(orders):
+            order_id = str(order.get('_id', 'Нет ID'))
+            date = order.get('date', 'Нет даты')
+            positions_count = len(order.get('Positions', {}))
+            logger.debug(f"Заказ #{i+1}: ID={order_id}, дата={date}, позиций={positions_count}")
 
         # Создаем словарь для отслеживания позиций из заказов
-        # Ключ: beer_id_legalEntity, Значение: {информация о позиции}
+        # Ключ: beer_id, Значение: {информация о позиции}
         seen_positions = {}
         result = []
 
@@ -334,8 +343,13 @@ def get_last_orders():
             for position_key, position in positions.items():
                 beer_id = position.get('Beer_ID')
                 legal_entity = position.get('Legal_Entity')
+                beer_name = position.get('Beer_Name', '')
+                
+                # Логируем информацию о позиции
+                logger.debug(f"Позиция: Beer_ID={beer_id}, Beer_Name={beer_name}, Legal_Entity={legal_entity}")
                 
                 if beer_id is None or legal_entity is None:
+                    logger.warning(f"Пропускаем позицию с отсутствующими данными: Beer_ID={beer_id}, Legal_Entity={legal_entity}")
                     continue
                 
                 # Создаем уникальный ключ для этой позиции
@@ -344,14 +358,49 @@ def get_last_orders():
                 # Если эта позиция не была добавлена ранее, добавляем ее в результат
                 if unique_key not in seen_positions:
                     seen_positions[unique_key] = True
-                    result.append({
-                        'Beer_ID': beer_id,
-                        'Beer_Name': position.get('Beer_Name', ''),
+                    
+                    # Преобразуем Beer_ID в строку, если нужно
+                    beer_id_str = str(beer_id) if beer_id is not None else ''
+                    
+                    # Получаем Beer_Count, обрабатывая случай None
+                    beer_count = position.get('Beer_Count')
+                    beer_count_int = int(beer_count) if beer_count is not None else 0
+                    
+                    result_position = {
+                        'Beer_ID': beer_id_str,
+                        'Beer_Name': beer_name,
                         'Legal_Entity': legal_entity,
-                        'Beer_Count': position.get('Beer_Count', 0) if position.get('Beer_Count') is not None else 0
-                    })
+                        'Beer_Count': beer_count_int
+                    }
+                    
+                    result.append(result_position)
+                    logger.debug(f"Добавлена позиция в результат: {result_position}")
         
         logger.debug(f"Собрано {len(result)} уникальных позиций из заказов")
+        
+        # Если не нашли ни одной позиции, пробуем поискать в каталоге
+        if not result:
+            logger.debug("Не найдено ни одной позиции в заказах, ищем в каталоге")
+            
+            # Получаем несколько позиций из каталога для примера
+            catalog_items = list(mongo.cx.Pivo.catalog.find(
+                {"TARA": {"$ne": True}},  # Исключаем тару
+                {"id": 1, "name": 1, "legalEntity": 1}
+            ).limit(5))
+            
+            for item in catalog_items:
+                beer_id = item.get('id')
+                beer_name = item.get('name', '')
+                legal_entity = item.get('legalEntity', 1)
+                
+                if beer_id:
+                    result.append({
+                        'Beer_ID': str(beer_id),
+                        'Beer_Name': beer_name,
+                        'Legal_Entity': legal_entity,
+                        'Beer_Count': 0  # По умолчанию 0
+                    })
+                    logger.debug(f"Добавлена позиция из каталога: ID={beer_id}, Name={beer_name}")
         
         # Добавляем org_ID в ответ для n8n
         response_data = {
@@ -363,7 +412,7 @@ def get_last_orders():
         return jsonify(response_data)
 
     except Exception as e:
-        logger.error(f"Ошибка при получении последних заказов: {str(e)}")
+        logger.error(f"Ошибка при получении последних заказов: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/my_orders')
@@ -408,12 +457,21 @@ def get_orders():
                 'status': 1, 
                 'Positions': 1, 
                 'ordersUID': 1, 
-                '_id': 1
+                '_id': 1,
+                'createdAt': 1  # Добавляем поле createdAt для более точной сортировки
             }
-        ).sort('date', -1).limit(5))
+        ).sort([('createdAt', -1), ('date', -1)]).limit(10))  # Увеличиваем лимит до 10 и добавляем двойную сортировку
         
         query_time_end = datetime.now()
         logger.debug(f'Запрос к MongoDB выполнен за: {(query_time_end - query_time_start).total_seconds():.3f} сек, получено {len(orders)} заказов')
+        
+        # Логируем даты для отладки
+        if orders:
+            logger.debug("Даты заказов из MongoDB:")
+            for idx, order in enumerate(orders):
+                created_at = order.get('createdAt')
+                date_str = order.get('date', '')
+                logger.debug(f"  Заказ {idx+1}: _id={order.get('_id')}, createdAt={created_at}, date={date_str}")
         
         # Преобразуем заказы в нужный формат
         formatted_orders = []
@@ -439,12 +497,24 @@ def get_orders():
             if 'ordersUID' in order:
                 orders_uid = order.get('ordersUID')
 
+            # Преобразуем ObjectId в строку
+            order_id = str(order.get('_id'))
+            
+            # Используем createdAt для более точного отображения даты создания
+            created_at = order.get('date', '')
+            if 'createdAt' in order and order['createdAt']:
+                try:
+                    # Преобразуем datetime в строку в нужном формате
+                    created_at = order['createdAt'].strftime("%d.%m.%y %H:%M")
+                except:
+                    pass
+
             formatted_order = {
-                'created_at': order.get('date', ''),
+                'created_at': created_at,
                 'status': order.get('status', 'in work'),
                 'positions': positions,
                 'ordersUID': orders_uid,
-                'order_ID': str(order.get('_id'))
+                'order_ID': order_id
             }
             formatted_orders.append(formatted_order)
 
@@ -1536,39 +1606,15 @@ def get_batch_order_statuses():
         cache_hits = 0
         cache_start = datetime.now()
         
-        # Разделяем запросы по типам и проверяем кеш
+        # Для отладки - выводим список всех запрашиваемых ID
+        logger.debug(f"Запрошенные ID заказов: {[o.get('mongo_id') or o.get('order_uid') for o in orders]}")
+        
+        # Разделяем запросы по типам 
+        # Временно отключаем использование кеша
         for order in orders:
             if 'mongo_id' in order:
-                # Проверяем кеш для MongoDB ID
-                cache_key = f'order_status:{order["mongo_id"]}'
-                cached_status = redis_client.get(cache_key)
-                
-                if cached_status:
-                    try:
-                        status_data = json.loads(cached_status)
-                        if 'status' in status_data:
-                            results[order["mongo_id"]] = status_data
-                            cache_hits += 1
-                            continue
-                    except:
-                        pass
-                
                 mongo_ids.append(order['mongo_id'])
             elif 'order_uid' in order:
-                # Проверяем кеш для UID
-                cache_key = f'order_status:{order["order_uid"]}'
-                cached_status = redis_client.get(cache_key)
-                
-                if cached_status:
-                    try:
-                        status_data = json.loads(cached_status)
-                        if 'status' in status_data:
-                            results[order["order_uid"]] = status_data
-                            cache_hits += 1
-                            continue
-                    except:
-                        pass
-                
                 order_uids.append(order['order_uid'])
         
         cache_end = datetime.now()
@@ -1581,48 +1627,24 @@ def get_batch_order_statuses():
                 # Получаем заказы из MongoDB
                 mongo_orders = list(mongo.cx.Pivo.Orders.find(
                     {'_id': {'$in': [ObjectId(id) for id in mongo_ids]}},
-                    {'ordersUID': 1, '_id': 1, 'date': 1}
+                    {'ordersUID': 1, '_id': 1, 'date': 1, 'status': 1}
                 ))
                 
                 logger.debug(f"Получено {len(mongo_orders)} заказов из MongoDB")
                 
-                # Создаем список запросов к 1C для заказов из MongoDB
+                # Применяем статусы из MongoDB напрямую
                 for order in mongo_orders:
                     order_id = str(order.get('_id'))
+                    status = order.get('status', 'В обработке')
                     
-                    # Пропускаем старые заказы (старше 30 дней)
-                    try:
-                        if 'date' in order:
-                            # Парсим дату
-                            date_str = order.get('date', '')
-                            if date_str:
-                                date_parts = date_str.split(' ')
-                                if len(date_parts) == 2:
-                                    date_part = date_parts[0].split('.')
-                                    if len(date_part) == 3:
-                                        day = int(date_part[0])
-                                        month = int(date_part[1])
-                                        year = 2000 + int(date_part[2])  # Предполагаем, что год в формате YY
-                                        order_date = datetime(year, month, day)
-                                        
-                                        # Если заказ старше 30 дней, используем кешированный статус или просто "Выполнен"
-                                        if (datetime.now() - order_date).days > 30:
-                                            results[order_id] = {
-                                                'status': 'Выполнен',
-                                                'cached': True,
-                                                'note': 'Старый заказ'
-                                            }
-                                            
-                                            # Кешируем статус на длительное время
-                                            redis_client.setex(
-                                                f'order_status:{order_id}',
-                                                86400 * 30,  # 30 дней
-                                                json.dumps({'status': 'Выполнен', 'cached': True})
-                                            )
-                                            continue
-                    except Exception as e:
-                        logger.warning(f"Ошибка при анализе даты заказа {order_id}: {str(e)}")
+                    results[order_id] = {
+                        'status': status,
+                        'source': 'mongodb'
+                    }
                     
+                    logger.debug(f"Статус для заказа {order_id} из MongoDB: {status}")
+                    
+                    # Если у заказа есть ordersUID, также запросим статус из 1С
                     if 'ordersUID' in order and order['ordersUID']:
                         # Получаем первый UID из ordersUID
                         first_uid = next(iter(order['ordersUID'].values()))
@@ -1630,8 +1652,9 @@ def get_batch_order_statuses():
                             order_uids.append(first_uid)
                             # Сохраняем соответствие для последующего маппинга
                             results[order_id] = {
-                                'status': 'Запрошен',
-                                'linked_uid': first_uid
+                                'status': status,
+                                'linked_uid': first_uid,
+                                'source': 'mongodb'
                             }
             except Exception as e:
                 logger.error(f"Ошибка при получении заказов из MongoDB: {str(e)}")
@@ -1664,13 +1687,16 @@ def get_batch_order_statuses():
                             
                         # Добавляем статус в результаты
                         results[uid] = {
-                            'status': status
+                            'status': status,
+                            'source': '1c'
                         }
                         
+                        logger.debug(f"Статус для заказа UID {uid} из 1C: {status}")
+                        
                         # Кешируем статус (на разное время в зависимости от статуса)
-                        cache_ttl = 300  # 5 минут по умолчанию
+                        cache_ttl = 60  # 1 минута по умолчанию для активных заказов
                         if status.lower() in ['выполнен', 'доставлен', 'отменен']:
-                            cache_ttl = 86400  # 24 часа для финальных статусов
+                            cache_ttl = 3600  # 1 час для финальных статусов
                         
                         redis_client.setex(
                             f'order_status:{uid}',
@@ -1681,14 +1707,27 @@ def get_batch_order_statuses():
                         # Также обновляем статус для связанных заказов из MongoDB
                         for mongo_id, data in results.items():
                             if 'linked_uid' in data and data['linked_uid'] == uid:
-                                results[mongo_id]['status'] = status
-                                
-                                # Кешируем статус для MongoDB ID
-                                redis_client.setex(
-                                    f'order_status:{mongo_id}',
-                                    cache_ttl,
-                                    json.dumps({'status': status})
-                                )
+                                # Обновляем статус только если он более приоритетный
+                                current_status = data['status']
+                                if determine_highest_priority_status([current_status, status]) == status:
+                                    results[mongo_id]['status'] = status
+                                    
+                                    # Обновляем также статус в MongoDB
+                                    try:
+                                        mongo.cx.Pivo.Orders.update_one(
+                                            {'_id': ObjectId(mongo_id)},
+                                            {'$set': {'status': status}}
+                                        )
+                                        logger.debug(f"Обновлен статус для заказа {mongo_id} в MongoDB: {status}")
+                                    except Exception as update_error:
+                                        logger.error(f"Ошибка при обновлении статуса в MongoDB: {str(update_error)}")
+                                    
+                                    # Кешируем статус для MongoDB ID
+                                    redis_client.setex(
+                                        f'order_status:{mongo_id}',
+                                        cache_ttl,
+                                        json.dumps({'status': status})
+                                    )
                     except:
                         logger.warning(f"Ошибка при обработке ответа статуса для UID {uid}")
                         results[uid] = {'status': 'Ошибка данных'}
@@ -1711,12 +1750,58 @@ def get_batch_order_statuses():
             "stats": {
                 "total_requests": len(orders),
                 "cache_hits": cache_hits,
-                "actual_requests": len(order_uids)
+                "actual_requests": len(order_uids) + len(mongo_ids)
             }
         })
     except Exception as e:
         logger.error(f"Ошибка при получении batch-статусов заказов: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+def determine_highest_priority_status(statuses):
+    """
+    Определяет статус с наивысшим приоритетом из списка статусов.
+    Приоритет: Новый < В работе/В обработке < Выполнен/Доставлен < Отменен
+    """
+    if not statuses:
+        return "В обработке"
+    
+    # Словарь приоритетов (чем выше число, тем выше приоритет)
+    priority_map = {
+        "новый": 1,
+        "в работе": 2, 
+        "в обработке": 2,
+        "выполнен": 3,
+        "доставлен": 3,
+        "отменен": 4
+    }
+    
+    highest_priority = 0
+    highest_status = "В обработке"
+    
+    for status in statuses:
+        if not status:
+            continue
+            
+        status_lower = status.lower()
+        
+        # Ищем наивысший приоритет
+        for key, priority in priority_map.items():
+            if key in status_lower and priority > highest_priority:
+                highest_priority = priority
+                
+                # Возвращаем статус в оригинальном написании
+                if "новый" in status_lower:
+                    highest_status = "Новый"
+                elif "в работе" in status_lower or "в обработке" in status_lower:
+                    highest_status = "В работе"
+                elif "выполнен" in status_lower or "доставлен" in status_lower:
+                    highest_status = "Выполнен"
+                elif "отменен" in status_lower:
+                    highest_status = "Отменен"
+                else:
+                    highest_status = status  # Сохраняем оригинальное написание
+    
+    return highest_status
 
 @app.route('/api/check-tara', methods=['POST'])
 def check_tara():

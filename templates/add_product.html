@@ -428,46 +428,57 @@
                 .then(data => {
                     if (data.success) {
                         const container = document.getElementById('last_orders_products');
-                        container.innerHTML = ''; // Очищаем контейнер
+                        container.innerHTML = '<h3>Позиции из последних заказов</h3>';
+                        
+                        console.log(`Получено ${data.positions.length} позиций из последних заказов:`, data.positions);
+                        
+                        // Проверяем, есть ли позиции
+                        if (!data.positions || data.positions.length === 0) {
+                            container.innerHTML += '<p>Нет данных о предыдущих заказах</p>';
+                            showContent();
+                            return;
+                        }
+                        
+                        // Сортируем позиции по названию для удобства
+                        const sortedPositions = [...data.positions].sort((a, b) => 
+                            a.Beer_Name.localeCompare(b.Beer_Name)
+                        );
 
-                        data.positions.forEach(position => {
-                            // Добавляем позицию в массив remainders
-                            const product = {
-                                id: position.Beer_ID.toString(),
-                                name: position.Beer_Name,
-                                legalEntity: position.Legal_Entity,
-                                quantity: 1
-                            };
-                            
-                            // Добавляем в remainders только если такой позиции еще нет
-                            const existingItemIndex = remainders.findIndex(item => 
-                                item.id === product.id && 
-                                item.legalEntity === product.legalEntity
-                            );
-                            
-                            if (existingItemIndex === -1) {
-                                remainders.push(product);
+                        sortedPositions.forEach(position => {
+                            // Проверяем, что есть все необходимые данные
+                            if (!position.Beer_ID || !position.Beer_Name) {
+                                console.warn('Пропускаем позицию с неполными данными:', position);
+                                return;
                             }
 
                             const productDiv = document.createElement('div');
                             productDiv.className = 'product-item';
                             
+                            // Преобразуем значения для корректной передачи
+                            const beerId = position.Beer_ID.toString();
+                            // Экранируем кавычки в названии для безопасной вставки в HTML
+                            const beerName = position.Beer_Name.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                            const legalEntity = position.Legal_Entity || 1;
+                            const quantity = position.Beer_Count || 1;
+                            
                             productDiv.innerHTML = `
                                 <div class="product-info">
-                                    ${position.Beer_Name}
+                                    ${beerName}
                                 </div>
                                 <div class="product-controls">
                                     <input type="number" 
-                                           value="1" 
+                                           value="${quantity}" 
                                            min="0" 
                                            max="50" 
                                            step="0.5" 
                                            class="quantity-input" 
                                            style="width: 80px; text-align: center; padding: 8px;"
-                                           onchange="addLastOrderProduct(${position.Beer_ID}, '${position.Beer_Name}', ${position.Legal_Entity}, this.value)">
-                                    <button onclick="deleteRemainder('${position.Beer_ID}', ${position.Legal_Entity}, this.closest('.product-item'))"
-                                            class="delete-button">
-                                        Удалить
+                                           data-id="${beerId}" 
+                                           data-name="${beerName}" 
+                                           data-legal="${legalEntity}">
+                                    <button class="add-button" 
+                                            onclick="addProductFromInput(this.previousElementSibling)">
+                                        Добавить
                                     </button>
                                 </div>
                             `;
@@ -529,11 +540,19 @@
         }
 
         function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
+            console.log(`Добавление товара из последнего заказа: ID=${beerId}, Name=${beerName}, Legal=${legalEntity}, Quantity=${quantity}`);
+            
+            if (!beerId) {
+                console.error("Отсутствует ID товара");
+                return;
+            }
+            
+            // Преобразуем параметры в нужные типы
             const product = {
                 id: beerId.toString(),
                 name: beerName,
-                legalEntity: legalEntity,
-                quantity: parseFloat(quantity)
+                legalEntity: parseInt(legalEntity) || 1,
+                quantity: parseFloat(quantity) || 0
             };
 
             const existingItemIndex = remainders.findIndex(item => 
@@ -542,10 +561,17 @@
             );
             
             if (existingItemIndex !== -1) {
+                // Обновляем количество в массиве
                 remainders[existingItemIndex].quantity = product.quantity;
+                console.log(`Обновлено количество для товара ${product.name}: ${product.quantity}`);
             } else {
+                // Добавляем новый товар в массив
                 remainders.push(product);
+                console.log(`Добавлен новый товар в остатки: ${product.name}`);
             }
+            
+            // Обновляем отображение списка остатков
+            displayRemainders();
         }
         
         function deleteRemainder(beerId, legalEntity, productItem) {
@@ -836,6 +862,26 @@
             sessionStorage.removeItem('recommendation');
             remainders.length = 0;
             window.location.href = '/cart' + (userId ? `?user_id=${userId}` : '');
+        }
+
+        // Добавляем новую функцию для обработки нажатия кнопки "Добавить"
+        function addProductFromInput(inputElement) {
+            if (!inputElement) {
+                console.error('Не найден элемент ввода');
+                return;
+            }
+            
+            // Получаем данные из атрибутов input
+            const beerId = inputElement.getAttribute('data-id');
+            const beerName = inputElement.getAttribute('data-name');
+            const legalEntity = inputElement.getAttribute('data-legal');
+            const quantity = inputElement.value;
+            
+            // Добавляем товар в остатки
+            addLastOrderProduct(beerId, beerName, legalEntity, quantity);
+            
+            // Показываем сообщение
+            tg.showAlert(`Товар "${beerName}" добавлен в остатки`);
         }
 
         // Запускаем проверку авторизации
