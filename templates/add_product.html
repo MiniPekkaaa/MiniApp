@@ -279,6 +279,10 @@
                 <!-- Сюда будут добавляться позиции из последних заказов -->
             </div>
 
+            <div id="current_remainders" class="product-list">
+                <!-- Сюда будут добавляться текущие остатки -->
+            </div>
+
             <div class="select-container">
                 <h3>Добавить новый остаток</h3>
                 <div class="search-container">
@@ -320,6 +324,9 @@
         let initialProducts = {{ products|tojson|safe }};
         let selectedProduct = null;
         const remainders = [];
+        
+        // Флаг для отслеживания начальной загрузки
+        window.initialLoadComplete = false;
         
         // Устанавливаем минимальную дату для календаря (сегодня)
         const today = new Date();
@@ -527,6 +534,12 @@
                         console.log(`[${formatTime(new Date())}] Добавлена позиция #${index} на страницу: ${beerName}`);
                     });
                     
+                    // После завершения загрузки всех позиций
+                    window.initialLoadComplete = true;
+                    
+                    // Отображаем остатки только один раз после загрузки всех позиций
+                    displayRemainders();
+                    
                     showContent();
                 })
                 .catch(error => {
@@ -549,10 +562,15 @@
 
         function displayRemainders() {
             const container = document.getElementById('current_remainders');
-            // Очищаем контейнер, сохраняя заголовок
-            const header = container.querySelector('h3');
-            container.innerHTML = '';
-            container.appendChild(header);
+            
+            // Проверяем существование контейнера
+            if (!container) {
+                console.error('Элемент current_remainders не найден');
+                return;
+            }
+            
+            // Очищаем контейнер
+            container.innerHTML = '<h3>Текущие остатки</h3>';
 
             remainders.forEach(remainder => {
                 const remainderDiv = document.createElement('div');
@@ -619,7 +637,13 @@
                 console.log(`Добавлен новый товар в остатки: ${product.name}`);
             }
             
-            // Обновляем отображение списка остатков
+            // Отключаем автоматическое обновление списка остатков при загрузке страницы,
+            // так как это может привести к дублированию или бесконечному циклу
+            if (!window.initialLoadComplete) {
+                return; // Не обновляем отображение при начальной загрузке
+            }
+            
+            // Обновляем отображение списка остатков только при изменении пользователем
             displayRemainders();
         }
         
