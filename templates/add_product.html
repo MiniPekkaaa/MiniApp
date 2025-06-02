@@ -438,24 +438,8 @@
         function loadLastOrdersProducts() {
             console.log(`[${formatTime(new Date())}] Начало загрузки позиций из последних заказов для пользователя ${userId}`);
             
-            // Сначала получим данные о продуктах для определения, какие из них TARA
-            let taraProducts = {};
-            
-            fetch(`/api/get-products?user_id=${userId}`)
-                .then(response => response.json())
-                .then(products => {
-                    // Создаем карту продуктов с TARA=true для быстрого поиска
-                    products.forEach(product => {
-                        if (product.TARA === true) {
-                            taraProducts[product.id] = true;
-                        }
-                    });
-                    
-                    console.log(`[${formatTime(new Date())}] Найдено ${Object.keys(taraProducts).length} продуктов с TARA=true`);
-                    
-                    // После получения данных о TARA, запрашиваем позиции из отгруженных заказов
-                    return fetch(`/api/get-shipped-orders-positions?user_id=${userId}`);
-                })
+            // Напрямую запрашиваем позиции из отгруженных заказов - это новый API-маршрут
+            fetch(`/api/get-shipped-orders-positions?user_id=${userId}`)
                 .then(response => {
                     console.log(`[${formatTime(new Date())}] Получен ответ от /api/get-shipped-orders-positions, статус: ${response.status}`);
                     return response.json();
@@ -493,7 +477,9 @@
                     // Фильтруем позиции, исключая те, у которых TARA=true
                     const filteredPositions = data.positions.filter(position => {
                         const beerId = position.Beer_ID.toString();
-                        return !taraProducts[beerId]; // исключаем позиции с TARA=true
+                        // Проверяем, есть ли товар с таким ID в каталоге и имеет ли он TARA=true
+                        const product = initialProducts.find(p => p.id.toString() === beerId);
+                        return !(product && product.TARA === true);
                     });
                     
                     console.log(`[${formatTime(new Date())}] Отфильтровано ${data.positions.length - filteredPositions.length} позиций с TARA=true`);
