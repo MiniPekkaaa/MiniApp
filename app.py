@@ -309,110 +309,80 @@ def get_last_orders():
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 400
 
-        logger.debug(f"Получение последних 3 отгруженных заказов для организации {org_id}")
+        logger.debug(f"Получение последних заказов для организации {org_id}")
 
-        # Получаем последние 3 ОТГРУЖЕННЫХ заказа организации, отсортированные по дате
+        # Получаем последние 5 заказов организации, отсортированные по дате создания
         orders = list(mongo.cx.Pivo.Orders.find(
-            {
-                "org_ID": org_id,
-                "status": "Отгружен"  # Только отгруженные заказы
-            },
-            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1}
-        ).sort([("createdAt", -1), ("date", -1)]).limit(3))
+            {"org_ID": org_id},
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(5))
         
-        logger.debug(f"Найдено {len(orders)} последних отгруженных заказов")
+        logger.debug(f"Найдено {len(orders)} последних заказов")
 
-        # Если не найдено отгруженных заказов, проверяем статусы через API для заказов с ordersUID
-        if len(orders) == 0:
-            logger.debug("Не найдено отгруженных заказов в MongoDB, проверяем через API")
-            
-            # Получаем последние 5 заказов для проверки статусов
-            potential_orders = list(mongo.cx.Pivo.Orders.find(
-                {"org_ID": org_id},
-                {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1}
-            ).sort([("createdAt", -1), ("date", -1)]).limit(5))
-            
-            logger.debug(f"Найдено {len(potential_orders)} потенциальных заказов для проверки статусов")
-            
-            # Проверяем статус каждого заказа через API
-            orders_with_status = []
-            for order in potential_orders:
-                order_id = str(order.get('_id', 'Нет ID'))
-                logger.debug(f"Проверка статуса заказа {order_id}")
-                
-                if 'ordersUID' in order and order['ordersUID']:
-                    order_uids = order['ordersUID']
-                    logger.debug(f"Заказ {order_id} имеет {len(order_uids)} UID: {order_uids}")
-                    
-                    # Берем первый UID из ordersUID
-                    first_uid = next(iter(order['ordersUID'].values()))
-                    if first_uid:
-                        logger.debug(f"Запрашиваем статус для UID {first_uid}")
-                        try:
-                            # Запрашиваем статус в 1C
-                            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{first_uid}'
-                            response = requests.get(
-                                api_url,
-                                auth=('int2', 'pcKnE8GqXn'),
-                                headers={'Content-Type': 'application/json'},
-                                timeout=5
-                            )
-                            
-                            logger.debug(f"Ответ API для UID {first_uid}: статус {response.status_code}")
-                            
-                            if response.status_code == 200:
-                                try:
-                                    status_data = response.json()
-                                    status = ""
-                                    
-                                    if isinstance(status_data, str):
-                                        status = status_data
-                                    elif isinstance(status_data, dict) and 'STATUS' in status_data:
-                                        status = status_data['STATUS']
-                                    
-                                    logger.debug(f"Заказ {order_id} с UID {first_uid} имеет статус '{status}' в 1C")
-                                    
-                                    # Если статус "Отгружен", добавляем заказ в список
-                                    if status.lower() == "отгружен" or status.lower() == "отгружено" or "отгруж" in status.lower():
-                                        logger.debug(f"Добавляем отгруженный заказ {order_id} в список")
-                                        # Обновляем статус в MongoDB
-                                        mongo.cx.Pivo.Orders.update_one(
-                                            {'_id': order['_id']},
-                                            {'$set': {'status': 'Отгружен'}}
-                                        )
-                                        orders_with_status.append(order)
-                                        if len(orders_with_status) >= 3:
-                                            break
-                                    else:
-                                        logger.debug(f"Пропускаем заказ {order_id} со статусом '{status}'")
-                                except Exception as e:
-                                    logger.error(f"Ошибка при обработке статуса заказа {order_id}: {str(e)}")
-                        except Exception as e:
-                            logger.error(f"Ошибка при запросе статуса заказа {order_id}: {str(e)}")
-                else:
-                    logger.debug(f"Заказ {order_id} не имеет UID, пропускаем")
-            
-            # Используем заказы с проверенным статусом "Отгружен"
-            if orders_with_status:
-                orders = orders_with_status
-                logger.debug(f"Найдено {len(orders)} отгруженных заказов через API")
-            else:
-                logger.debug("Не найдено отгруженных заказов через API")
+        # Собираем все ID и UID заказов для проверки статусов
+        order_requests = []
+        for order in orders:
+            order_id = str(order.get('_id', ''))
+            if order_id:
+                order_requests.append({"mongo_id": order_id})
         
-        # Логируем информацию о найденных заказах
-        for i, order in enumerate(orders):
-            order_id = str(order.get('_id', 'Нет ID'))
-            date = order.get('date', 'Нет даты')
-            positions_count = len(order.get('Positions', {}))
-            logger.debug(f"Заказ #{i+1}: ID={order_id}, дата={date}, позиций={positions_count}")
+        # Если нет заказов для проверки статусов, возвращаем пустой результат
+        if not order_requests:
+            logger.debug("Нет заказов для проверки статусов")
+            return jsonify({"success": True, "positions": [], "org_ID": org_id})
+
+        # Запрашиваем статусы всех заказов
+        logger.debug(f"Запрашиваем статусы для {len(order_requests)} заказов")
+        try:
+            # Отправляем batch-запрос для получения статусов
+            response = requests.post(
+                f'http://{request.host}/api/get-batch-order-statuses',
+                json={"orders": order_requests},
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Ошибка при получении статусов: {response.status_code}, {response.text}")
+                # Продолжаем выполнение с имеющимися статусами
+            else:
+                status_data = response.json()
+                if status_data.get('success') and status_data.get('statuses'):
+                    # Обновляем статусы заказов
+                    statuses = status_data['statuses']
+                    for order in orders:
+                        order_id = str(order.get('_id', ''))
+                        if order_id in statuses:
+                            # Обновляем статус в объекте заказа
+                            order['status'] = statuses[order_id]['status']
+                            logger.debug(f"Обновлен статус заказа {order_id}: {order['status']}")
+        except Exception as e:
+            logger.error(f"Ошибка при получении batch-статусов: {str(e)}")
+            # Продолжаем выполнение с имеющимися статусами
+        
+        # Фильтруем только заказы со статусом "Отгружен"
+        shipped_orders = []
+        for order in orders:
+            status = order.get('status', '').lower()
+            if status == "отгружен" or status == "отгружено" or "отгруж" in status:
+                logger.debug(f"Добавляем отгруженный заказ {order.get('_id')} в список")
+                shipped_orders.append(order)
+        
+        # Берем только 3 последних отгруженных заказа
+        shipped_orders = shipped_orders[:3]
+        logger.debug(f"Отфильтровано {len(shipped_orders)} отгруженных заказов")
+
+        # Если не нашли отгруженных заказов, возвращаем пустой результат
+        if not shipped_orders:
+            logger.debug("Не найдено отгруженных заказов")
+            return jsonify({"success": True, "positions": [], "org_ID": org_id})
 
         # Создаем словарь для отслеживания позиций из заказов
-        # Ключ: beer_id, Значение: {информация о позиции}
         seen_positions = {}
         result = []
 
-        # Обрабатываем каждый заказ в порядке от новых к старым
-        for order_index, order in enumerate(orders):
+        # Обрабатываем каждый отгруженный заказ
+        for order_index, order in enumerate(shipped_orders):
             positions = order.get('Positions', {})
             logger.debug(f"Заказ #{order_index+1} содержит {len(positions)} позиций")
             
@@ -421,9 +391,6 @@ def get_last_orders():
                 beer_id = position.get('Beer_ID')
                 legal_entity = position.get('Legal_Entity')
                 beer_name = position.get('Beer_Name', '')
-                
-                # Логируем информацию о позиции
-                logger.debug(f"Позиция: Beer_ID={beer_id}, Beer_Name={beer_name}, Legal_Entity={legal_entity}")
                 
                 if beer_id is None or legal_entity is None:
                     logger.warning(f"Пропускаем позицию с отсутствующими данными: Beer_ID={beer_id}, Legal_Entity={legal_entity}")
@@ -453,11 +420,11 @@ def get_last_orders():
                     result.append(result_position)
                     logger.debug(f"Добавлена позиция в результат: {result_position}")
         
-        logger.debug(f"Собрано {len(result)} уникальных позиций из заказов")
+        logger.debug(f"Собрано {len(result)} уникальных позиций из отгруженных заказов")
         
         # Если не нашли ни одной позиции, пробуем поискать в каталоге
         if not result:
-            logger.debug("Не найдено ни одной позиции в заказах, ищем в каталоге")
+            logger.debug("Не найдено ни одной позиции в отгруженных заказах, ищем в каталоге")
             
             # Получаем несколько позиций из каталога для примера
             catalog_items = list(mongo.cx.Pivo.catalog.find(
@@ -577,9 +544,9 @@ def get_orders():
             # Преобразуем ObjectId в строку
             order_id = str(order.get('_id'))
             
-            # Используем createdAt для более точного отображения даты создания
+            # Используем оригинальную дату из MongoDB, без преобразований
             created_at = order.get('date', '')
-            if 'createdAt' in order and order['createdAt']:
+            if not created_at and 'createdAt' in order and order['createdAt']:
                 try:
                     # Преобразуем datetime в строку в нужном формате
                     created_at = order['createdAt'].strftime("%d.%m.%y %H:%M")
@@ -1713,7 +1680,7 @@ def get_batch_order_statuses():
                                 order_uids.append(uid)
                                 # Сохраняем соответствие для последующего обновления MongoDB
                                 if order_id not in results:
-                                    results[order_id] = {
+                                            results[order_id] = {
                                         'status': status,
                                         'linked_uids': [],
                                         'source': 'mongodb'
@@ -1721,10 +1688,10 @@ def get_batch_order_statuses():
                                 results[order_id]['linked_uids'].append(uid)
                     else:
                         # Если нет UID, используем статус из MongoDB
-                        results[order_id] = {
+                            results[order_id] = {
                             'status': status,
                             'source': 'mongodb'
-                        }
+                            }
             except Exception as e:
                 logger.error(f"Ошибка при получении заказов из MongoDB: {str(e)}")
         
