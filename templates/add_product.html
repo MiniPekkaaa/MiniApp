@@ -438,166 +438,22 @@
         function loadLastOrdersProducts() {
             console.log(`[${formatTime(new Date())}] Начало загрузки позиций из последних заказов для пользователя ${userId}`);
             
-            // Получаем данные пользователя для org_ID
-            fetch(`/api/get-orders?user_id=${userId}`)
+            // Напрямую запрашиваем позиции из отгруженных заказов - это новый API-маршрут
+            fetch(`/api/get-shipped-orders-positions?user_id=${userId}`)
                 .then(response => {
-                    console.log(`[${formatTime(new Date())}] Получен ответ от /api/get-orders, статус: ${response.status}`);
+                    console.log(`[${formatTime(new Date())}] Получен ответ от /api/get-shipped-orders-positions, статус: ${response.status}`);
                     return response.json();
                 })
                 .then(data => {
                     if (!data.success) {
-                        console.error(`[${formatTime(new Date())}] Ошибка при получении заказов:`, data.error);
-                        throw new Error(data.error || 'Ошибка при получении заказов');
+                        console.error(`[${formatTime(new Date())}] Ошибка при получении позиций:`, data.error);
+                        throw new Error(data.error || 'Ошибка при получении позиций из отгруженных заказов');
                     }
                     
-                    console.log(`[${formatTime(new Date())}] Получено ${data.orders ? data.orders.length : 0} заказов из MongoDB`);
-                    if (data.orders && data.orders.length > 0) {
-                        console.log(`[${formatTime(new Date())}] Первый заказ:`, JSON.stringify(data.orders[0]));
-                    } else {
-                        console.warn(`[${formatTime(new Date())}] Нет заказов в ответе от /api/get-orders`);
-                    }
+                    console.log(`[${formatTime(new Date())}] Получено ${data.positions ? data.positions.length : 0} позиций из отгруженных заказов`);
                     
-                    // Берем только 10 последних заказов для проверки статусов
-                    const orders = data.orders.slice(0, 10);
-                    console.log(`[${formatTime(new Date())}] Отобрано ${orders.length} заказов для проверки статусов`);
-                    
-                    // Запрашиваем статусы заказов через HTTP, как на странице "Мои заказы"
-                    if (orders.length > 0) {
-                        // Проверяем наличие ordersUID у заказов
-                        const ordersWithUID = orders.filter(order => 
-                            order.ordersUID && Object.keys(order.ordersUID).length > 0);
-                        console.log(`[${formatTime(new Date())}] Заказов с ordersUID: ${ordersWithUID.length} из ${orders.length}`);
-                        
-                        if (ordersWithUID.length > 0) {
-                            console.log(`[${formatTime(new Date())}] Пример ordersUID:`, 
-                                JSON.stringify(ordersWithUID[0].ordersUID));
-                        }
-                        
-                        // Формируем массив запросов для получения статусов
-                        const orderRequests = [];
-                        
-                        orders.forEach((order, index) => {
-                            // Если у заказа есть ordersUID, добавляем запрос для каждого UID
-                            if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
-                                const uid = order.ordersUID[Object.keys(order.ordersUID)[0]];
-                                if (uid) {
-                                    orderRequests.push({ "mongo_id": order.order_ID });
-                                    console.log(`[${formatTime(new Date())}] Добавлен запрос статуса для заказа #${index}, mongo_id: ${order.order_ID}, UID: ${uid}`);
-                                } else {
-                                    console.warn(`[${formatTime(new Date())}] У заказа #${index} с mongo_id ${order.order_ID} есть ordersUID, но значение UID пустое`);
-                                }
-                            } else {
-                                console.warn(`[${formatTime(new Date())}] У заказа #${index} с mongo_id ${order.order_ID} нет ordersUID`);
-                            }
-                        });
-                        
-                        if (orderRequests.length > 0) {
-                            console.log(`[${formatTime(new Date())}] Отправляем запрос на получение статусов для ${orderRequests.length} заказов`, JSON.stringify(orderRequests));
-                            
-                            // Отправляем batch-запрос для получения статусов
-                            return fetch('/api/get-batch-order-statuses', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ orders: orderRequests })
-                            })
-                            .then(response => {
-                                console.log(`[${formatTime(new Date())}] Получен ответ от /api/get-batch-order-statuses, статус: ${response.status}`);
-                                return response.json();
-                            })
-                            .then(statusData => {
-                                if (!statusData.success) {
-                                    console.error(`[${formatTime(new Date())}] Ошибка при получении статусов заказов:`, statusData.error);
-                                    throw new Error(statusData.error || 'Ошибка при получении статусов заказов');
-                                }
-                                
-                                console.log(`[${formatTime(new Date())}] Получены статусы заказов:`, JSON.stringify(statusData.statuses));
-                                
-                                // Обновляем статусы заказов
-                                orders.forEach((order, index) => {
-                                    const mongo_id = order.order_ID;
-                                    if (mongo_id && statusData.statuses && statusData.statuses[mongo_id]) {
-                                        const oldStatus = order.status || 'неизвестно';
-                                        order.status = statusData.statuses[mongo_id].status;
-                                        console.log(`[${formatTime(new Date())}] Обновлен статус заказа #${index} с mongo_id ${mongo_id}: ${oldStatus} -> ${order.status}`);
-                                    } else {
-                                        console.warn(`[${formatTime(new Date())}] Не найден статус для заказа #${index} с mongo_id ${mongo_id}`);
-                                    }
-                                });
-                                
-                                // Фильтруем только заказы со статусом "Отгружен" или похожими
-                                const shippedOrders = orders.filter(order => {
-                                    const status = String(order.status || '').toLowerCase();
-                                    const isShipped = status.includes('отгруж') || 
-                                                status.includes('выполнен') || 
-                                                status.includes('доставлен') || 
-                                                status.includes('выдан');
-                                    
-                                    console.log(`[${formatTime(new Date())}] Проверка статуса заказа ${order.order_ID}: "${order.status}" -> ${isShipped ? 'ОТГРУЖЕН' : 'НЕ ОТГРУЖЕН'}`);
-                                    return isShipped;
-                                });
-                                
-                                console.log(`[${formatTime(new Date())}] Отфильтровано ${shippedOrders.length} отгруженных заказов из ${orders.length} общих`);
-                                if (shippedOrders.length > 0) {
-                                    console.log(`[${formatTime(new Date())}] Пример отгруженного заказа:`, JSON.stringify(shippedOrders[0]));
-                                }
-                                
-                                // Собираем все уникальные позиции из отгруженных заказов
-                                const uniquePositions = new Map();
-                                let positionsTotal = 0;
-                                
-                                shippedOrders.forEach((order, orderIndex) => {
-                                    console.log(`[${formatTime(new Date())}] Обработка позиций заказа #${orderIndex} с ID ${order.order_ID}`);
-                                    
-                                    if (order.positions && Array.isArray(order.positions)) {
-                                        console.log(`[${formatTime(new Date())}] В заказе ${order.order_ID} найдено ${order.positions.length} позиций`);
-                                        positionsTotal += order.positions.length;
-                                        
-                                        order.positions.forEach((position, posIndex) => {
-                                            if (position.id && position.name) {
-                                                const key = `${position.id}_${position.legal_entity || 1}`;
-                                                
-                                                console.log(`[${formatTime(new Date())}] Позиция #${posIndex} в заказе ${order.order_ID}: ${position.name}, ID=${position.id}, legal=${position.legal_entity || 1}, quantity=${position.quantity || 1}`);
-                                                
-                                                // Если позиция еще не добавлена, добавляем ее
-                                                if (!uniquePositions.has(key)) {
-                                                    uniquePositions.set(key, {
-                                                        Beer_ID: position.id,
-                                                        Beer_Name: position.name,
-                                                        Legal_Entity: position.legal_entity || 1,
-                                                        Beer_Count: position.quantity || 1
-                                                    });
-                                                    console.log(`[${formatTime(new Date())}] Добавлена новая уникальная позиция: ${position.name}`);
-                                                } else {
-                                                    console.log(`[${formatTime(new Date())}] Позиция уже существует: ${position.name}`);
-                                                }
-                                            } else {
-                                                console.warn(`[${formatTime(new Date())}] Пропущена позиция без ID или названия:`, JSON.stringify(position));
-                                            }
-                                        });
-                                    } else {
-                                        console.warn(`[${formatTime(new Date())}] У заказа ${order.order_ID} нет позиций или они не в массиве`);
-                                    }
-                                });
-                                
-                                const positions = Array.from(uniquePositions.values());
-                                console.log(`[${formatTime(new Date())}] Собрано ${positions.length} уникальных позиций из ${positionsTotal} общих позиций в отгруженных заказах`);
-                                
-                                return { success: true, positions: positions };
-                            });
-                        } else {
-                            console.log(`[${formatTime(new Date())}] Нет заказов с UID для запроса статусов`);
-                            return { success: true, positions: [] };
-                        }
-                    } else {
-                        console.log(`[${formatTime(new Date())}] Нет заказов для проверки статусов`);
-                        return { success: true, positions: [] };
-                    }
-                })
-                .then(data => {
                     const container = document.getElementById('last_orders_products');
                     container.innerHTML = '<h3>Позиции из последних отгруженных заказов</h3>';
-                    
-                    console.log(`[${formatTime(new Date())}] Получено ${data.positions.length} позиций из последних отгруженных заказов`);
                     
                     // Проверяем, есть ли позиции
                     if (!data.positions || data.positions.length === 0) {

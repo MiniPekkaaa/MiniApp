@@ -1956,5 +1956,109 @@ def check_tara():
             'error': str(e)
         })
 
+@app.route('/api/get-shipped-orders-positions')
+def get_shipped_orders_positions():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"success": False, "error": "User ID is required"}), 400
+            
+        logger.debug(f"Получение позиций из отгруженных заказов для пользователя {user_id}")
+        
+        # Получаем данные пользователя из Redis для получения org_ID
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"success": False, "error": "Organization ID not found"}), 400
+            
+        logger.debug(f"Получение заказов для организации {org_id}")
+        
+        # Получаем последние 10 заказов организации, отсортированные по дате создания
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {"org_ID": org_id},
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(10))
+        
+        logger.debug(f"Найдено {len(orders)} последних заказов")
+        
+        # Запрашиваем статусы заказов через ordersUID напрямую из 1С
+        shipped_orders = []
+        
+        for order in orders:
+            # Если у заказа есть ordersUID, проверяем статус каждого UID
+            if 'ordersUID' in order and order['ordersUID'] and isinstance(order['ordersUID'], dict):
+                for uid_key, order_uid in order['ordersUID'].items():
+                    if order_uid:
+                        try:
+                            # Запрашиваем статус заказа в 1С
+                            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                            logger.debug(f"Запрос статуса для заказа с UID {order_uid}")
+                            
+                            response = requests.get(
+                                api_url,
+                                auth=('int2', 'pcKnE8GqXn'),
+                                headers={'Content-Type': 'application/json'},
+                                timeout=5
+                            )
+                            
+                            if response.status_code == 200:
+                                status_text = response.text.strip()
+                                logger.debug(f"Статус для заказа UID {order_uid} из 1C: {status_text}")
+                                
+                                # Проверяем, является ли статус "Отгружен" или подобным
+                                status_lower = status_text.lower()
+                                if 'отгруж' in status_lower or 'выполнен' in status_lower or 'доставлен' in status_lower or 'выдан' in status_lower:
+                                    # Добавляем заказ в список отгруженных
+                                    order['status_from_1c'] = status_text
+                                    shipped_orders.append(order)
+                                    logger.debug(f"Добавлен отгруженный заказ: {order.get('_id')}")
+                                    break  # Если нашли хотя бы один UID со статусом "Отгружен", выходим из цикла
+                        except Exception as e:
+                            logger.error(f"Ошибка при получении статуса для UID {order_uid}: {str(e)}")
+        
+        logger.debug(f"Найдено {len(shipped_orders)} отгруженных заказов")
+        
+        # Собираем все уникальные позиции из отгруженных заказов
+        unique_positions = {}
+        
+        for order in shipped_orders:
+            positions = order.get('Positions', {})
+            logger.debug(f"В заказе {order.get('_id')} найдено {len(positions)} позиций")
+            
+            for pos_key, position in positions.items():
+                beer_id = position.get('Beer_ID')
+                beer_name = position.get('Beer_Name')
+                legal_entity = position.get('Legal_Entity', 1)
+                
+                if beer_id is not None and beer_name:
+                    # Создаем уникальный ключ
+                    key = f"{beer_id}_{legal_entity}"
+                    
+                    # Если позиция еще не добавлена, добавляем ее
+                    if key not in unique_positions:
+                        unique_positions[key] = {
+                            'Beer_ID': str(beer_id),
+                            'Beer_Name': beer_name,
+                            'Legal_Entity': legal_entity,
+                            'Beer_Count': position.get('Beer_Count', 1)
+                        }
+                        logger.debug(f"Добавлена уникальная позиция: {beer_name}")
+        
+        positions_list = list(unique_positions.values())
+        logger.debug(f"Всего собрано {len(positions_list)} уникальных позиций из отгруженных заказов")
+        
+        return jsonify({
+            "success": True,
+            "positions": positions_list
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении позиций из отгруженных заказов: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
