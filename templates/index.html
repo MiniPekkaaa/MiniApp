@@ -72,6 +72,12 @@
         .notification.show {
             transform: translateY(0);
         }
+        
+        /* Стиль для активной кнопки фильтра */
+        .active-filter {
+            background-color: #5288c1 !important;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -103,6 +109,10 @@
         <div id="product_selection" class="container" style="display: none;">
             <div class="search-container">
                 <input type="text" id="product_search" class="search-input" placeholder="Поиск товара...">
+                <div class="filter-buttons" style="display: flex; margin: 10px 0; gap: 10px;">
+                    <button id="filter-beer" class="button active-filter" style="margin: 0; flex: 1;" onclick="filterProducts('beer')">Пиво</button>
+                    <button id="filter-tara" class="button" style="margin: 0; flex: 1;" onclick="filterProducts('tara')">Тара</button>
+                </div>
                 <div id="product_dropdown" class="dropdown-list">
                     <!-- Список товаров будет добавлен динамически -->
                 </div>
@@ -162,6 +172,7 @@
         
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
         let selectedProduct = null;
+        let currentFilter = 'beer'; // По умолчанию показываем пиво (не тару)
         updateCartCount();
         
         // Инициализация поиска
@@ -171,8 +182,8 @@
         searchInput.addEventListener('input', function() {
             const searchText = this.value.toLowerCase();
             const filteredProducts = initialProducts.filter(product => 
-                product.name.toLowerCase().includes(searchText) ||
-                product.fullName.toLowerCase().includes(searchText)
+                (product.name.toLowerCase().includes(searchText) ||
+                product.fullName.toLowerCase().includes(searchText))
             );
             
             updateDropdownList(filteredProducts);
@@ -188,12 +199,43 @@
                 dropdownList.classList.remove('active');
             }
         });
+        
+        // Функция для фильтрации продуктов (пиво/тара)
+        function filterProducts(filterType) {
+            currentFilter = filterType;
+            
+            // Обновляем активную кнопку
+            document.getElementById('filter-beer').classList.remove('active-filter');
+            document.getElementById('filter-tara').classList.remove('active-filter');
+            document.getElementById('filter-' + filterType).classList.add('active-filter');
+            
+            // Применяем фильтр к текущему поисковому запросу
+            const searchText = searchInput.value.toLowerCase();
+            const filteredProducts = initialProducts.filter(product => 
+                (product.name.toLowerCase().includes(searchText) ||
+                product.fullName.toLowerCase().includes(searchText))
+            );
+            
+            updateDropdownList(filteredProducts);
+        }
 
         function updateDropdownList(filteredProducts) {
             dropdownList.innerHTML = '';
             
             if (filteredProducts.length > 0) {
-                filteredProducts.forEach(product => {
+                // Фильтруем по TARA в зависимости от выбранного фильтра
+                const taraFilteredProducts = filteredProducts.filter(product => {
+                    if (currentFilter === 'beer') {
+                        return product.TARA !== true;
+                    } else if (currentFilter === 'tara') {
+                        return product.TARA === true;
+                    }
+                    return true; // На случай, если добавятся другие фильтры
+                });
+                
+                console.log(`Отфильтровано ${filteredProducts.length - taraFilteredProducts.length} товаров по фильтру ${currentFilter}`);
+                
+                taraFilteredProducts.forEach(product => {
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
                     
