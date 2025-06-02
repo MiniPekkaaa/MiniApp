@@ -436,90 +436,197 @@
         }
 
         function loadLastOrdersProducts() {
-            fetch(`/api/get-last-orders?user_id=${userId}`)
+            console.log(`[${formatTime(new Date())}] Начало загрузки позиций из последних заказов`);
+            
+            // Получаем данные пользователя для org_ID
+            fetch(`/api/get-orders?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        const container = document.getElementById('last_orders_products');
-                        container.innerHTML = '<h3>Позиции из последних отгруженных заказов</h3>';
+                    if (!data.success) {
+                        throw new Error(data.error || 'Ошибка при получении заказов');
+                    }
+                    
+                    console.log(`[${formatTime(new Date())}] Получено ${data.orders ? data.orders.length : 0} заказов из MongoDB`);
+                    
+                    // Берем только 10 последних заказов для проверки статусов
+                    const orders = data.orders.slice(0, 10);
+                    
+                    // Запрашиваем статусы заказов через HTTP, как на странице "Мои заказы"
+                    if (orders.length > 0) {
+                        // Формируем массив запросов для получения статусов
+                        const orderRequests = [];
                         
-                        console.log(`Получено ${data.positions.length} позиций из последних заказов:`, data.positions);
-                        
-                        // Проверяем, есть ли позиции
-                        if (!data.positions || data.positions.length === 0) {
-                            container.innerHTML += 
-                                '<div class="alert-message">' +
-                                '<p>Нет данных о последних отгруженных заказах.</p>' +
-                                '<p>Вы можете добавить остатки вручную ниже.</p>' +
-                                '</div>';
-                            showContent();
-                            return;
-                        }
-                        
-                        // Добавляем информационное сообщение о позициях из отгруженных заказов
-                        container.innerHTML += 
-                            '<div class="alert-message" style="background-color: rgba(76, 175, 80, 0.1); border-left-color: #4CAF50;">' +
-                            '<p><strong>Это товары из ваших последних отгруженных заказов.</strong></p>' +
-                            '<p>Укажите актуальные остатки и нажмите "Добавить" для каждой позиции.</p>' +
-                            '</div>';
-                        
-                        // Сортируем позиции по названию для удобства
-                        const sortedPositions = [...data.positions].sort((a, b) => 
-                            a.Beer_Name.localeCompare(b.Beer_Name)
-                        );
-
-                        sortedPositions.forEach(position => {
-                            // Проверяем, что есть все необходимые данные
-                            if (!position.Beer_ID || !position.Beer_Name) {
-                                console.warn('Пропускаем позицию с неполными данными:', position);
-                                return;
+                        orders.forEach(order => {
+                            // Если у заказа есть ordersUID, добавляем запрос для каждого UID
+                            if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
+                                const uid = order.ordersUID[Object.keys(order.ordersUID)[0]];
+                                if (uid) {
+                                    orderRequests.push({ "mongo_id": order.order_ID });
+                                }
                             }
-
-                            const productDiv = document.createElement('div');
-                            productDiv.className = 'product-item';
-                            
-                            // Преобразуем значения для корректной передачи
-                            const beerId = position.Beer_ID.toString();
-                            // Экранируем кавычки в названии для безопасной вставки в HTML
-                            const beerName = position.Beer_Name.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                            const legalEntity = position.Legal_Entity || 1;
-                            const quantity = position.Beer_Count || 1;
-                            
-                            productDiv.innerHTML = `
-                                <div class="product-info">
-                                    ${beerName}
-                                </div>
-                                <div class="product-controls">
-                                    <input type="number" 
-                                           value="${quantity}" 
-                                           min="0" 
-                                           max="50" 
-                                           step="0.5" 
-                                           class="quantity-input" 
-                                           style="width: 80px; text-align: center; padding: 8px;"
-                                           data-id="${beerId}" 
-                                           data-name="${beerName}" 
-                                           data-legal="${legalEntity}">
-                                    <button class="add-button" 
-                                            onclick="addProductFromInput(this.previousElementSibling)">
-                                        Добавить
-                                    </button>
-                                </div>
-                            `;
-                            
-                            container.appendChild(productDiv);
                         });
                         
-                        showContent();
+                        if (orderRequests.length > 0) {
+                            console.log(`[${formatTime(new Date())}] Отправляем запрос на получение статусов для ${orderRequests.length} заказов`);
+                            
+                            // Отправляем batch-запрос для получения статусов
+                            return fetch('/api/get-batch-order-statuses', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ orders: orderRequests })
+                            })
+                            .then(response => response.json())
+                            .then(statusData => {
+                                if (!statusData.success) {
+                                    throw new Error(statusData.error || 'Ошибка при получении статусов заказов');
+                                }
+                                
+                                console.log(`[${formatTime(new Date())}] Получены статусы заказов:`, statusData.statuses);
+                                
+                                // Обновляем статусы заказов
+                                orders.forEach(order => {
+                                    const mongo_id = order.order_ID;
+                                    if (mongo_id && statusData.statuses && statusData.statuses[mongo_id]) {
+                                        order.status = statusData.statuses[mongo_id].status;
+                                    }
+                                });
+                                
+                                // Фильтруем только заказы со статусом "Отгружен" или похожими
+                                const shippedOrders = orders.filter(order => {
+                                    const status = String(order.status || '').toLowerCase();
+                                    return status.includes('отгруж') || 
+                                           status.includes('выполнен') || 
+                                           status.includes('доставлен') || 
+                                           status.includes('выдан');
+                                });
+                                
+                                console.log(`[${formatTime(new Date())}] Отфильтровано ${shippedOrders.length} отгруженных заказов`);
+                                
+                                // Собираем все уникальные позиции из отгруженных заказов
+                                const uniquePositions = new Map();
+                                
+                                shippedOrders.forEach(order => {
+                                    if (order.positions && Array.isArray(order.positions)) {
+                                        order.positions.forEach(position => {
+                                            if (position.id && position.name) {
+                                                const key = `${position.id}_${position.legal_entity || 1}`;
+                                                
+                                                // Если позиция еще не добавлена, добавляем ее
+                                                if (!uniquePositions.has(key)) {
+                                                    uniquePositions.set(key, {
+                                                        Beer_ID: position.id,
+                                                        Beer_Name: position.name,
+                                                        Legal_Entity: position.legal_entity || 1,
+                                                        Beer_Count: position.quantity || 1
+                                                    });
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                                
+                                const positions = Array.from(uniquePositions.values());
+                                console.log(`[${formatTime(new Date())}] Собрано ${positions.length} уникальных позиций из отгруженных заказов`);
+                                
+                                return { success: true, positions: positions };
+                            });
+                        } else {
+                            console.log(`[${formatTime(new Date())}] Нет заказов с UID для запроса статусов`);
+                            return { success: true, positions: [] };
+                        }
                     } else {
-                        throw new Error(data.error || 'Ошибка при загрузке позиций');
+                        console.log(`[${formatTime(new Date())}] Нет заказов для проверки статусов`);
+                        return { success: true, positions: [] };
                     }
+                })
+                .then(data => {
+                    const container = document.getElementById('last_orders_products');
+                    container.innerHTML = '<h3>Позиции из последних отгруженных заказов</h3>';
+                    
+                    console.log(`[${formatTime(new Date())}] Получено ${data.positions.length} позиций из последних отгруженных заказов`);
+                    
+                    // Проверяем, есть ли позиции
+                    if (!data.positions || data.positions.length === 0) {
+                        container.innerHTML += 
+                            '<div class="alert-message">' +
+                            '<p>Нет данных о последних отгруженных заказах.</p>' +
+                            '<p>Вы можете добавить остатки вручную ниже.</p>' +
+                            '</div>';
+                        showContent();
+                        return;
+                    }
+                    
+                    // Добавляем информационное сообщение о позициях из отгруженных заказов
+                    container.innerHTML += 
+                        '<div class="alert-message" style="background-color: rgba(76, 175, 80, 0.1); border-left-color: #4CAF50;">' +
+                        '<p><strong>Это товары из ваших последних отгруженных заказов.</strong></p>' +
+                        '<p>Укажите актуальные остатки и нажмите "Добавить" для каждой позиции.</p>' +
+                        '</div>';
+                    
+                    // Сортируем позиции по названию для удобства
+                    const sortedPositions = [...data.positions].sort((a, b) => 
+                        a.Beer_Name.localeCompare(b.Beer_Name)
+                    );
+
+                    sortedPositions.forEach(position => {
+                        // Проверяем, что есть все необходимые данные
+                        if (!position.Beer_ID || !position.Beer_Name) {
+                            console.warn('Пропускаем позицию с неполными данными:', position);
+                            return;
+                        }
+
+                        const productDiv = document.createElement('div');
+                        productDiv.className = 'product-item';
+                        
+                        // Преобразуем значения для корректной передачи
+                        const beerId = position.Beer_ID.toString();
+                        // Экранируем кавычки в названии для безопасной вставки в HTML
+                        const beerName = position.Beer_Name.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                        const legalEntity = position.Legal_Entity || 1;
+                        const quantity = position.Beer_Count || 1;
+                        
+                        productDiv.innerHTML = `
+                            <div class="product-info">
+                                ${beerName}
+                            </div>
+                            <div class="product-controls">
+                                <input type="number" 
+                                       value="${quantity}" 
+                                       min="0" 
+                                       max="50" 
+                                       step="0.5" 
+                                       class="quantity-input" 
+                                       style="width: 80px; text-align: center; padding: 8px;"
+                                       data-id="${beerId}" 
+                                       data-name="${beerName}" 
+                                       data-legal="${legalEntity}">
+                                <button class="add-button" 
+                                        onclick="addProductFromInput(this.previousElementSibling)">
+                                    Добавить
+                                </button>
+                            </div>
+                        `;
+                        
+                        container.appendChild(productDiv);
+                    });
+                    
+                    showContent();
                 })
                 .catch(error => {
                     console.error('Ошибка при загрузке позиций:', error);
-                    tg.showAlert('Ошибка при загрузке позиций: ' + error.message);
+                    document.getElementById('last_orders_products').innerHTML = 
+                        '<h3>Позиции из последних отгруженных заказов</h3>' +
+                        '<div class="alert-message">' +
+                        '<p>Не удалось загрузить данные о последних заказах.</p>' +
+                        '<p>Вы можете добавить остатки вручную ниже.</p>' +
+                        '</div>';
                     showContent();
                 });
+        }
+        
+        // Функция для форматирования времени
+        function formatTime(date) {
+            return date.toISOString().split('T')[1].split('.')[0];
         }
 
         function displayRemainders() {
