@@ -274,9 +274,9 @@
     <!-- Основной контент -->
     <div id="content" class="hidden">
         <div class="container">
-            <h2 style="margin-bottom: 20px; color: var(--tg-theme-text-color);">Позиции из последних заказов</h2>
-            <div id="last_orders_products" class="product-list">
-                <!-- Сюда будут добавляться позиции из последних заказов -->
+            <h2 style="margin-bottom: 20px; color: var(--tg-theme-text-color);">Ввод остатков</h2>
+            <div id="last_orders_products" class="product-list" style="display: none;">
+                <!-- Позиции из последних заказов скрыты -->
             </div>
 
             <div id="current_remainders" class="product-list">
@@ -459,27 +459,14 @@
                     
                     console.log(`[${formatTime(new Date())}] Получено ${data.positions ? data.positions.length : 0} позиций из отгруженных заказов`);
                     
-                    const container = document.getElementById('last_orders_products');
-                    container.innerHTML = '<h3>Позиции из последних отгруженных заказов</h3>';
+                    // Вместо отображения в last_orders_products, сразу добавляем в remainders
                     
                     // Проверяем, есть ли позиции
                     if (!data.positions || data.positions.length === 0) {
                         console.warn(`[${formatTime(new Date())}] Нет позиций из отгруженных заказов для отображения`);
-                        container.innerHTML += 
-                            '<div class="alert-message">' +
-                            '<p>Нет данных о последних отгруженных заказах.</p>' +
-                            '<p>Вы можете добавить остатки вручную ниже.</p>' +
-                            '</div>';
                         showContent();
                         return;
                     }
-                    
-                    // Добавляем информационное сообщение о позициях из отгруженных заказов
-                    container.innerHTML += 
-                        '<div class="alert-message" style="background-color: rgba(76, 175, 80, 0.1); border-left-color: #4CAF50;">' +
-                        '<p><strong>Это товары из ваших последних отгруженных заказов.</strong></p>' +
-                        '<p>Укажите актуальные остатки для каждой позиции.</p>' +
-                        '</div>';
                     
                     // Сортируем позиции по названию для удобства
                     const sortedPositions = [...data.positions].sort((a, b) => 
@@ -494,9 +481,6 @@
                             console.warn(`[${formatTime(new Date())}] Пропускаем позицию #${index} с неполными данными:`, position);
                             return;
                         }
-
-                        const productDiv = document.createElement('div');
-                        productDiv.className = 'product-item';
                         
                         // Преобразуем значения для корректной передачи
                         const beerId = position.Beer_ID.toString();
@@ -505,33 +489,28 @@
                         const legalEntity = position.Legal_Entity || 1;
                         const quantity = position.Beer_Count || 1;
                         
-                        // Используем точно такой же формат, как при ручном добавлении в addToRemainders()
-                        productDiv.innerHTML = `
-                            <div class="product-info">
-                                ${beerName}
-                            </div>
-                            <div class="product-controls">
-                                <input type="number" 
-                                       value="${quantity}" 
-                                       min="0" 
-                                       max="50" 
-                                       step="0.5" 
-                                       class="quantity-input" 
-                                       style="width: 80px; text-align: center; padding: 8px;"
-                                       onchange="addLastOrderProduct('${beerId}', '${beerName}', ${legalEntity}, this.value)">
-                                <button onclick="deleteRemainder('${beerId}', ${legalEntity}, this.closest('.product-item'))"
-                                        class="delete-button">
-                                    Удалить
-                                </button>
-                            </div>
-                        `;
+                        // Сразу добавляем товар в массив remainders без отображения в last_orders_products
+                        const product = {
+                            id: beerId,
+                            name: beerName,
+                            legalEntity: parseInt(legalEntity) || 1,
+                            quantity: parseFloat(quantity) || 0
+                        };
                         
-                        container.appendChild(productDiv);
+                        const existingItemIndex = remainders.findIndex(item => 
+                            item.id === product.id && 
+                            item.legalEntity === product.legalEntity
+                        );
                         
-                        // Сразу добавляем товар в массив remainders
-                        addLastOrderProduct(beerId, beerName, legalEntity, quantity);
+                        if (existingItemIndex !== -1) {
+                            // Обновляем количество в массиве
+                            remainders[existingItemIndex].quantity = product.quantity;
+                        } else {
+                            // Добавляем новый товар в массив
+                            remainders.push(product);
+                        }
                         
-                        console.log(`[${formatTime(new Date())}] Добавлена позиция #${index} на страницу: ${beerName}`);
+                        console.log(`[${formatTime(new Date())}] Добавлена позиция #${index} в остатки: ${beerName}`);
                     });
                     
                     // После завершения загрузки всех позиций
@@ -544,13 +523,6 @@
                 })
                 .catch(error => {
                     console.error(`[${formatTime(new Date())}] Ошибка при загрузке позиций:`, error);
-                    document.getElementById('last_orders_products').innerHTML = 
-                        '<h3>Позиции из последних отгруженных заказов</h3>' +
-                        '<div class="alert-message">' +
-                        '<p>Не удалось загрузить данные о последних заказах.</p>' +
-                        '<p>Вы можете добавить остатки вручную ниже.</p>' +
-                        '<p>Ошибка: ' + error.message + '</p>' +
-                        '</div>';
                     showContent();
                 });
         }
@@ -606,47 +578,6 @@
             }
         }
 
-        function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
-            console.log(`Добавление товара из последнего заказа: ID=${beerId}, Name=${beerName}, Legal=${legalEntity}, Quantity=${quantity}`);
-            
-            if (!beerId) {
-                console.error("Отсутствует ID товара");
-                return;
-            }
-            
-            // Преобразуем параметры в нужные типы
-            const product = {
-                id: beerId.toString(),
-                name: beerName,
-                legalEntity: parseInt(legalEntity) || 1,
-                quantity: parseFloat(quantity) || 0
-            };
-
-            const existingItemIndex = remainders.findIndex(item => 
-                item.id === product.id && 
-                item.legalEntity === product.legalEntity
-            );
-            
-            if (existingItemIndex !== -1) {
-                // Обновляем количество в массиве
-                remainders[existingItemIndex].quantity = product.quantity;
-                console.log(`Обновлено количество для товара ${product.name}: ${product.quantity}`);
-            } else {
-                // Добавляем новый товар в массив
-                remainders.push(product);
-                console.log(`Добавлен новый товар в остатки: ${product.name}`);
-            }
-            
-            // Отключаем автоматическое обновление списка остатков при загрузке страницы,
-            // так как это может привести к дублированию или бесконечному циклу
-            if (!window.initialLoadComplete) {
-                return; // Не обновляем отображение при начальной загрузке
-            }
-            
-            // Обновляем отображение списка остатков только при изменении пользователем
-            displayRemainders();
-        }
-        
         function deleteRemainder(beerId, legalEntity, productItem) {
             try {
                 beerId = beerId.toString();
@@ -955,6 +886,41 @@
             
             // Показываем сообщение
             tg.showAlert(`Товар "${beerName}" добавлен в остатки`);
+        }
+
+        function addLastOrderProduct(beerId, beerName, legalEntity, quantity) {
+            console.log(`Изменение количества товара: ID=${beerId}, Name=${beerName}, Legal=${legalEntity}, Quantity=${quantity}`);
+            
+            if (!beerId) {
+                console.error("Отсутствует ID товара");
+                return;
+            }
+            
+            // Преобразуем параметры в нужные типы
+            const product = {
+                id: beerId.toString(),
+                name: beerName,
+                legalEntity: parseInt(legalEntity) || 1,
+                quantity: parseFloat(quantity) || 0
+            };
+
+            const existingItemIndex = remainders.findIndex(item => 
+                item.id === product.id && 
+                item.legalEntity === product.legalEntity
+            );
+            
+            if (existingItemIndex !== -1) {
+                // Обновляем количество в массиве
+                remainders[existingItemIndex].quantity = product.quantity;
+                console.log(`Обновлено количество для товара ${product.name}: ${product.quantity}`);
+            } else {
+                // Добавляем новый товар в массив
+                remainders.push(product);
+                console.log(`Добавлен новый товар в остатки: ${product.name}`);
+            }
+            
+            // Обновляем отображение списка остатков
+            displayRemainders();
         }
 
         // Запускаем проверку авторизации
