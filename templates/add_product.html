@@ -249,6 +249,19 @@
                 opacity: 1;
             }
         }
+        
+        .alert-message {
+            background-color: rgba(255, 193, 7, 0.1);
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .alert-message p {
+            margin: 5px 0;
+            color: var(--tg-theme-text-color);
+        }
     </style>
 </head>
 <body>
@@ -428,13 +441,17 @@
                 .then(data => {
                     if (data.success) {
                         const container = document.getElementById('last_orders_products');
-                        container.innerHTML = '<h3>Позиции из последних заказов</h3>';
+                        container.innerHTML = '<h3>Позиции из последних отгруженных заказов</h3>';
                         
                         console.log(`Получено ${data.positions.length} позиций из последних заказов:`, data.positions);
                         
                         // Проверяем, есть ли позиции
                         if (!data.positions || data.positions.length === 0) {
-                            container.innerHTML += '<p>Нет данных о предыдущих заказах</p>';
+                            container.innerHTML += 
+                                '<div class="alert-message">' +
+                                '<p>Нет данных о последних отгруженных заказах.</p>' +
+                                '<p>Вы можете добавить остатки вручную ниже.</p>' +
+                                '</div>';
                             showContent();
                             return;
                         }

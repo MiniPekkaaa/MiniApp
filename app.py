@@ -309,18 +309,95 @@ def get_last_orders():
         if not org_id:
             return jsonify({"error": "Organization ID not found"}), 400
 
-        logger.debug(f"Получение последних 3 выполненных заказов для организации {org_id}")
+        logger.debug(f"Получение последних 3 отгруженных заказов для организации {org_id}")
 
-        # Получаем последние 3 ВЫПОЛНЕННЫХ заказа организации, отсортированные по дате
+        # Получаем последние 3 ОТГРУЖЕННЫХ заказа организации, отсортированные по дате
         orders = list(mongo.cx.Pivo.Orders.find(
             {
                 "org_ID": org_id,
-                "status": "Выполнен"  # Только выполненные заказы
+                "status": "Отгружен"  # Только отгруженные заказы
             },
-            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1}
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1}
         ).sort([("createdAt", -1), ("date", -1)]).limit(3))
         
-        logger.debug(f"Найдено {len(orders)} последних выполненных заказов")
+        logger.debug(f"Найдено {len(orders)} последних отгруженных заказов")
+
+        # Если не найдено отгруженных заказов, проверяем статусы через API для заказов с ordersUID
+        if len(orders) == 0:
+            logger.debug("Не найдено отгруженных заказов в MongoDB, проверяем через API")
+            
+            # Получаем последние 5 заказов для проверки статусов
+            potential_orders = list(mongo.cx.Pivo.Orders.find(
+                {"org_ID": org_id},
+                {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1}
+            ).sort([("createdAt", -1), ("date", -1)]).limit(5))
+            
+            logger.debug(f"Найдено {len(potential_orders)} потенциальных заказов для проверки статусов")
+            
+            # Проверяем статус каждого заказа через API
+            orders_with_status = []
+            for order in potential_orders:
+                order_id = str(order.get('_id', 'Нет ID'))
+                logger.debug(f"Проверка статуса заказа {order_id}")
+                
+                if 'ordersUID' in order and order['ordersUID']:
+                    order_uids = order['ordersUID']
+                    logger.debug(f"Заказ {order_id} имеет {len(order_uids)} UID: {order_uids}")
+                    
+                    # Берем первый UID из ordersUID
+                    first_uid = next(iter(order['ordersUID'].values()))
+                    if first_uid:
+                        logger.debug(f"Запрашиваем статус для UID {first_uid}")
+                        try:
+                            # Запрашиваем статус в 1C
+                            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{first_uid}'
+                            response = requests.get(
+                                api_url,
+                                auth=('int2', 'pcKnE8GqXn'),
+                                headers={'Content-Type': 'application/json'},
+                                timeout=5
+                            )
+                            
+                            logger.debug(f"Ответ API для UID {first_uid}: статус {response.status_code}")
+                            
+                            if response.status_code == 200:
+                                try:
+                                    status_data = response.json()
+                                    status = ""
+                                    
+                                    if isinstance(status_data, str):
+                                        status = status_data
+                                    elif isinstance(status_data, dict) and 'STATUS' in status_data:
+                                        status = status_data['STATUS']
+                                    
+                                    logger.debug(f"Заказ {order_id} с UID {first_uid} имеет статус '{status}' в 1C")
+                                    
+                                    # Если статус "Отгружен", добавляем заказ в список
+                                    if status.lower() == "отгружен" or status.lower() == "отгружено" or "отгруж" in status.lower():
+                                        logger.debug(f"Добавляем отгруженный заказ {order_id} в список")
+                                        # Обновляем статус в MongoDB
+                                        mongo.cx.Pivo.Orders.update_one(
+                                            {'_id': order['_id']},
+                                            {'$set': {'status': 'Отгружен'}}
+                                        )
+                                        orders_with_status.append(order)
+                                        if len(orders_with_status) >= 3:
+                                            break
+                                    else:
+                                        logger.debug(f"Пропускаем заказ {order_id} со статусом '{status}'")
+                                except Exception as e:
+                                    logger.error(f"Ошибка при обработке статуса заказа {order_id}: {str(e)}")
+                        except Exception as e:
+                            logger.error(f"Ошибка при запросе статуса заказа {order_id}: {str(e)}")
+                else:
+                    logger.debug(f"Заказ {order_id} не имеет UID, пропускаем")
+            
+            # Используем заказы с проверенным статусом "Отгружен"
+            if orders_with_status:
+                orders = orders_with_status
+                logger.debug(f"Найдено {len(orders)} отгруженных заказов через API")
+            else:
+                logger.debug("Не найдено отгруженных заказов через API")
         
         # Логируем информацию о найденных заказах
         for i, order in enumerate(orders):
@@ -1602,23 +1679,12 @@ def get_batch_order_statuses():
         mongo_ids = []
         order_uids = []
         
-        # Проверяем кеш статусов
-        cache_hits = 0
-        cache_start = datetime.now()
-        
-        # Для отладки - выводим список всех запрашиваемых ID
-        logger.debug(f"Запрошенные ID заказов: {[o.get('mongo_id') or o.get('order_uid') for o in orders]}")
-        
-        # Разделяем запросы по типам 
-        # Временно отключаем использование кеша
+        # Разделяем запросы по типам (MongoDB ID и 1C UID)
         for order in orders:
             if 'mongo_id' in order:
                 mongo_ids.append(order['mongo_id'])
             elif 'order_uid' in order:
                 order_uids.append(order['order_uid'])
-        
-        cache_end = datetime.now()
-        logger.debug(f"Проверка кеша статусов выполнена за: {(cache_end - cache_start).total_seconds():.3f} сек, найдено {cache_hits} кешированных статусов")
         
         # Получаем статусы из MongoDB
         mongo_start = datetime.now()
@@ -1632,38 +1698,43 @@ def get_batch_order_statuses():
                 
                 logger.debug(f"Получено {len(mongo_orders)} заказов из MongoDB")
                 
-                # Применяем статусы из MongoDB напрямую
+                # Для каждого заказа из MongoDB добавляем его UID в список для запроса к 1C
                 for order in mongo_orders:
                     order_id = str(order.get('_id'))
                     status = order.get('status', 'В обработке')
                     
-                    results[order_id] = {
-                        'status': status,
-                        'source': 'mongodb'
-                    }
-                    
                     logger.debug(f"Статус для заказа {order_id} из MongoDB: {status}")
                     
-                    # Если у заказа есть ordersUID, также запросим статус из 1С
+                    # Если у заказа есть ordersUID, запросим актуальный статус из 1С
                     if 'ordersUID' in order and order['ordersUID']:
-                        # Получаем первый UID из ordersUID
-                        first_uid = next(iter(order['ordersUID'].values()))
-                        if first_uid:
-                            order_uids.append(first_uid)
-                            # Сохраняем соответствие для последующего маппинга
-                            results[order_id] = {
-                                'status': status,
-                                'linked_uid': first_uid,
-                                'source': 'mongodb'
-                            }
+                        # Получаем все UID из ordersUID
+                        for uid_key, uid in order['ordersUID'].items():
+                            if uid and uid not in order_uids:
+                                order_uids.append(uid)
+                                # Сохраняем соответствие для последующего обновления MongoDB
+                                if order_id not in results:
+                                    results[order_id] = {
+                                        'status': status,
+                                        'linked_uids': [],
+                                        'source': 'mongodb'
+                                    }
+                                results[order_id]['linked_uids'].append(uid)
+                    else:
+                        # Если нет UID, используем статус из MongoDB
+                        results[order_id] = {
+                            'status': status,
+                            'source': 'mongodb'
+                        }
             except Exception as e:
                 logger.error(f"Ошибка при получении заказов из MongoDB: {str(e)}")
         
         mongo_end = datetime.now()
         logger.debug(f"Запросы к MongoDB выполнены за: {(mongo_end - mongo_start).total_seconds():.3f} сек")
         
-        # Получаем статусы из 1C
+        # Получаем статусы из 1C - всегда делаем запросы без использования кеша
         c1_start = datetime.now()
+        c1_statuses = {}  # Собираем статусы из 1C
+        
         for uid in order_uids:
             try:
                 # Запрашиваем статус в 1C
@@ -1691,43 +1762,10 @@ def get_batch_order_statuses():
                             'source': '1c'
                         }
                         
+                        # Сохраняем статус для обновления MongoDB
+                        c1_statuses[uid] = status
+                        
                         logger.debug(f"Статус для заказа UID {uid} из 1C: {status}")
-                        
-                        # Кешируем статус (на разное время в зависимости от статуса)
-                        cache_ttl = 60  # 1 минута по умолчанию для активных заказов
-                        if status.lower() in ['выполнен', 'доставлен', 'отменен']:
-                            cache_ttl = 3600  # 1 час для финальных статусов
-                        
-                        redis_client.setex(
-                            f'order_status:{uid}',
-                            cache_ttl,
-                            json.dumps({'status': status})
-                        )
-                        
-                        # Также обновляем статус для связанных заказов из MongoDB
-                        for mongo_id, data in results.items():
-                            if 'linked_uid' in data and data['linked_uid'] == uid:
-                                # Обновляем статус только если он более приоритетный
-                                current_status = data['status']
-                                if determine_highest_priority_status([current_status, status]) == status:
-                                    results[mongo_id]['status'] = status
-                                    
-                                    # Обновляем также статус в MongoDB
-                                    try:
-                                        mongo.cx.Pivo.Orders.update_one(
-                                            {'_id': ObjectId(mongo_id)},
-                                            {'$set': {'status': status}}
-                                        )
-                                        logger.debug(f"Обновлен статус для заказа {mongo_id} в MongoDB: {status}")
-                                    except Exception as update_error:
-                                        logger.error(f"Ошибка при обновлении статуса в MongoDB: {str(update_error)}")
-                                    
-                                    # Кешируем статус для MongoDB ID
-                                    redis_client.setex(
-                                        f'order_status:{mongo_id}',
-                                        cache_ttl,
-                                        json.dumps({'status': status})
-                                    )
                     except:
                         logger.warning(f"Ошибка при обработке ответа статуса для UID {uid}")
                         results[uid] = {'status': 'Ошибка данных'}
@@ -1738,6 +1776,30 @@ def get_batch_order_statuses():
                 logger.error(f"Ошибка при запросе статуса для UID {uid}: {str(e)}")
                 results[uid] = {'status': 'Ошибка запроса'}
         
+        # Обновляем статусы в MongoDB на основе данных из 1C
+        for mongo_id, data in list(results.items()):
+            if 'linked_uids' in data:
+                # Получаем статусы из 1C для всех связанных UID
+                linked_statuses = []
+                for uid in data['linked_uids']:
+                    if uid in c1_statuses:
+                        linked_statuses.append(c1_statuses[uid])
+                
+                # Определяем итоговый статус на основе статусов из 1C
+                if linked_statuses:
+                    final_status = determine_highest_priority_status(linked_statuses)
+                    # Обновляем статус в результатах
+                    results[mongo_id]['status'] = final_status
+                    # Обновляем статус в MongoDB
+                    try:
+                        mongo.cx.Pivo.Orders.update_one(
+                            {'_id': ObjectId(mongo_id)},
+                            {'$set': {'status': final_status}}
+                        )
+                        logger.debug(f"Обновлен статус для заказа {mongo_id} в MongoDB: {final_status}")
+                    except Exception as update_error:
+                        logger.error(f"Ошибка при обновлении статуса в MongoDB: {str(update_error)}")
+        
         c1_end = datetime.now()
         logger.debug(f"Запросы к 1C выполнены за: {(c1_end - c1_start).total_seconds():.3f} сек")
         
@@ -1746,12 +1808,7 @@ def get_batch_order_statuses():
         
         return jsonify({
             "success": True,
-            "statuses": results,
-            "stats": {
-                "total_requests": len(orders),
-                "cache_hits": cache_hits,
-                "actual_requests": len(order_uids) + len(mongo_ids)
-            }
+            "statuses": results
         })
     except Exception as e:
         logger.error(f"Ошибка при получении batch-статусов заказов: {str(e)}")
