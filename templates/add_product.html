@@ -672,35 +672,8 @@
                 remainders.push(product);
             }
             
-            // Добавляем новый остаток в список позиций
-            const container = document.getElementById('last_orders_products');
-            const productDiv = document.createElement('div');
-            productDiv.className = 'product-item';
-            
-            // Отображаем объем товара
-            const volumeDisplay = product.volume ? ` (${product.volume}л)` : '';
-            
-            productDiv.innerHTML = `
-                <div class="product-info">
-                    ${product.name}${volumeDisplay}
-                </div>
-                <div class="product-controls">
-                    <input type="number" 
-                           value="${quantity}" 
-                           min="0" 
-                           max="50" 
-                           step="0.5" 
-                           class="quantity-input" 
-                           style="width: 80px; text-align: center; padding: 8px;"
-                           onchange="addLastOrderProduct('${product.id}', '${product.name}', ${product.legalEntity}, this.value)">
-                    <button onclick="deleteRemainder('${product.id}', ${product.legalEntity}, this.closest('.product-item'))"
-                            class="delete-button">
-                        Удалить
-                    </button>
-                </div>
-            `;
-            
-            container.appendChild(productDiv);
+            // Обновляем отображение списка остатков для немедленной визуализации добавленного товара
+            displayRemainders();
             
             searchInput.value = "";
             document.getElementById('quantity').value = "1";
@@ -718,52 +691,9 @@
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('content').classList.add('hidden');
 
-            // Собираем все позиции из списка
-            const container = document.getElementById('last_orders_products');
-            const items = container.querySelectorAll('.product-item');
-            const allRemainders = [];
-
-            // Добавляем все позиции из DOM
-            items.forEach(item => {
-                const name = item.querySelector('.product-info').textContent.trim();
-                const quantity = parseFloat(item.querySelector('.quantity-input').value);
-                const deleteButton = item.querySelector('.delete-button');
-                // Получаем beer_id и legal_entity из атрибутов кнопки удаления
-                const onclick = deleteButton.getAttribute('onclick');
-                const matches = onclick.match(/deleteRemainder\((\d+),\s*(\d+)/);
-                if (matches) {
-                    const [_, beerId, legalEntity] = matches;
-                    
-                    // Получаем объем товара из каталога
-                    const productInCatalog = initialProducts.find(p => p.id.toString() === beerId);
-                    const volume = productInCatalog ? productInCatalog.volume : null;
-                    
-                    allRemainders.push({
-                        id: beerId,
-                        name: name.replace(/\s*\(\d+\.?\d*л\)$/, ''), // Удаляем объем из названия
-                        legalEntity: parseInt(legalEntity),
-                        quantity: quantity,
-                        volume: volume // Добавляем объем
-                    });
-                }
-            });
-
-            // Добавляем все позиции из массива remainders, которых еще нет в списке
-            remainders.forEach(remainder => {
-                const exists = allRemainders.some(item => 
-                    item.id === remainder.id && 
-                    item.legalEntity === remainder.legalEntity
-                );
-                if (!exists) {
-                    allRemainders.push({
-                        id: remainder.id,
-                        name: remainder.name,
-                        legalEntity: remainder.legalEntity,
-                        quantity: remainder.quantity,
-                        volume: remainder.volume // Добавляем объем
-                    });
-                }
-            });
+            // Используем прямо массив remainders для формирования списка товаров
+            // Нет необходимости собирать данные из DOM, так как все актуальные данные уже есть в массиве remainders
+            const allRemainders = [...remainders]; // Копируем массив
 
             if (allRemainders.length === 0) {
                 tg.showAlert("Добавьте хотя бы один остаток");
