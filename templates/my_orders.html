@@ -944,77 +944,65 @@
 
         // Функция для параллельного получения статусов нескольких заказов за один запрос
         async function getBatchOrderStatuses(orders) {
-            // Получаем все MongoDB ID и/или UID заказов
-            const orderRequests = [];
+            console.log(`[${formatTime(new Date())}] Запрос статусов для ${orders.length} заказов напрямую через HTTP`);
             
-            for (const order of orders) {
-                if (order.ordersUID && Object.keys(order.ordersUID).length > 0 && order.order_ID) {
-                    // Если есть ordersUID, добавляем MongoDB ID
-                    orderRequests.push({
-                        mongo_id: order.order_ID,
-                        type: 'MongoDB'
-                    });
-                } else if (order.order1C && order.order1C.ID_ORDER) {
-                    // Если нет ordersUID, но есть 1C ID, добавляем UID
-                    orderRequests.push({
-                        order_uid: order.order1C.ID_ORDER,
-                        type: '1C'
-                    });
+            // Создаем копию массива заказов
+            const ordersWithStatuses = [...orders];
+            
+            // Получаем статусы для каждого заказа напрямую через HTTP запрос
+            const statusPromises = [];
+            
+            for (let i = 0; i < ordersWithStatuses.length; i++) {
+                const order = ordersWithStatuses[i];
+                
+                // Определяем идентификатор заказа для запроса статуса
+                let orderUID = null;
+                
+                // Если есть ordersUID, берем первый UID
+                if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
+                    orderUID = order.ordersUID[Object.keys(order.ordersUID)[0]];
+                }
+                // Если есть 1C ID, используем его
+                else if (order.order1C && order.order1C.ID_ORDER) {
+                    orderUID = order.order1C.ID_ORDER;
+                }
+                
+                if (orderUID) {
+                    // Создаем промис для запроса статуса заказа
+                    const statusPromise = (async (index, uid) => {
+                        try {
+                            // Делаем прямой HTTP запрос к указанному URL
+                            const response = await fetch(`/api/proxy-order-status?uid=${uid}`);
+                            const data = await response.json();
+                            
+                            if (data.success && data.status) {
+                                console.log(`[${formatTime(new Date())}] Получен статус для заказа UID ${uid}: ${data.status}`);
+                                ordersWithStatuses[index].status = data.status;
+                            } else {
+                                console.warn(`[${formatTime(new Date())}] Не удалось получить статус для заказа UID ${uid}:`, data.error || 'Неизвестная ошибка');
+                            }
+                        } catch (error) {
+                            console.error(`[${formatTime(new Date())}] Ошибка при запросе статуса для заказа UID ${uid}:`, error);
+                        }
+                    })(i, orderUID);
+                    
+                    statusPromises.push(statusPromise);
                 }
             }
             
-            if (orderRequests.length === 0) {
-                console.log('[getBatchOrderStatuses] Нет заказов для запроса статусов');
-                return orders;
-            }
-            
-            console.log(`[${formatTime(new Date())}] Запрос batch статусов для ${orderRequests.length} заказов`);
-            
-            try {
-                // Отправляем один запрос на получение всех статусов
-                const batchStart = performance.now();
-                
-                const response = await fetch('/api/get-batch-order-statuses', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        orders: orderRequests
-                    })
-                });
-                
-                const data = await response.json();
-                const batchDuration = (performance.now() - batchStart) / 1000;
-                
-                console.log(`[${formatTime(new Date())}] Получены batch статусы за ${batchDuration.toFixed(2)} сек:`, data);
-                
-                if (data.success && data.statuses) {
-                    // Применяем полученные статусы к заказам
-                    for (let i = 0; i < orders.length; i++) {
-                        const order = orders[i];
-                        let statusApplied = false;
-                        
-                        // Проверяем статус по MongoDB ID
-                        if (order.order_ID && data.statuses[order.order_ID]) {
-                            orders[i].status = data.statuses[order.order_ID].status;
-                            statusApplied = true;
-                            console.log(`[${formatTime(new Date())}] Применен статус для заказа MongoDB ID ${order.order_ID}: ${orders[i].status}`);
-                        }
-                        
-                        // Проверяем статус по 1C ID
-                        if (!statusApplied && order.order1C && order.order1C.ID_ORDER && data.statuses[order.order1C.ID_ORDER]) {
-                            orders[i].status = data.statuses[order.order1C.ID_ORDER].status;
-                            console.log(`[${formatTime(new Date())}] Применен статус для заказа 1C ID ${order.order1C.ID_ORDER}: ${orders[i].status}`);
-                        }
-                    }
+            // Ждем завершения всех запросов статусов
+            if (statusPromises.length > 0) {
+                try {
+                    await Promise.all(statusPromises);
+                    console.log(`[${formatTime(new Date())}] Все ${statusPromises.length} запросов статусов выполнены`);
+                } catch (error) {
+                    console.error(`[${formatTime(new Date())}] Ошибка при выполнении запросов статусов:`, error);
                 }
-                
-                return orders;
-            } catch (error) {
-                console.error(`[${formatTime(new Date())}] Ошибка при получении batch статусов:`, error);
-                return orders;
+            } else {
+                console.log(`[${formatTime(new Date())}] Нет заказов для запроса статусов`);
             }
+            
+            return ordersWithStatuses;
         }
     </script>
 </body>

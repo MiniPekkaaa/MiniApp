@@ -1506,8 +1506,60 @@ def get_order_status():
             return jsonify({"error": f"Request error: {str(e)}"}), 500
             
     except Exception as e:
-        logger.error(f"Ошибка при получении статуса заказа: {str(e)}")
+        logger.error(f"Общая ошибка при получении статуса заказа: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+# Новый маршрут для проксирования запросов статуса заказа
+@app.route('/api/proxy-order-status')
+def proxy_order_status():
+    try:
+        uid = request.args.get('uid')
+        if not uid:
+            return jsonify({"success": False, "error": "Order UID is required"}), 400
+            
+        logger.debug(f"Запрос статуса заказа через прокси для UID: {uid}")
+        
+        # Отправляем запрос к API 1С для получения статуса заказа
+        api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+        logger.debug(f"Отправка запроса: GET {api_url}")
+        
+        response = requests.get(
+            api_url,
+            auth=('int2', 'pcKnE8GqXn'),
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        logger.debug(f"Статус ответа от API статуса заказа: {response.status_code}")
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка API статуса заказа: {response.status_code}, {response.text}")
+            return jsonify({"success": False, "error": f"API error: {response.status_code}"}), 500
+            
+        # Обработка ответа
+        try:
+            response_text = response.text.strip()
+            
+            # Если ответ пустой, возвращаем статус по умолчанию
+            if not response_text:
+                logger.warning(f"Пустой ответ от API статуса заказа для UID: {uid}")
+                return jsonify({"success": True, "status": "in work"})
+                
+            # Пробуем обработать JSON
+            status_data = response.json()
+            logger.debug(f"Успешно получен статус заказа: {status_data}")
+            
+            # Возвращаем статус в нужном формате
+            return jsonify({"success": True, "status": status_data})
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке ответа статуса заказа: {str(e)}")
+            # В случае ошибки парсинга JSON, возвращаем сам текст как статус
+            return jsonify({"success": True, "status": response_text.strip()})
+            
+    except Exception as e:
+        logger.error(f"Общая ошибка при проксировании статуса заказа: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/get-combined-order-status')
 def get_combined_order_status():
@@ -1639,147 +1691,180 @@ def get_batch_order_statuses():
         if not orders or not isinstance(orders, list):
             return jsonify({"error": "Некорректный формат списка заказов"}), 400
             
-        logger.debug(f"Получен запрос на получение статусов для {len(orders)} заказов")
+        logger.debug(f"Получен запрос на получение статусов для {len(orders)} заказов напрямую из 1С")
         
         # Подготавливаем результаты
         results = {}
         mongo_ids = []
         order_uids = []
         
-        # Разделяем запросы по типам (MongoDB ID и 1C UID)
+        # Собираем все order_uid и mongo_id
         for order in orders:
             if 'mongo_id' in order:
-                mongo_ids.append(order['mongo_id'])
-            elif 'order_uid' in order:
-                order_uids.append(order['order_uid'])
-        
-        # Получаем статусы из MongoDB
-        mongo_start = datetime.now()
-        if mongo_ids:
-            try:
-                # Получаем заказы из MongoDB
-                mongo_orders = list(mongo.cx.Pivo.Orders.find(
-                    {'_id': {'$in': [ObjectId(id) for id in mongo_ids]}},
-                    {'ordersUID': 1, '_id': 1, 'date': 1, 'status': 1}
-                ))
+                mongo_id = order['mongo_id']
+                mongo_ids.append(mongo_id)
                 
-                logger.debug(f"Получено {len(mongo_orders)} заказов из MongoDB")
-                
-                # Для каждого заказа из MongoDB добавляем его UID в список для запроса к 1C
-                for order in mongo_orders:
-                    order_id = str(order.get('_id'))
-                    status = order.get('status', 'В обработке')
+                # Находим соответствующие UID из MongoDB, но НЕ обновляем статусы
+                try:
+                    mongo_order = mongo.cx.Pivo.Orders.find_one(
+                        {'_id': ObjectId(mongo_id)},
+                        {'ordersUID': 1}
+                    )
                     
-                    logger.debug(f"Статус для заказа {order_id} из MongoDB: {status}")
-                    
-                    # Если у заказа есть ordersUID, запросим актуальный статус из 1С
-                    if 'ordersUID' in order and order['ordersUID']:
-                        # Получаем все UID из ordersUID
-                        for uid_key, uid in order['ordersUID'].items():
+                    if mongo_order and 'ordersUID' in mongo_order and mongo_order['ordersUID']:
+                        for uid_key, uid in mongo_order['ordersUID'].items():
                             if uid and uid not in order_uids:
                                 order_uids.append(uid)
-                                # Сохраняем соответствие для последующего обновления MongoDB
-                                if order_id not in results:
-                                            results[order_id] = {
-                                        'status': status,
-                                        'linked_uids': [],
-                                        'source': 'mongodb'
+                                # Сохраняем соответствие mongo_id -> uid
+                                if mongo_id not in results:
+                                    results[mongo_id] = {
+                                        'linked_uids': []
                                     }
-                                results[order_id]['linked_uids'].append(uid)
-                    else:
-                        # Если нет UID, используем статус из MongoDB
-                            results[order_id] = {
-                            'status': status,
-                            'source': 'mongodb'
-                            }
-            except Exception as e:
-                logger.error(f"Ошибка при получении заказов из MongoDB: {str(e)}")
+                                results[mongo_id]['linked_uids'].append(uid)
+                except Exception as e:
+                    logger.error(f"Ошибка при получении UID для MongoDB ID {mongo_id}: {str(e)}")
+            
+            # Добавляем UID из прямых запросов
+            elif 'order_uid' in order:
+                order_uid = order['order_uid']
+                if order_uid not in order_uids:
+                    order_uids.append(order_uid)
         
-        mongo_end = datetime.now()
-        logger.debug(f"Запросы к MongoDB выполнены за: {(mongo_end - mongo_start).total_seconds():.3f} сек")
+        logger.debug(f"Найдено {len(mongo_ids)} MongoDB ID и {len(order_uids)} 1С UID для запроса статусов")
         
-        # Получаем статусы из 1C - всегда делаем запросы без использования кеша
+        # Получаем статусы только из 1C - всегда делаем запросы без использования кеша
         c1_start = datetime.now()
-        c1_statuses = {}  # Собираем статусы из 1C
+        
+        # Создаем словарь для хранения статусов
+        statuses = {}
+        
+        # Запрашиваем статусы для всех UID параллельно
+        async_requests = []
         
         for uid in order_uids:
             try:
-                # Запрашиваем статус в 1C
+                # Создаем запрос, но не выполняем его сразу
                 api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
-                response = requests.get(
-                    api_url,
-                    auth=('int2', 'pcKnE8GqXn'),
-                    headers={'Content-Type': 'application/json'},
-                    timeout=5  # Уменьшаем тайм-аут для ускорения
-                )
-                
-                if response.status_code == 200:
-                    try:
-                        status_data = response.json()
-                        status = "В обработке"
-                        
-                        if isinstance(status_data, str):
-                            status = status_data
-                        elif isinstance(status_data, dict) and 'STATUS' in status_data:
-                            status = status_data['STATUS']
-                            
-                        # Добавляем статус в результаты
-                        results[uid] = {
-                            'status': status,
-                            'source': '1c'
-                        }
-                        
-                        # Сохраняем статус для обновления MongoDB
-                        c1_statuses[uid] = status
-                        
-                        logger.debug(f"Статус для заказа UID {uid} из 1C: {status}")
-                    except:
-                        logger.warning(f"Ошибка при обработке ответа статуса для UID {uid}")
-                        results[uid] = {'status': 'Ошибка данных'}
-                else:
-                    logger.warning(f"Ошибка API при получении статуса для UID {uid}: {response.status_code}")
-                    results[uid] = {'status': 'Ошибка API'}
+                request_obj = {
+                    'uid': uid,
+                    'url': api_url
+                }
+                async_requests.append(request_obj)
             except Exception as e:
-                logger.error(f"Ошибка при запросе статуса для UID {uid}: {str(e)}")
-                results[uid] = {'status': 'Ошибка запроса'}
+                logger.error(f"Ошибка при подготовке запроса для UID {uid}: {str(e)}")
         
-        # Обновляем статусы в MongoDB на основе данных из 1C
-        for mongo_id, data in list(results.items()):
-            if 'linked_uids' in data:
-                # Получаем статусы из 1C для всех связанных UID
-                linked_statuses = []
-                for uid in data['linked_uids']:
-                    if uid in c1_statuses:
-                        linked_statuses.append(c1_statuses[uid])
+        # Выполняем запросы параллельно с ограничением в 5 одновременных запросов
+        chunk_size = 5
+        for i in range(0, len(async_requests), chunk_size):
+            chunk = async_requests[i:i+chunk_size]
+            chunk_tasks = []
+            
+            for req in chunk:
+                uid = req['uid']
+                api_url = req['url']
                 
-                # Определяем итоговый статус на основе статусов из 1C
-                if linked_statuses:
-                    final_status = determine_highest_priority_status(linked_statuses)
-                    # Обновляем статус в результатах
-                    results[mongo_id]['status'] = final_status
-                    # Обновляем статус в MongoDB
-                    try:
-                        mongo.cx.Pivo.Orders.update_one(
-                            {'_id': ObjectId(mongo_id)},
-                            {'$set': {'status': final_status}}
-                        )
-                        logger.debug(f"Обновлен статус для заказа {mongo_id} в MongoDB: {final_status}")
-                    except Exception as update_error:
-                        logger.error(f"Ошибка при обновлении статуса в MongoDB: {str(update_error)}")
+                try:
+                    # Запрашиваем статус в 1C
+                    response = requests.get(
+                        api_url,
+                        auth=('int2', 'pcKnE8GqXn'),
+                        headers={'Content-Type': 'application/json'},
+                        timeout=5  # Уменьшаем тайм-аут для ускорения
+                    )
+                    
+                    if response.status_code == 200:
+                        try:
+                            response_text = response.text.strip()
+                            
+                            # Если ответ пустой, используем статус по умолчанию
+                            if not response_text:
+                                logger.warning(f"Пустой ответ от API статуса заказа для UID: {uid}")
+                                statuses[uid] = "В обработке"
+                                continue
+                                
+                            # Пробуем обработать JSON или текстовый ответ
+                            try:
+                                status_data = response.json()
+                                
+                                if isinstance(status_data, str):
+                                    status = status_data
+                                elif isinstance(status_data, dict) and 'STATUS' in status_data:
+                                    status = status_data['STATUS']
+                                else:
+                                    status = "В обработке"
+                            except:
+                                # Если не удалось распарсить JSON, используем текст как статус
+                                status = response_text
+                                
+                            # Добавляем статус в словарь
+                            statuses[uid] = status
+                            logger.debug(f"Статус для заказа UID {uid} из 1C: {status}")
+                            
+                        except Exception as parse_error:
+                            logger.warning(f"Ошибка при обработке ответа статуса для UID {uid}: {str(parse_error)}")
+                            statuses[uid] = "Ошибка данных"
+                    else:
+                        logger.warning(f"Ошибка API при получении статуса для UID {uid}: {response.status_code}")
+                        statuses[uid] = "Ошибка API"
+                except Exception as req_error:
+                    logger.error(f"Ошибка при запросе статуса для UID {uid}: {str(req_error)}")
+                    statuses[uid] = "Ошибка запроса"
         
         c1_end = datetime.now()
         logger.debug(f"Запросы к 1C выполнены за: {(c1_end - c1_start).total_seconds():.3f} сек")
+        
+        # Формируем результаты для возврата клиенту
+        final_results = {}
+        
+        # Обрабатываем MongoDB ID с использованием UID
+        for mongo_id in mongo_ids:
+            if mongo_id in results and 'linked_uids' in results[mongo_id]:
+                # Получаем статусы всех связанных UID
+                linked_statuses = []
+                for uid in results[mongo_id]['linked_uids']:
+                    if uid in statuses:
+                        linked_statuses.append(statuses[uid])
+                
+                # Определяем итоговый статус
+                if linked_statuses:
+                    final_status = determine_highest_priority_status(linked_statuses)
+                else:
+                    final_status = "В обработке"
+                
+                # Добавляем статус в результаты
+                final_results[mongo_id] = {
+                    'status': final_status,
+                    'source': '1c'
+                }
+            else:
+                # Если нет связанных UID, используем статус по умолчанию
+                final_results[mongo_id] = {
+                    'status': "В обработке",
+                    'source': 'default'
+                }
+        
+        # Добавляем статусы для прямых UID
+        for uid in order_uids:
+            if uid in statuses:
+                final_results[uid] = {
+                    'status': statuses[uid],
+                    'source': '1c'
+                }
         
         end_time = datetime.now()
         logger.debug(f"Общее время выполнения batch-статусов: {(end_time - start_time).total_seconds():.3f} сек")
         
         return jsonify({
-            "success": True,
-            "statuses": results
+            'success': True,
+            'statuses': final_results
         })
+        
     except Exception as e:
-        logger.error(f"Ошибка при получении batch-статусов заказов: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Ошибка при получении batch-статусов: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 def determine_highest_priority_status(statuses):
     """
