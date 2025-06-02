@@ -377,7 +377,7 @@
                 sortedProducts.forEach(product => {
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
-                    item.innerHTML = `${product.name} (${product.volume}л - ${product.price}₽)`;
+                    item.innerHTML = `${product.name} (${product.volume}л)`;
                     
                     item.addEventListener('click', () => {
                         selectedProduct = product;
@@ -775,7 +775,6 @@
                                 id: product.id,
                                 name: product.name,
                                 quantity: parseInt(position.quantity) || 0,
-                                price: parseFloat(product.price) || 0,
                                 legalEntity: parseInt(product.legalEntity) || 1
                             };
                         } else {
@@ -784,7 +783,6 @@
                                 id: '',
                                 name: position.name,
                                 quantity: parseInt(position.quantity) || 0,
-                                price: 0,
                                 legalEntity: 1
                             };
                         }
@@ -819,7 +817,6 @@
                         id: product.id,
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
-                        price: parseFloat(product.price) || 0,
                         legalEntity: parseInt(product.legalEntity) || 1
                     });
                 } else {
@@ -828,7 +825,6 @@
                         id: item.id || '',
                         name: item.name,
                         quantity: parseInt(item.quantity) || 0,
-                        price: 0,
                         legalEntity: item.legalEntity || 1
                     });
                 }
