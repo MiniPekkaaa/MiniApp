@@ -484,13 +484,21 @@
                         
                         // Преобразуем значения для корректной передачи
                         const beerId = position.Beer_ID.toString();
+                        
+                        // Проверяем, является ли товар тарой
+                        const productInCatalog = initialProducts.find(p => p.id.toString() === beerId);
+                        if (productInCatalog && productInCatalog.TARA === true) {
+                            console.log(`[${formatTime(new Date())}] Пропускаем позицию с TARA=true: ${position.Beer_Name}`);
+                            return; // Пропускаем позиции с TARA=true
+                        }
+                        
                         // Экранируем кавычки в названии для безопасной вставки в HTML
                         const beerName = position.Beer_Name.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                         const legalEntity = position.Legal_Entity || 1;
                         const quantity = position.Beer_Count || 1;
                         
                         // Сразу добавляем товар в массив remainders без отображения в last_orders_products
-                        const product = {
+                        const productToAdd = {
                             id: beerId,
                             name: beerName,
                             legalEntity: parseInt(legalEntity) || 1,
@@ -498,16 +506,16 @@
                         };
                         
                         const existingItemIndex = remainders.findIndex(item => 
-                            item.id === product.id && 
-                            item.legalEntity === product.legalEntity
+                            item.id === productToAdd.id && 
+                            item.legalEntity === productToAdd.legalEntity
                         );
                         
                         if (existingItemIndex !== -1) {
                             // Обновляем количество в массиве
-                            remainders[existingItemIndex].quantity = product.quantity;
+                            remainders[existingItemIndex].quantity = productToAdd.quantity;
                         } else {
                             // Добавляем новый товар в массив
-                            remainders.push(product);
+                            remainders.push(productToAdd);
                         }
                         
                         console.log(`[${formatTime(new Date())}] Добавлена позиция #${index} в остатки: ${beerName}`);
@@ -543,8 +551,16 @@
             
             // Очищаем контейнер
             container.innerHTML = '<h3>Текущие остатки</h3>';
+            
+            // Фильтруем позиции, исключая те, у которых TARA=true
+            const filteredRemainders = remainders.filter(remainder => {
+                const product = initialProducts.find(p => p.id.toString() === remainder.id.toString());
+                return !(product && product.TARA === true); // исключаем позиции с TARA=true
+            });
+            
+            console.log(`Отфильтровано ${remainders.length - filteredRemainders.length} позиций с TARA=true из остатков`);
 
-            remainders.forEach(remainder => {
+            filteredRemainders.forEach(remainder => {
                 const remainderDiv = document.createElement('div');
                 remainderDiv.className = 'product-item';
                 
@@ -609,6 +625,12 @@
         function addToRemainders() {
             if (!selectedProduct) {
                 tg.showAlert("Пожалуйста, выберите товар");
+                return;
+            }
+            
+            // Проверяем, не является ли выбранный товар тарой
+            if (selectedProduct.TARA === true) {
+                tg.showAlert("Нельзя добавить тару в остатки");
                 return;
             }
             
