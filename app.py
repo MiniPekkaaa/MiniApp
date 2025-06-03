@@ -982,9 +982,6 @@ def create_1c_order():
         logger.debug(f"Создано {len(catalog_uid_by_id)} сопоставлений ID->UID")
         logger.debug(f"Создано {len(catalog_uid_by_name)} сопоставлений name->UID")
             
-        # Группируем товары по legalEntity
-        items_by_legal_entity = {}
-        
         # Сначала находим все доступные legalEntity из позиций, которые не являются тарой
         available_legal_entities = []
         for item in data.get('items', []):
@@ -993,17 +990,20 @@ def create_1c_order():
             if not is_tara and legal_entity is not None:
                 available_legal_entities.append(legal_entity)
         
-        # Если у нас есть доступные legalEntity, используем первый из них для позиций с TARA=true
-        default_legal_entity = available_legal_entities[0] if available_legal_entities else "2724132975"
+        # Всегда используем стандартное значение для тары
+        default_legal_entity = "2724132975"
+        
+        # Группируем товары по legalEntity
+        items_by_legal_entity = {}
         
         for item in data.get('items', []):
             is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
             
-            # Если это тара и нет legalEntity, используем дефолтный
-            if is_tara and (legal_entity is None or not str(legal_entity).strip() or legal_entity == 1):
+            # Для тары всегда используем стандартный legalEntity
+            if is_tara:
                 legal_entity = default_legal_entity
-                logger.debug(f"Для тары {item.get('name')} установлен legalEntity: {legal_entity} из других позиций")
+                logger.debug(f"Для тары {item.get('name')} установлен legalEntity: {legal_entity}")
             
             if legal_entity not in items_by_legal_entity:
                 items_by_legal_entity[legal_entity] = []
