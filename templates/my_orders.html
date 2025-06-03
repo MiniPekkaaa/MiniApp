@@ -536,56 +536,31 @@
                         // Пробуем получить дату в различных форматах
                         let dateA, dateB;
                         
-                        // Для заказов из MongoDB используем createdAt или дату из строки
-                        if (a.created_at) {
-                            // Преобразуем строку вида "03.06.25 13:53" в объект Date
-                            const dateParts = a.created_at.split(' ');
-                            if (dateParts.length === 2) {
-                                const [datePart, timePart] = dateParts;
-                                const [day, month, year] = datePart.split('.');
-                                const [hour, minute] = timePart.split(':');
-                                
-                                // Создаем дату в формате 2025-06-03T13:53:00
-                                dateA = new Date(2000 + parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
-                            } else {
-                                dateA = new Date(a.created_at);
-                            }
-                        } else if (a.order1C && a.order1C.DATE_UNIX) {
+                        // Для заказов из 1С
+                        if (a.order1C && a.order1C.DATE_UNIX) {
                             dateA = new Date(parseInt(a.order1C.DATE_UNIX) * 1000);
+                        } else if (a.created_at) {
+                            dateA = new Date(a.created_at);
                         } else {
                             dateA = new Date(0);
                         }
                         
-                        // Аналогично для объекта B
-                        if (b.created_at) {
-                            const dateParts = b.created_at.split(' ');
-                            if (dateParts.length === 2) {
-                                const [datePart, timePart] = dateParts;
-                                const [day, month, year] = datePart.split('.');
-                                const [hour, minute] = timePart.split(':');
-                                
-                                dateB = new Date(2000 + parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
-                            } else {
-                                dateB = new Date(b.created_at);
-                            }
-                        } else if (b.order1C && b.order1C.DATE_UNIX) {
+                        if (b.order1C && b.order1C.DATE_UNIX) {
                             dateB = new Date(parseInt(b.order1C.DATE_UNIX) * 1000);
+                        } else if (b.created_at) {
+                            dateB = new Date(b.created_at);
                         } else {
                             dateB = new Date(0);
                         }
                         
-                        // Если не смогли правильно определить даты, используем текущую дату для сравнения
-                        if (isNaN(dateA.getTime())) dateA = new Date();
-                        if (isNaN(dateB.getTime())) dateB = new Date();
-                        
                         return dateB - dateA;
                     });
                     
-                    // Ограничиваем до 10 последних заказов ПЕРЕД запросом статусов
-                    const limitedOrders = matchedOrders.slice(0, 10);
+                    // Ограничиваем до 5 последних заказов ПЕРЕД запросом статусов
+                    const limitedOrders = matchedOrders.slice(0, 5);
                     console.log(`[${formatTime(new Date())}] Ограничили список до ${limitedOrders.length} заказов для получения статусов`);
                     
-                    // Получаем статусы только для этих 10 заказов
+                    // Получаем статусы только для этих 5 заказов
                     return processOrderStatuses(limitedOrders);
                 })
                 .then(ordersWithStatuses => {
@@ -638,35 +613,20 @@
                 ordersMongo = [];
             }
             
-            // Сначала обрабатываем заказы из MongoDB, чтобы они отображались первыми
+            // Сначала добавляем заказы из MongoDB
             for (const orderMongo of ordersMongo) {
-                // Проверяем, содержит ли заказ необходимые поля
-                if (!orderMongo || !orderMongo.order_ID) {
-                    console.warn("Пропускаем заказ из MongoDB без ID:", orderMongo);
-                    continue;
-                }
-                
                 // Добавляем заказ из MongoDB
                 console.log(`Добавляем заказ из MongoDB: ID ${orderMongo.order_ID}`);
                 processedMongoIds.add(orderMongo.order_ID);
+                matchedOrders.push(orderMongo);
                 
-                // Преобразуем объект ordersUID в массив для более удобной работы
-                if (orderMongo.ordersUID && typeof orderMongo.ordersUID === 'object') {
-                    // Если у заказа есть ordersUID, добавляем их в Set обработанных UID
+                // Если у заказа есть ordersUID, добавляем их в Set обработанных UID
+                if (orderMongo.ordersUID && Object.keys(orderMongo.ordersUID).length > 0) {
                     for (const [key, uid] of Object.entries(orderMongo.ordersUID)) {
-                        if (uid) {
-                            processedOrderUIDs.add(uid);
-                            console.log(`Добавлен UID ${uid} в список обработанных`);
-                        }
+                        processedOrderUIDs.add(uid);
+                        console.log(`Добавлен UID ${uid} в список обработанных`);
                     }
                 }
-                
-                // Если в заказе нет позиций, создаем пустой массив
-                if (!orderMongo.positions || !Array.isArray(orderMongo.positions)) {
-                    orderMongo.positions = [];
-                }
-                
-                matchedOrders.push(orderMongo);
             }
             
             // Затем проверяем заказы из 1С и добавляем только те, которых еще нет
@@ -695,8 +655,8 @@
                             id: pos.ID_NOM,
                             name: pos.NAME || 'Неизвестный товар',
                             quantity: pos.AMOUNT || 0,
-                            price: pos.PRICE || 0, // Если есть цена в данных 1С, используем ее
-                            legal_entity: pos.INN_legal_entity || 1 // Если есть, используем INN
+                            price: 0, // Цена неизвестна из данных 1С
+                            legal_entity: 1 // Значение по умолчанию
                         });
                     });
                 }
@@ -705,33 +665,10 @@
                 let created_at = 'Неизвестно';
                 if (order1C.DATE) {
                     try {
-                        // Парсим дату из 1С в формате строки
                         const date = new Date(order1C.DATE);
-                        created_at = date.toLocaleDateString('ru-RU', {
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: '2-digit', 
-                            hour: '2-digit', 
-                            minute: '2-digit'
-                        }).replace(',', '');
+                        created_at = date.toLocaleDateString('ru-RU');
                     } catch (e) {
                         console.warn(`Ошибка форматирования даты: ${order1C.DATE}`, e);
-                        
-                        // Если не удалось распарсить дату, пробуем использовать DATE_UNIX
-                        if (order1C.DATE_UNIX) {
-                            try {
-                                const date = new Date(parseInt(order1C.DATE_UNIX) * 1000);
-                                created_at = date.toLocaleDateString('ru-RU', {
-                                    day: '2-digit', 
-                                    month: '2-digit', 
-                                    year: '2-digit', 
-                                    hour: '2-digit', 
-                                    minute: '2-digit'
-                                }).replace(',', '');
-                            } catch (e2) {
-                                console.warn(`Ошибка форматирования DATE_UNIX: ${order1C.DATE_UNIX}`, e2);
-                            }
-                        }
                     }
                 }
                 
@@ -739,7 +676,7 @@
                 const order1COnly = {
                     order_ID: order1C.ID_ORDER,
                     created_at: created_at,
-                    status: order1C.STATUS || 'Выполнен', // Используем статус из 1С или по умолчанию
+                    status: 'Выполнен', // Предполагаем, что заказы из 1С уже выполнены
                     positions: positions,
                     order1C: order1C
                 };
@@ -821,10 +758,7 @@
             orders.forEach((order, index) => {
                 // Определяем дату и статус в зависимости от источника заказа
                 let date = order.created_at || 'Неизвестно';
-                let status = order.status || 'В обработке';
-                
-                // Приведем статус к нормальному виду
-                if (status === 'in work') status = 'В обработке';
+                let status = order.status || 'in work';
                 
                 // Считаем общую сумму заказа и количество позиций
                 let totalPrice = 0;
@@ -837,14 +771,6 @@
                         const quantity = parseInt(position.quantity) || 0;
                         totalPrice += price * quantity;
                     });
-                }
-                
-                // Если позиций нет или сумма равна 0, проверяем есть ли заказы в 1С
-                if (totalPrice === 0 && order.order1C) {
-                    // Пытаемся получить сумму из заказа 1С
-                    if (order.order1C.TOTAL) {
-                        totalPrice = parseFloat(order.order1C.TOTAL) || 0;
-                    }
                 }
                 
                 ordersHTML += `
@@ -1050,38 +976,8 @@
                             const data = await response.json();
                             
                             if (data.success && data.status) {
-                                let status = data.status;
-                                
-                                // Преобразуем строку статуса к объекту, если она пришла в формате JSON строки
-                                if (typeof status === 'string' && status.startsWith('{') && status.endsWith('}')) {
-                                    try {
-                                        const statusObj = JSON.parse(status);
-                                        if (statusObj.STATUS) {
-                                            status = statusObj.STATUS;
-                                        }
-                                    } catch (e) {
-                                        // Если не удалось распарсить, оставляем как есть
-                                    }
-                                }
-                                
-                                // Преобразуем статус к читаемому виду
-                                if (typeof status === 'string') {
-                                    // Для русских статусов
-                                    if (status.toLowerCase().includes('отгруж')) {
-                                        status = 'Отгружен';
-                                    } else if (status.toLowerCase().includes('выполн')) {
-                                        status = 'Выполнен';
-                                    } else if (status.toLowerCase().includes('отмен')) {
-                                        status = 'Отменен';
-                                    } else if (status.toLowerCase().includes('нов')) {
-                                        status = 'Новый';
-                                    } else if (status.toLowerCase().includes('обработ') || status.toLowerCase().includes('работ')) {
-                                        status = 'В обработке';
-                                    }
-                                }
-                                
-                                console.log(`[${formatTime(new Date())}] Получен статус для заказа UID ${uid}: ${status}`);
-                                ordersWithStatuses[index].status = status;
+                                console.log(`[${formatTime(new Date())}] Получен статус для заказа UID ${uid}: ${data.status}`);
+                                ordersWithStatuses[index].status = data.status;
                             } else {
                                 console.warn(`[${formatTime(new Date())}] Не удалось получить статус для заказа UID ${uid}:`, data.error || 'Неизвестная ошибка');
                             }
@@ -1102,6 +998,8 @@
                 } catch (error) {
                     console.error(`[${formatTime(new Date())}] Ошибка при выполнении запросов статусов:`, error);
                 }
+            } else {
+                console.log(`[${formatTime(new Date())}] Нет заказов для запроса статусов`);
             }
             
             return ordersWithStatuses;

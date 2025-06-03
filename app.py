@@ -500,7 +500,6 @@ def get_orders():
         logger.debug(f'Начало запроса к MongoDB: {(query_time_start - start_time).total_seconds():.3f} сек')
         
         # Убираем любое кеширование, всегда запрашиваем актуальные данные
-        # Запрашиваем все заказы по org_ID без фильтрации по статусу
         orders = list(mongo.cx.Pivo.Orders.find(
             {'org_ID': org_id},
             {
@@ -511,7 +510,7 @@ def get_orders():
                 '_id': 1,
                 'createdAt': 1  # Добавляем поле createdAt для более точной сортировки
             }
-        ).sort([('createdAt', -1), ('date', -1)]).limit(20))  # Увеличиваем лимит до 20, чтобы гарантировать наличие заказов
+        ).sort([('createdAt', -1), ('date', -1)]).limit(10))  # Увеличиваем лимит до 10 и добавляем двойную сортировку
         
         query_time_end = datetime.now()
         logger.debug(f'Запрос к MongoDB выполнен за: {(query_time_end - query_time_start).total_seconds():.3f} сек, получено {len(orders)} заказов')
