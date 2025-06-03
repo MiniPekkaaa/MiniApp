@@ -287,10 +287,6 @@
                 <h3>Добавить новый остаток</h3>
                 <div class="search-container">
                     <input type="text" id="product_search" class="search-input" placeholder="Поиск товара...">
-                    <div class="filter-buttons">
-                        <button id="filter-beer" class="button active-filter" onclick="filterProducts('beer')">Пиво</button>
-                        <button id="filter-tara" class="button" onclick="filterProducts('tara')">Тара</button>
-                    </div>
                     <div id="product_dropdown" class="dropdown-list">
                         <!-- Здесь будет список товаров -->
                     </div>
@@ -328,7 +324,6 @@
         let initialProducts = {{ products|tojson|safe }};
         let selectedProduct = null;
         const remainders = [];
-        let currentFilter = 'beer'; // По умолчанию показываем пиво (не тару)
         
         // Флаг для отслеживания начальной загрузки
         window.initialLoadComplete = false;
@@ -386,61 +381,44 @@
             }
         });
 
-        // Функция для фильтрации продуктов (пиво/тара)
-        function filterProducts(filterType) {
-            // Если нажали на уже активную кнопку, сбрасываем фильтр
-            if (currentFilter === filterType) {
-                currentFilter = 'all';
-                document.getElementById('filter-beer').classList.remove('active-filter');
-                document.getElementById('filter-tara').classList.remove('active-filter');
-            } else {
-                currentFilter = filterType;
-                
-                // Обновляем активную кнопку
-                document.getElementById('filter-beer').classList.remove('active-filter');
-                document.getElementById('filter-tara').classList.remove('active-filter');
-                document.getElementById('filter-' + filterType).classList.add('active-filter');
-            }
-            
-            // Применяем фильтр к текущему поисковому запросу
+        // Функция для фильтрации продуктов
+        function filterProducts() {
             const searchText = searchInput.value.toLowerCase();
-            const filteredProducts = initialProducts.filter(product => 
-                (product.name.toLowerCase().includes(searchText) ||
-                (product.fullName && product.fullName.toLowerCase().includes(searchText)))
-            );
+            const filteredProducts = initialProducts.filter(function(product) {
+                return (product.name.toLowerCase().includes(searchText) ||
+                    (product.fullName && product.fullName.toLowerCase().includes(searchText)));
+            });
             
             updateDropdownList(filteredProducts);
         }
 
         function updateDropdownList(filteredProducts) {
+            // Очищаем выпадающий список
             dropdownList.innerHTML = '';
             
-            if (filteredProducts.length > 0) {
-                // Фильтруем по TARA в зависимости от выбранного фильтра
-                const taraFilteredProducts = filteredProducts.filter(product => {
-                    if (currentFilter === 'beer') {
-                        return product.TARA !== true;
-                    } else if (currentFilter === 'tara') {
-                        return product.TARA === true;
-                    }
-                    return true; // Если фильтр сброшен, показываем все
+            // Если есть подходящие товары
+            if (filteredProducts && filteredProducts.length > 0) {
+                // Фильтруем только пиво (исключаем тару)
+                const beerProducts = filteredProducts.filter(function(product) {
+                    return product.TARA !== true;
                 });
                 
                 // Сортируем товары по алфавиту
-                const sortedProducts = taraFilteredProducts.slice().sort(function(a, b) {
+                const sortedProducts = beerProducts.slice().sort(function(a, b) {
                     if (!a.name || !b.name) return 0;
                     return a.name.localeCompare(b.name, 'ru');
                 });
                 
                 console.log('Товары отсортированы по алфавиту:', 
-                    sortedProducts.slice(0, 5).map(p => p.name));
+                    sortedProducts.slice(0, 5).map(function(p) { return p.name; }));
                 
-                sortedProducts.forEach(product => {
+                // Добавляем каждый товар в выпадающий список
+                sortedProducts.forEach(function(product) {
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
                     item.innerHTML = `${product.name} (${product.volume}л)`;
                     
-                    item.addEventListener('click', () => {
+                    item.addEventListener('click', function() {
                         selectedProduct = product;
                         searchInput.value = product.name;
                         dropdownList.classList.remove('active');
@@ -449,8 +427,10 @@
                     dropdownList.appendChild(item);
                 });
                 
+                // Показываем выпадающий список
                 dropdownList.classList.add('active');
             } else {
+                // Скрываем выпадающий список, если нет подходящих товаров
                 dropdownList.classList.remove('active');
             }
         }

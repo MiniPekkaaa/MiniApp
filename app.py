@@ -1001,7 +1001,7 @@ def create_1c_order():
             legal_entity = item.get('legalEntity')
             
             # Если это тара и нет legalEntity, используем дефолтный
-            if is_tara and (legal_entity is None or not str(legal_entity).strip()):
+            if is_tara and (legal_entity is None or not str(legal_entity).strip() or legal_entity == 1):
                 legal_entity = default_legal_entity
                 logger.debug(f"Для тары {item.get('name')} установлен legalEntity: {legal_entity} из других позиций")
             
