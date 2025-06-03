@@ -598,7 +598,6 @@
         function matchOrdersFromBothSources(orders1C, ordersMongo) {
             const matchedOrders = [];
             const processedMongoIds = new Set();
-            const processedOrderUIDs = new Set(); // Для отслеживания уже добавленных заказов из 1C
             
             console.log(`Обработка ${orders1C ? orders1C.length : 0} заказов из 1С и ${ordersMongo ? ordersMongo.length : 0} заказов из MongoDB`);
             
@@ -611,90 +610,18 @@
             if (!ordersMongo || !Array.isArray(ordersMongo)) {
                 console.warn("Данные заказов из MongoDB отсутствуют или имеют неверный формат");
                 ordersMongo = [];
-                // Если в MongoDB нет заказов, возвращаем пустой массив
-                console.log("В MongoDB нет заказов, не будем добавлять заказы из 1С");
-                return [];
+                return []; // Возвращаем пустой массив, если нет заказов в MongoDB
             }
             
-            // Если в MongoDB нет заказов, не добавляем заказы из 1С
-            if (ordersMongo.length === 0) {
-                console.log("В MongoDB нет заказов, не будем добавлять заказы из 1С");
-                return [];
-            }
-            
-            // Сначала добавляем заказы из MongoDB
+            // Отображаем только заказы из MongoDB
             for (const orderMongo of ordersMongo) {
                 // Добавляем заказ из MongoDB
                 console.log(`Добавляем заказ из MongoDB: ID ${orderMongo.order_ID}`);
                 processedMongoIds.add(orderMongo.order_ID);
                 matchedOrders.push(orderMongo);
-                
-                // Если у заказа есть ordersUID, добавляем их в Set обработанных UID
-                if (orderMongo.ordersUID && Object.keys(orderMongo.ordersUID).length > 0) {
-                    for (const [key, uid] of Object.entries(orderMongo.ordersUID)) {
-                        processedOrderUIDs.add(uid);
-                        console.log(`Добавлен UID ${uid} в список обработанных`);
-                    }
-                }
             }
             
-            // Затем проверяем заказы из 1С и добавляем только те, которых еще нет
-            for (const order1C of orders1C) {
-                // Получаем ID заказа из 1С
-                const orderId1C = order1C.ID_ORDER;
-                if (!orderId1C) {
-                    console.warn("Заказ из 1С не имеет ID_ORDER:", order1C);
-                    continue;
-                }
-                
-                // Проверяем, не был ли этот заказ уже добавлен из MongoDB
-                if (processedOrderUIDs.has(orderId1C)) {
-                    console.log(`Пропускаем заказ из 1С ${orderId1C}, так как он уже был добавлен из MongoDB`);
-                    continue;
-                }
-                
-                // Если заказ еще не был добавлен, создаем его из данных 1C
-                console.log(`Заказ из 1С ${orderId1C} не найден в MongoDB, добавляем как отдельный заказ`);
-                
-                // Создаем позиции из данных 1С
-                const positions = [];
-                if (order1C.positions && Array.isArray(order1C.positions)) {
-                    order1C.positions.forEach(pos => {
-                        positions.push({
-                            id: pos.ID_NOM,
-                            name: pos.NAME || 'Неизвестный товар',
-                            quantity: pos.AMOUNT || 0,
-                            price: 0, // Цена неизвестна из данных 1С
-                            legal_entity: 1 // Значение по умолчанию
-                        });
-                    });
-                }
-                
-                // Формируем дату из данных 1С
-                let created_at = 'Неизвестно';
-                if (order1C.DATE) {
-                    try {
-                        const date = new Date(order1C.DATE);
-                        created_at = date.toLocaleDateString('ru-RU');
-                    } catch (e) {
-                        console.warn(`Ошибка форматирования даты: ${order1C.DATE}`, e);
-                    }
-                }
-                
-                // Создаем заказ из данных 1С
-                const order1COnly = {
-                    order_ID: order1C.ID_ORDER,
-                    created_at: created_at,
-                    status: 'Выполнен', // Предполагаем, что заказы из 1С уже выполнены
-                    positions: positions,
-                    order1C: order1C
-                };
-                
-                matchedOrders.push(order1COnly);
-                processedOrderUIDs.add(orderId1C);
-            }
-            
-            console.log(`Итого создано ${matchedOrders.length} заказов`);
+            console.log(`Итого отображаем ${matchedOrders.length} заказов из MongoDB`);
             return matchedOrders;
         }
         
