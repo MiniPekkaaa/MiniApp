@@ -984,12 +984,37 @@ def create_1c_order():
             
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
+        
+        # Сначала находим все доступные legalEntity из позиций, которые не являются тарой
+        available_legal_entities = []
         for item in data.get('items', []):
+            is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
+            if not is_tara and legal_entity is not None:
+                available_legal_entities.append(legal_entity)
+        
+        # Если у нас есть доступные legalEntity, используем первый из них для позиций с TARA=true
+        default_legal_entity = available_legal_entities[0] if available_legal_entities else "2724132975"
+        
+        for item in data.get('items', []):
+            is_tara = item.get('TARA', False)
+            legal_entity = item.get('legalEntity')
+            
+            # Если это тара и нет legalEntity, используем дефолтный
+            if is_tara and (legal_entity is None or not str(legal_entity).strip()):
+                legal_entity = default_legal_entity
+                logger.debug(f"Для тары {item.get('name')} установлен legalEntity: {legal_entity} из других позиций")
+            
             if legal_entity not in items_by_legal_entity:
                 items_by_legal_entity[legal_entity] = []
-            items_by_legal_entity[legal_entity].append(item)
             
+            # Создаем копию позиции с обновленным legalEntity для тары
+            item_copy = dict(item)
+            if is_tara:
+                item_copy['legalEntity'] = legal_entity
+                
+            items_by_legal_entity[legal_entity].append(item_copy)
+        
         logger.debug(f"Товары сгруппированы по legalEntity: {len(items_by_legal_entity)} групп")
         # Логируем группировку
         for legal_entity, items in items_by_legal_entity.items():
