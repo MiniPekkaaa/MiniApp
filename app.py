@@ -56,17 +56,7 @@ def check_admin_access(user_id):
         # Получаем значение Admin из Redis
         admin_id = redis_client.hget('beer:setting', 'Admin')
         logger.debug(f"Admin ID from Redis: {admin_id}, User ID: {user_id}")
-        
-        # Добавляем более подробные логи для отладки
-        if admin_id is None:
-            logger.error("Admin ID not found in Redis (beer:setting:Admin is None)")
-            return False
-            
-        # Приводим оба значения к строковому типу и сравниваем
-        is_admin = str(user_id) == str(admin_id)
-        logger.debug(f"Is user {user_id} admin? {is_admin}")
-        
-        return is_admin
+        return str(user_id) == str(admin_id)
     except Exception as e:
         logger.error(f"Error checking admin access: {str(e)}")
         return False
@@ -91,14 +81,13 @@ def index():
         if not user_id:
             return render_template('unauthorized.html')
 
-        # Проверяем, является ли пользователь администратором (без проверки регистрации)
-        if check_admin_access(user_id):
-            logger.info(f"User {user_id} identified as admin, redirecting to admin panel")
-            return redirect(f'/admin_panel?user_id={user_id}')
-
-        # Проверяем регистрацию обычного пользователя
+        # Проверяем регистрацию пользователя
         if not check_user_registration(user_id):
             return render_template('unauthorized.html')
+
+        # Проверяем, является ли пользователь администратором
+        if check_admin_access(user_id):
+            return redirect(f'/admin_panel?user_id={user_id}')
 
         return render_template('main_menu.html', user_id=user_id)
     
@@ -111,15 +100,10 @@ def admin_panel():
     try:
         user_id = request.args.get('user_id')
         if not user_id:
-            logger.warning("Admin panel access attempt without user_id")
             return redirect('/')
 
-        # Проверяем права администратора (без проверки регистрации)
-        is_admin = check_admin_access(user_id)
-        logger.info(f"Admin panel access: user_id={user_id}, is_admin={is_admin}")
-        
-        if not is_admin:
-            logger.warning(f"Unauthorized admin panel access attempt by user {user_id}")
+        # Проверяем регистрацию и права администратора
+        if not check_user_registration(user_id) or not check_admin_access(user_id):
             return redirect('/')
 
         return render_template('admin_panel.html', user_id=user_id)
