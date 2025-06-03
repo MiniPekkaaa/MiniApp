@@ -81,14 +81,17 @@ def index():
         if not user_id:
             return render_template('unauthorized.html')
 
-        # Проверяем регистрацию пользователя
+        # Сначала проверяем, является ли пользователь администратором
+        if check_admin_access(user_id):
+            # Если админ, сразу перенаправляем в админ-панель
+            # Проверка регистрации для админа здесь не нужна
+            return redirect(f'/admin_panel?user_id={user_id}')
+
+        # Если не админ, тогда проверяем регистрацию
         if not check_user_registration(user_id):
             return render_template('unauthorized.html')
 
-        # Проверяем, является ли пользователь администратором
-        if check_admin_access(user_id):
-            return redirect(f'/admin_panel?user_id={user_id}')
-
+        # Если зарегистрирован и не админ, показываем главное меню
         return render_template('main_menu.html', user_id=user_id)
     
     except Exception as e:
@@ -102,11 +105,17 @@ def admin_panel():
         if not user_id:
             return redirect('/')
 
-        # Проверяем регистрацию и права администратора
-        if not check_user_registration(user_id) or not check_admin_access(user_id):
-            return redirect('/')
+        # Для доступа в админ-панель проверяем ТОЛЬКО права администратора
+        if not check_admin_access(user_id):
+            # Если не админ, перенаправляем на главную (или страницу ошибки)
+            return redirect('/') 
 
         return render_template('admin_panel.html', user_id=user_id)
     except Exception as e:
         logger.error(f"Error in admin_panel route: {str(e)}", exc_info=True)
         return f"Error: {str(e)}", 500
+
+@app.route('/api/get-coefficient')
+def get_coefficient():
+    # Implementation of the route
+    pass
