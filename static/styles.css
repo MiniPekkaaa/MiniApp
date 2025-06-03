@@ -316,31 +316,3 @@ input:focus + .slider {
 input:checked + .slider:before {
     transform: translateX(18px);
 }
-
-/* Стили для кнопок фильтрации (Пиво/Тара) */
-.filter-buttons {
-    display: flex;
-    margin: 10px 0;
-    gap: 10px;
-}
-
-.filter-buttons .button {
-    margin: 0;
-    flex: 1;
-    border: 2px solid transparent;
-    transition: all 0.3s ease;
-}
-
-.filter-buttons .button.active-filter {
-    background-color: var(--tg-theme-button-color);
-    color: var(--tg-theme-button-text-color);
-    border-color: var(--tg-theme-button-color);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transform: translateY(-2px);
-}
-
-.filter-buttons .button:not(.active-filter) {
-    background-color: var(--tg-theme-secondary-bg-color);
-    color: var(--tg-theme-text-color);
-    border-color: var(--tg-theme-hint-color);
-}

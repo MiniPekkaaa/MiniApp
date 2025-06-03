@@ -288,7 +288,7 @@
                 <div class="search-container">
                     <input type="text" id="product_search" class="search-input" placeholder="Поиск товара...">
                     <div id="product_dropdown" class="dropdown-list">
-                        <!-- Здесь будет список товаров -->
+                        <!-- Список товаров будет добавлен динамически -->
                     </div>
                 </div>
                 <div class="quantity-controls">
@@ -363,8 +363,8 @@
         searchInput.addEventListener('input', function() {
             const searchText = this.value.toLowerCase();
             const filteredProducts = initialProducts.filter(product => 
-                (product.name.toLowerCase().includes(searchText) ||
-                (product.fullName && product.fullName.toLowerCase().includes(searchText)))
+                product.name.toLowerCase().includes(searchText) ||
+                product.fullName.toLowerCase().includes(searchText)
             );
             
             updateDropdownList(filteredProducts);
@@ -381,44 +381,30 @@
             }
         });
 
-        // Функция для фильтрации продуктов
-        function filterProducts() {
-            const searchText = searchInput.value.toLowerCase();
-            const filteredProducts = initialProducts.filter(function(product) {
-                return (product.name.toLowerCase().includes(searchText) ||
-                    (product.fullName && product.fullName.toLowerCase().includes(searchText)));
-            });
-            
-            updateDropdownList(filteredProducts);
-        }
-
         function updateDropdownList(filteredProducts) {
-            // Очищаем выпадающий список
             dropdownList.innerHTML = '';
             
-            // Если есть подходящие товары
-            if (filteredProducts && filteredProducts.length > 0) {
-                // Фильтруем только пиво (исключаем тару)
-                const beerProducts = filteredProducts.filter(function(product) {
-                    return product.TARA !== true;
-                });
+            if (filteredProducts.length > 0) {
+                // Фильтруем товары, исключая те, у которых TARA=true
+                const nonTaraProducts = filteredProducts.filter(product => product.TARA !== true);
+                
+                console.log(`Отфильтровано ${filteredProducts.length - nonTaraProducts.length} товаров с TARA=true из списка`);
                 
                 // Сортируем товары по алфавиту
-                const sortedProducts = beerProducts.slice().sort(function(a, b) {
+                const sortedProducts = nonTaraProducts.slice().sort(function(a, b) {
                     if (!a.name || !b.name) return 0;
                     return a.name.localeCompare(b.name, 'ru');
                 });
                 
                 console.log('Товары отсортированы по алфавиту:', 
-                    sortedProducts.slice(0, 5).map(function(p) { return p.name; }));
+                    sortedProducts.slice(0, 5).map(p => p.name));
                 
-                // Добавляем каждый товар в выпадающий список
-                sortedProducts.forEach(function(product) {
+                sortedProducts.forEach(product => {
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
                     item.innerHTML = `${product.name} (${product.volume}л)`;
                     
-                    item.addEventListener('click', function() {
+                    item.addEventListener('click', () => {
                         selectedProduct = product;
                         searchInput.value = product.name;
                         dropdownList.classList.remove('active');
@@ -427,10 +413,8 @@
                     dropdownList.appendChild(item);
                 });
                 
-                // Показываем выпадающий список
                 dropdownList.classList.add('active');
             } else {
-                // Скрываем выпадающий список, если нет подходящих товаров
                 dropdownList.classList.remove('active');
             }
         }
