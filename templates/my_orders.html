@@ -611,6 +611,15 @@
             if (!ordersMongo || !Array.isArray(ordersMongo)) {
                 console.warn("Данные заказов из MongoDB отсутствуют или имеют неверный формат");
                 ordersMongo = [];
+                // Если в MongoDB нет заказов, возвращаем пустой массив
+                console.log("В MongoDB нет заказов, не будем добавлять заказы из 1С");
+                return [];
+            }
+            
+            // Если в MongoDB нет заказов, не добавляем заказы из 1С
+            if (ordersMongo.length === 0) {
+                console.log("В MongoDB нет заказов, не будем добавлять заказы из 1С");
+                return [];
             }
             
             // Сначала добавляем заказы из MongoDB
