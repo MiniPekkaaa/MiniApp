@@ -7,6 +7,7 @@ import redis
 from datetime import datetime, timedelta
 import pytz
 import requests
+import random
 
 # Настройка логирования
 logging.basicConfig(
@@ -984,12 +985,57 @@ def create_1c_order():
             
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
+        
+        # Сначала собираем все legalEntity из позиций, которые не являются тарой
+        non_tara_legal_entities = []
         for item in data.get('items', []):
+            is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
-            if legal_entity not in items_by_legal_entity:
-                items_by_legal_entity[legal_entity] = []
-            items_by_legal_entity[legal_entity].append(item)
+            if not is_tara and legal_entity is not None and legal_entity != 1:
+                # Проверяем, что legalEntity не равен 1
+                if str(legal_entity) not in non_tara_legal_entities:
+                    non_tara_legal_entities.append(str(legal_entity))
+        
+        logger.debug(f"Найдены legalEntity из позиций не-тара: {non_tara_legal_entities}")
+        
+        # Определяем, какой legalEntity использовать для тары
+        tara_legal_entity = None
+        if non_tara_legal_entities:
+            # Если есть legalEntity от не-тары, используем первый
+            tara_legal_entity = non_tara_legal_entities[0]
+            logger.debug(f"Для тары будет использован legalEntity из других позиций: {tara_legal_entity}")
+        else:
+            # Если нет, используем одно из стандартных значений
+            standard_legal_entities = ["2724132975", "2724163243"]
+            tara_legal_entity = random.choice(standard_legal_entities)
+            logger.debug(f"Для тары будет использован случайно выбранный legalEntity: {tara_legal_entity}")
+        
+        # Теперь группируем товары, обрабатывая тару специальным образом
+        for item in data.get('items', []):
+            is_tara = item.get('TARA', False)
+            legal_entity = item.get('legalEntity')
             
+            # Если это тара или legalEntity некорректный, используем tara_legal_entity
+            if is_tara or legal_entity == 1 or legal_entity is None or not str(legal_entity).strip():
+                legal_entity = tara_legal_entity
+                # Создаем копию товара с обновленным legalEntity
+                item_copy = dict(item)
+                item_copy['legalEntity'] = legal_entity
+                
+                if is_tara:
+                    logger.debug(f"Для тары '{item.get('name')}' установлен legalEntity: {legal_entity}")
+                
+                if legal_entity not in items_by_legal_entity:
+                    items_by_legal_entity[legal_entity] = []
+                
+                items_by_legal_entity[legal_entity].append(item_copy)
+            else:
+                # Для обычных товаров с корректным legalEntity
+                if legal_entity not in items_by_legal_entity:
+                    items_by_legal_entity[legal_entity] = []
+                
+                items_by_legal_entity[legal_entity].append(item)
+        
         logger.debug(f"Товары сгруппированы по legalEntity: {len(items_by_legal_entity)} групп")
         # Логируем группировку
         for legal_entity, items in items_by_legal_entity.items():
