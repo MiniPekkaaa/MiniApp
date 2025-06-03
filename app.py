@@ -2106,5 +2106,88 @@ def get_shipped_orders_positions():
             "error": str(e)
         }), 500
 
+@app.route('/api/get-shipped-orders-for-input')
+def get_shipped_orders_for_input():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"success": False, "error": "User ID is required"}), 400
+            
+        logger.debug(f"Получение отгруженных заказов для ввода остатков (пользователь {user_id})")
+        
+        # Получаем данные пользователя из Redis для получения org_ID
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"success": False, "error": "Organization ID not found"}), 400
+            
+        logger.debug(f"Получение заказов для организации {org_id}")
+        
+        # Получаем последние 10 заказов организации, отсортированные по дате создания
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {"org_ID": org_id},
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(10))
+        
+        logger.debug(f"Найдено {len(orders)} последних заказов")
+        
+        # Фильтруем заказы со статусом "Отгружен" и ограничиваем до 3
+        shipped_orders = []
+        
+        for order in orders:
+            # Проверяем статус заказа (если статус не указан, считаем его "Новый")
+            status = order.get('status', 'Новый')
+            
+            # Проверяем, является ли статус "Отгружен" или подобным
+            status_lower = status.lower()
+            if 'отгруж' in status_lower or 'выполнен' in status_lower or 'доставлен' in status_lower:
+                # Форматируем заказ для ответа API
+                formatted_order = {
+                    'order_ID': str(order.get('_id')),
+                    'date': order.get('date', ''),
+                    'status': status,
+                    'positions': []
+                }
+                
+                # Преобразуем позиции из словаря в список
+                positions = order.get('Positions', {})
+                for pos_key, position in positions.items():
+                    beer_id = position.get('Beer_ID')
+                    beer_name = position.get('Beer_Name')
+                    legal_entity = position.get('Legal_Entity', 1)
+                    quantity = position.get('Beer_Count', 0)
+                    price = position.get('Price', 0)
+                    
+                    if beer_id is not None and beer_name:
+                        formatted_order['positions'].append({
+                            'id': str(beer_id),
+                            'name': beer_name,
+                            'legal_entity': legal_entity,
+                            'quantity': quantity,
+                            'price': price
+                        })
+                
+                shipped_orders.append(formatted_order)
+                logger.debug(f"Добавлен отгруженный заказ: {order.get('_id')}")
+                
+                # Если уже нашли 3 заказа, выходим из цикла
+                if len(shipped_orders) >= 3:
+                    break
+        
+        logger.debug(f"Найдено {len(shipped_orders)} отгруженных заказов для ввода остатков")
+        
+        return jsonify({
+            "success": True,
+            "orders": shipped_orders
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении отгруженных заказов для ввода остатков: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

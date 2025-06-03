@@ -694,7 +694,10 @@
             orders.forEach((order, index) => {
                 // Определяем дату и статус в зависимости от источника заказа
                 let date = order.created_at || 'Неизвестно';
-                let status = order.status || 'in work';
+                let status = order.status || 'Новый';
+                
+                // Нормализуем статус для правильного отображения
+                status = normalizeOrderStatus(status);
                 
                 // Считаем общую сумму заказа и количество позиций
                 let totalPrice = 0;
@@ -734,6 +737,25 @@
             
             // Сохраняем заказы в глобальной переменной для последующего использования
             window.mongoOrdersData = orders;
+        }
+        
+        // Функция для нормализации статуса заказа
+        function normalizeOrderStatus(status) {
+            if (!status) return "Новый";
+            
+            const statusLower = status.toLowerCase();
+            
+            if (statusLower.includes('нов') || statusLower.includes('в обработке')) {
+                return "Новый";
+            } else if (statusLower.includes('собр') || statusLower.includes('в работе')) {
+                return "Собран";
+            } else if (statusLower.includes('отгруж') || statusLower.includes('выполн') || statusLower.includes('доставл')) {
+                return "Отгружен";
+            } else if (statusLower.includes('оплач')) {
+                return "Оплачен";
+            }
+            
+            return status; // Возвращаем исходный статус, если не смогли сопоставить
         }
 
         function generateProductsHTMLFromMongo(positions) {
@@ -784,9 +806,6 @@
             
             // Сохраняем корзину в sessionStorage
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
-            
-            // Устанавливаем флаг, что нужно показать рекомендацию
-            sessionStorage.setItem('recommendation', 'Создан новый заказ на основе предыдущего. Цены будут обновлены при загрузке корзины.');
             
             // Перенаправляем на страницу корзины
             window.location.href = `/cart?user_id=${userId}`;
@@ -891,19 +910,60 @@
             for (let i = 0; i < ordersWithStatuses.length; i++) {
                 const order = ordersWithStatuses[i];
                 
-                // Определяем идентификатор заказа для запроса статуса
-                let orderUID = null;
-                
-                // Если есть ordersUID, берем первый UID
+                // Если у заказа есть ordersUID, получаем статусы для всех UID
                 if (order.ordersUID && Object.keys(order.ordersUID).length > 0) {
-                    orderUID = order.ordersUID[Object.keys(order.ordersUID)[0]];
+                    const orderUIDs = Object.values(order.ordersUID);
+                    console.log(`[${formatTime(new Date())}] Заказ ${i+1} имеет ${orderUIDs.length} UID`);
+                    
+                    // Создаем промисы для запроса статусов всех UID заказа
+                    const orderStatuses = [];
+                    
+                    for (const uid of orderUIDs) {
+                        const statusPromise = (async (uid) => {
+                            try {
+                                // Делаем прямой HTTP запрос к указанному URL
+                                const response = await fetch(`/api/proxy-order-status?uid=${uid}`);
+                                const data = await response.json();
+                                
+                                if (data.success && data.status) {
+                                    console.log(`[${formatTime(new Date())}] Получен статус для заказа UID ${uid}: ${data.status}`);
+                                    return data.status;
+                                } else {
+                                    console.warn(`[${formatTime(new Date())}] Не удалось получить статус для заказа UID ${uid}:`, data.error || 'Неизвестная ошибка');
+                                    return null;
+                                }
+                            } catch (error) {
+                                console.error(`[${formatTime(new Date())}] Ошибка при запросе статуса для заказа UID ${uid}:`, error);
+                                return null;
+                            }
+                        })(uid);
+                        
+                        orderStatuses.push(statusPromise);
+                    }
+                    
+                    // Добавляем промис, который обрабатывает все статусы данного заказа
+                    const orderStatusPromise = (async (index, statuses) => {
+                        try {
+                            const resolvedStatuses = await Promise.all(statuses);
+                            const filteredStatuses = resolvedStatuses.filter(status => status !== null);
+                            
+                            if (filteredStatuses.length > 0) {
+                                // Определяем наивысший статус согласно иерархии
+                                const highestStatus = determineHighestStatus(filteredStatuses);
+                                console.log(`[${formatTime(new Date())}] Наивысший статус для заказа ${index+1}: ${highestStatus}`);
+                                ordersWithStatuses[index].status = highestStatus;
+                            }
+                        } catch (error) {
+                            console.error(`[${formatTime(new Date())}] Ошибка при обработке статусов заказа ${index+1}:`, error);
+                        }
+                    })(i, orderStatuses);
+                    
+                    statusPromises.push(orderStatusPromise);
                 }
                 // Если есть 1C ID, используем его
                 else if (order.order1C && order.order1C.ID_ORDER) {
-                    orderUID = order.order1C.ID_ORDER;
-                }
-                
-                if (orderUID) {
+                    const orderUID = order.order1C.ID_ORDER;
+                    
                     // Создаем промис для запроса статуса заказа
                     const statusPromise = (async (index, uid) => {
                         try {
@@ -939,6 +999,34 @@
             }
             
             return ordersWithStatuses;
+        }
+        
+        // Функция для определения наивысшего статуса согласно иерархии
+        function determineHighestStatus(statuses) {
+            if (!statuses || statuses.length === 0) {
+                return "Новый";
+            }
+            
+            // Приоритеты статусов (чем выше число, тем выше приоритет)
+            const statusPriority = {
+                "Новый": 1,
+                "Собран": 2,
+                "Отгружен": 3,
+                "Оплачен": 4
+            };
+            
+            // Находим наивысший статус
+            let highestPriority = 0;
+            let highestStatus = "Новый";
+            
+            for (const status of statuses) {
+                if (status && statusPriority[status] && statusPriority[status] > highestPriority) {
+                    highestPriority = statusPriority[status];
+                    highestStatus = status;
+                }
+            }
+            
+            return highestStatus;
         }
     </script>
 </body>
