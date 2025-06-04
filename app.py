@@ -81,7 +81,7 @@ def index():
     try:
         user_id = request.args.get('user_id')
         if not user_id:
-            return render_template('unauthorized.html')
+            return render_template('unauthorized.html', telegram_bot_url=config.TELEGRAM_BOT_REGISTER_URL)
 
         # Сначала проверяем, является ли пользователь администратором
         if check_admin_access(user_id):
@@ -89,7 +89,7 @@ def index():
 
         # Если не админ, тогда проверяем регистрацию
         if not check_user_registration(user_id):
-            return render_template('unauthorized.html')
+            return render_template('unauthorized.html', telegram_bot_url=config.TELEGRAM_BOT_REGISTER_URL)
 
         return render_template('main_menu.html', user_id=user_id)
     
@@ -712,7 +712,7 @@ def get_order_status():
         
         # Отправляем запрос к API 1С для получения статуса заказа
         try:
-            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+            api_url = f'{config.API_1C_BASE_URL}{config.API_1C_ORDER_STATUS_ENDPOINT.format(uid=order_uid)}'
             logger.debug(f"Отправка запроса: GET {api_url}")
             
             response = requests.get(
@@ -757,7 +757,7 @@ def proxy_order_status():
         logger.debug(f"Запрос статуса заказа через прокси для UID: {uid}")
         
         # Отправляем запрос к API 1С для получения статуса заказа
-        api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+        api_url = f'{config.API_1C_BASE_URL}{config.API_1C_ORDER_STATUS_ENDPOINT.format(uid=uid)}'
         logger.debug(f"Отправка запроса: GET {api_url}")
         
         response = requests.get(
@@ -825,7 +825,7 @@ def get_combined_order_status():
             for uid_key, order_uid in order.get('ordersUID', {}).items():
                 try:
                     # Запрашиваем статус каждого заказа
-                    api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                    api_url = f'{config.API_1C_BASE_URL}{config.API_1C_ORDER_STATUS_ENDPOINT.format(uid=order_uid)}'
                     response = requests.get(
                         api_url,
                         auth=('int2', 'pcKnE8GqXn'),
@@ -1271,6 +1271,18 @@ def my_orders():
     if not user_id:
         return 'User ID is required', 400
     return render_template('my_orders.html', user_id=user_id)
+
+@app.route('/api/get-n8n-webhook-url')
+def get_n8n_webhook_url():
+    try:
+        # Возвращаем URL webhook из конфигурации
+        return jsonify({
+            "success": True,
+            "url": config.N8N_WEBHOOK_URL
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении URL webhook: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

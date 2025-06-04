@@ -31,4 +31,10 @@ API_1C_ORDER_STATUS_ENDPOINT = "/statuszakaz/{uid}"
 DEFAULT_ORGANIZATION_ID = "16d7a1a8-a651-11ef-895a-005056c00008"
 
 # Настройки для тары
-STANDARD_LEGAL_ENTITIES = ["2724132975", "2724163243"] 
+STANDARD_LEGAL_ENTITIES = ["2724132975", "2724163243"]
+
+# URL для веб-хука n8n
+N8N_WEBHOOK_URL = "https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa"
+
+# URL для регистрации в Telegram-боте
+TELEGRAM_BOT_REGISTER_URL = "https://t.me/beer_otto_bot?start=register" 
