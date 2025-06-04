@@ -108,7 +108,7 @@ def admin_panel():
         # Для доступа в админ-панель проверяем ТОЛЬКО права администратора
         if not check_admin_access(user_id):
             # Если не админ, перенаправляем на главную (или страницу ошибки)
-            return redirect('/') 
+            return redirect('/')
 
         return render_template('admin_panel.html', user_id=user_id)
     except Exception as e:
@@ -117,5 +117,63 @@ def admin_panel():
 
 @app.route('/api/get-coefficient')
 def get_coefficient():
-    # Implementation of the route
-    pass
+    try:
+        coefficient = redis_client.hget('beer:setting', 'coefficient')
+        last_date = redis_client.hget('beer:setting', 'coefficient_last_Date')
+        logger.debug(f"API: get-coefficient - Fetched from Redis: coefficient='{coefficient}', last_date='{last_date}'")
+        return jsonify({
+            "success": True,
+            "coefficient": coefficient if coefficient is not None else "1.0",
+            "last_date": last_date if last_date is not None else ""
+        })
+    except Exception as e:
+        logger.error(f"Error in /api/get-coefficient: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/update-coefficient', methods=['POST'])
+def update_coefficient():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"})
+
+        user_id = data.get('user_id')
+        new_coefficient = data.get('coefficient')
+
+        if not user_id or not new_coefficient:
+            return jsonify({"success": False, "error": "Missing required parameters"})
+
+        # Проверяем, имеет ли пользователь права администратора
+        if not check_admin_access(user_id):
+            logger.warning(f"Unauthorized coefficient update attempt by user {user_id}")
+            return jsonify({"success": False, "error": "Unauthorized access"}), 403
+
+        # Преобразуем в число и проверяем допустимость значения
+        try:
+            coefficient_float = float(new_coefficient)
+            if coefficient_float < 0.75 or coefficient_float > 1.25:
+                return jsonify({
+                    "success": False,
+                    "error": "Coefficient must be between 0.75 and 1.25"
+                })
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid coefficient value"})
+
+        # Текущая дата и время для записи в Redis
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        current_time = datetime.now(moscow_tz).strftime('%d.%m.%Y %H:%M')
+
+        # Обновляем данные в Redis
+        redis_client.hset('beer:setting', 'coefficient', str(coefficient_float))
+        redis_client.hset('beer:setting', 'coefficient_last_Date', current_time)
+
+        logger.info(f"Coefficient updated to {coefficient_float} by admin {user_id}")
+
+        return jsonify({
+            "success": True,
+            "coefficient": str(coefficient_float),
+            "last_date": current_time
+        })
+    except Exception as e:
+        logger.error(f"Error updating coefficient: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
