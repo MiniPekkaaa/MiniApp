@@ -9,6 +9,27 @@ import pytz
 import requests
 import random
 import config
+import platform
+import time
+
+# Глобальная переменная для отслеживания времени запуска приложения
+APP_START_TIME = time.time()
+
+# Функция для форматирования времени работы
+def format_uptime(seconds):
+    """Форматирует время работы в человекочитаемый формат."""
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    if days > 0:
+        return f"{int(days)}д {int(hours)}ч {int(minutes)}м {int(seconds)}с"
+    elif hours > 0:
+        return f"{int(hours)}ч {int(minutes)}м {int(seconds)}с"
+    elif minutes > 0:
+        return f"{int(minutes)}м {int(seconds)}с"
+    else:
+        return f"{int(seconds)}с"
 
 # Настройка логирования
 logging.basicConfig(
@@ -2181,6 +2202,145 @@ def get_shipped_orders_for_input():
             "success": False,
             "error": str(e)
         }), 500
+
+@app.route('/api/health-check')
+def health_check():
+    try:
+        start_time = datetime.now()
+        status = {
+            "status": "ok",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "services": {
+                "app": "running",
+                "mongodb": "unknown",
+                "redis": "unknown"
+            },
+            "response_time_ms": 0
+        }
+        
+        # Проверяем подключение к MongoDB
+        try:
+            # Простой запрос для проверки соединения
+            mongo.cx.admin.command('ping')
+            status["services"]["mongodb"] = "connected"
+        except Exception as e:
+            logger.error(f"MongoDB health check failed: {str(e)}")
+            status["services"]["mongodb"] = "error"
+            status["status"] = "degraded"
+            
+        # Проверяем подключение к Redis
+        try:
+            redis_ping = redis_client.ping()
+            if redis_ping:
+                status["services"]["redis"] = "connected"
+            else:
+                status["services"]["redis"] = "error"
+                status["status"] = "degraded"
+        except Exception as e:
+            logger.error(f"Redis health check failed: {str(e)}")
+            status["services"]["redis"] = "error"
+            status["status"] = "degraded"
+            
+        # Рассчитываем время ответа
+        end_time = datetime.now()
+        response_time = (end_time - start_time).total_seconds() * 1000
+        status["response_time_ms"] = round(response_time, 2)
+        
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/system-stats')
+def system_stats():
+    try:
+        # Рассчитываем время работы приложения
+        uptime_seconds = int(time.time() - APP_START_TIME)
+        
+        # Базовая информация о системе
+        stats = {
+            "status": "ok",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "system_info": {
+                "platform": platform.system(),
+                "platform_version": platform.version(),
+                "python_version": platform.python_version()
+            },
+            "database_stats": {
+                "mongodb": {},
+                "redis": {}
+            },
+            "app_stats": {
+                "uptime_seconds": uptime_seconds,
+                "uptime_formatted": format_uptime(uptime_seconds),
+                "start_time": datetime.fromtimestamp(APP_START_TIME).strftime("%Y-%m-%d %H:%M:%S")
+            }
+        }
+        
+        # Получаем статистику MongoDB
+        try:
+            # Получаем количество заказов
+            order_count = mongo.cx.Pivo.Orders.count_documents({})
+            stats["database_stats"]["mongodb"]["orders_count"] = order_count
+            
+            # Получаем количество товаров в каталоге
+            catalog_count = mongo.cx.Pivo.catalog.count_documents({})
+            stats["database_stats"]["mongodb"]["catalog_items_count"] = catalog_count
+            
+            # Получаем количество организаций
+            org_count = mongo.cx.Pivo.organizations.count_documents({})
+            stats["database_stats"]["mongodb"]["organizations_count"] = org_count
+            
+            # Проверяем размер коллекций
+            db_stats = mongo.cx.Pivo.command("dbStats")
+            stats["database_stats"]["mongodb"]["storage_size_mb"] = round(db_stats.get("storageSize", 0) / (1024 * 1024), 2)
+            stats["database_stats"]["mongodb"]["data_size_mb"] = round(db_stats.get("dataSize", 0) / (1024 * 1024), 2)
+            
+        except Exception as e:
+            logger.error(f"Error getting MongoDB stats: {str(e)}")
+            stats["database_stats"]["mongodb"]["error"] = str(e)
+            stats["status"] = "degraded"
+        
+        # Получаем статистику Redis
+        try:
+            # Получаем информацию о Redis
+            redis_info = redis_client.info()
+            
+            # Извлекаем полезные метрики
+            stats["database_stats"]["redis"]["connected_clients"] = redis_info.get("connected_clients", 0)
+            stats["database_stats"]["redis"]["used_memory_human"] = redis_info.get("used_memory_human", "0")
+            stats["database_stats"]["redis"]["uptime_in_seconds"] = redis_info.get("uptime_in_seconds", 0)
+            
+            # Получаем количество ключей пользователей
+            user_keys_count = len(redis_client.keys("beer:user:*"))
+            stats["database_stats"]["redis"]["user_keys_count"] = user_keys_count
+            
+        except Exception as e:
+            logger.error(f"Error getting Redis stats: {str(e)}")
+            stats["database_stats"]["redis"]["error"] = str(e)
+            stats["status"] = "degraded"
+            
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"System stats check failed: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/ping')
+def ping():
+    """Простой эндпоинт для проверки доступности приложения."""
+    return jsonify({
+        "status": "ok",
+        "message": "pong",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
