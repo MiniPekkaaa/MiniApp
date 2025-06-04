@@ -1,0 +1,41 @@
+                // Готовим данные для запроса в 1С
+                const items = cart.map(item => {
+                    // Пытаемся получить UID из карты соответствия
+                    let uid = null;
+                    
+                    // Проверяем наличие UID в карте соответствия
+                    if (userData.uid_map && userData.uid_map[item.id]) {
+                        uid = userData.uid_map[item.id];
+                        console.log(`Найден UID для товара ${item.name} (ID: ${item.id}): ${uid}`);
+                    } else {
+                        console.warn(`Не найден UID для товара ${item.name} (ID: ${item.id})`);
+                        // Ищем в каталоге по другим полям, если есть
+                        if (window.initialProducts) {
+                            const catalogItem = window.initialProducts.find(p => p.id === item.id);
+                            if (catalogItem && catalogItem.UID) {
+                                uid = catalogItem.UID;
+                                console.log(`Найден UID в каталоге для товара ${item.name}: ${uid}`);
+                            }
+                        }
+                    }
+                    
+                    // Если UID так и не найден, добавляем особое логирование
+                    if (!uid) {
+                        console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
+                    }
+                    
+                    // Определяем legalEntity (обычно должно быть предустановлено в товаре)
+                    const legalEntity = item.legalEntity || "2724132975";
+                    
+                    // Всегда передаем name, так как сервер может найти UID по имени
+                    return {
+                        id: item.id,
+                        uid: uid, // Передаем UID строкой, даже если null
+                        name: item.name || "Неизвестный товар", // Гарантируем, что name всегда есть
+                        quantity: parseInt(item.quantity),
+                        price: parseFloat(item.price) || 0,
+                        legalEntity: legalEntity
+                    };
+                });
+                
+                console.log('Подготовлены товары для заказа:', JSON.stringify(items, null, 2)); 

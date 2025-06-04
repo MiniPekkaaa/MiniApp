@@ -1032,24 +1032,72 @@
         }
 
         // Функция для расчета цен
-        function calculatePrices(data) {
-            return fetch('/api/calculate-prices', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .catch(error => {
-                console.error('Ошибка при расчете цен:', error);
-                throw error;
-            });
+        function calculatePrices(requestData) {
+            console.log('Отправка запроса на расчет цен:', requestData);
+            
+            // Добавляем вариант с прокси-запросом через наш сервер, если прямой запрос не работает
+            const useProxy = true;
+            
+            if (useProxy) {
+                // Используем наш бэкенд как прокси
+                return fetch('/api/calculate-prices', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        DATE: Math.floor(Date.now() / 1000).toString(),
+                        ID_customer: requestData.ID_customer || '',
+                        INN_legal_entity: requestData.INN_legal_entity || '',
+                        positions: requestData.positions || []
+                    })
+                })
+                .then(response => {
+                    console.log('Ответ получен через прокси, статус:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Данные о ценах получены через прокси:', data);
+                    return data;
+                })
+                .catch(error => {
+                    console.error('Ошибка при получении цен через прокси:', error);
+                    throw error;
+                });
+            } else {
+                // Прямой запрос к внешнему API
+                return fetch('http://87.225.110.142:65531/uttest/hs/int/calculate_checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Basic ' + btoa('int2:pcKnE8GqXn')
+                    },
+                    body: JSON.stringify({
+                        DATE: Math.floor(Date.now() / 1000).toString(),
+                        ID_customer: requestData.ID_customer || '',
+                        INN_legal_entity: requestData.INN_legal_entity || '',
+                        positions: requestData.positions || []
+                    })
+                })
+                .then(response => {
+                    console.log('Ответ получен, статус:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Данные о ценах получены:', data);
+                    return data;
+                })
+                .catch(error => {
+                    console.error('Ошибка при получении цен:', error);
+                    throw error;
+                });
+            }
         }
         
         // Функция для нахождения товара в корзине по UID

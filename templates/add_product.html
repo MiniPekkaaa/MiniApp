@@ -733,24 +733,14 @@
 
                     console.log('Отправляем данные в n8n:', data_to_send);
 
-                    // Получаем URL webhook из API
-                    return fetch('/api/get-n8n-webhook-url')
-                        .then(response => response.json())
-                        .then(webhookData => {
-                            if (!webhookData.success || !webhookData.url) {
-                                throw new Error('Не удалось получить URL webhook');
-                            }
-                            
-                            // Используем полученный URL для отправки данных
-                            return fetch(webhookData.url, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Accept': 'application/json'
-                                },
-                                body: JSON.stringify(data_to_send)
-                            });
-                        });
+                    return fetch('https://n8n.stage.3r.agency/webhook/e2d92758-49a8-4d07-a28c-acf92ff8affa', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(data_to_send)
+                    });
                 })
                 .then(response => {
                     if (!response.ok) {
