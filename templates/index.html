@@ -75,8 +75,19 @@
         
         /* Стиль для активной кнопки фильтра */
         .active-filter {
-            background-color: #5288c1 !important;
+            background: linear-gradient(145deg, #5288c1, #3a6d99) !important;
             font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+            position: relative;
+        }
+        
+        .active-filter::before {
+            content: '✓';
+            position: absolute;
+            top: 3px;
+            right: 8px;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -110,8 +121,8 @@
             <div class="search-container">
                 <input type="text" id="product_search" class="search-input" placeholder="Поиск товара...">
                 <div class="filter-buttons" style="display: flex; margin: 10px 0; gap: 10px;">
-                    <button id="filter-beer" class="button active-filter" style="margin: 0; flex: 1;" onclick="filterProducts('beer')">Пиво</button>
-                    <button id="filter-tara" class="button" style="margin: 0; flex: 1;" onclick="filterProducts('tara')">Тара</button>
+                    <button id="filter-beer" class="button active-filter" style="margin: 0; flex: 1;" onclick="filterProducts('beer')">Товар</button>
+                    <button id="filter-tara" class="button" style="margin: 0; flex: 1;" onclick="filterProducts('tara')">Возвратная тара</button>
                 </div>
                 <div id="product_dropdown" class="dropdown-list">
                     <!-- Список товаров будет добавлен динамически -->
@@ -202,12 +213,21 @@
         
         // Функция для фильтрации продуктов (пиво/тара)
         function filterProducts(filterType) {
-            currentFilter = filterType;
+            // Проверяем, не нажата ли уже активная кнопка фильтра
+            const isAlreadyActive = document.getElementById('filter-' + filterType).classList.contains('active-filter');
             
-            // Обновляем активную кнопку
-            document.getElementById('filter-beer').classList.remove('active-filter');
-            document.getElementById('filter-tara').classList.remove('active-filter');
-            document.getElementById('filter-' + filterType).classList.add('active-filter');
+            if (isAlreadyActive) {
+                // Если нажата уже активная кнопка - сбрасываем фильтр
+                currentFilter = 'all'; // Показываем все товары
+                document.getElementById('filter-beer').classList.remove('active-filter');
+                document.getElementById('filter-tara').classList.remove('active-filter');
+            } else {
+                // Обычное поведение - устанавливаем новый фильтр
+                currentFilter = filterType;
+                document.getElementById('filter-beer').classList.remove('active-filter');
+                document.getElementById('filter-tara').classList.remove('active-filter');
+                document.getElementById('filter-' + filterType).classList.add('active-filter');
+            }
             
             // Применяем фильтр к текущему поисковому запросу
             const searchText = searchInput.value.toLowerCase();
