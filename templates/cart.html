@@ -761,7 +761,8 @@
                     <div class="confirm-dialog-content">
                         <p>Вы не забыли добавить в корзину тару и углекислоту?</p>
                         <div class="confirm-dialog-buttons">
-                            <button id="confirmDialogClose" class="button button-close">Закрыть</button>
+                            <button id="confirmDialogClose" class="button">Закрыть</button>
+                            <button id="confirmDialogContinue" class="button button-primary">Продолжить оформление</button>
                         </div>
                     </div>
                 `;
@@ -776,53 +777,49 @@
                         left: 0;
                         right: 0;
                         bottom: 0;
-                        background-color: rgba(0, 0, 0, 0.7);
+                        background-color: rgba(0, 0, 0, 0.5);
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         z-index: 1000;
-                        backdrop-filter: blur(3px);
                     }
                     .confirm-dialog-content {
                         background-color: #17212b;
                         padding: 20px;
-                        border-radius: 12px;
+                        border-radius: 8px;
                         max-width: 300px;
                         width: 90%;
-                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
                     }
                     .confirm-dialog-content p {
                         color: white;
                         margin-bottom: 20px;
                         text-align: center;
-                        font-weight: 500;
                     }
                     .confirm-dialog-buttons {
                         display: flex;
-                        justify-content: center;
+                        justify-content: space-between;
+                        gap: 10px;
                     }
-                    .button-close {
-                        background: linear-gradient(145deg, #e53e3e, #c53030);
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        padding: 12px 24px;
-                        font-weight: bold;
-                        box-shadow: 0 2px 10px rgba(229, 62, 62, 0.3);
-                        transition: transform 0.2s, box-shadow 0.2s;
-                        width: 100%;
+                    .confirm-dialog-buttons button {
+                        flex: 1;
+                        padding: 10px;
                     }
-                    .button-close:active {
-                        transform: scale(0.96);
-                        box-shadow: 0 1px 5px rgba(229, 62, 62, 0.2);
+                    .button-primary {
+                        background-color: #3a6d99;
                     }
                 `;
                 document.head.appendChild(style);
                 
-                // Обработчик события для кнопки "Закрыть"
+                // Обработчики событий для кнопок
                 document.getElementById('confirmDialogClose').addEventListener('click', function() {
                     document.body.removeChild(confirmDialog);
+                });
+                
+                document.getElementById('confirmDialogContinue').addEventListener('click', function() {
+                    document.body.removeChild(confirmDialog);
+                    // Продолжаем оформление заказа
+                    continueOrderProcess();
                 });
                 
                 return;
