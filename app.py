@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import pytz
 import requests
 import random
+import config
 
 # Настройка логирования
 logging.basicConfig(
@@ -19,15 +20,15 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Конфигурация MongoDB
-app.config["MONGO_URI"] = "mongodb://root:otlehjoq543680@46.101.121.75:27017/admin?authSource=admin&directConnection=true"
+app.config["MONGO_URI"] = config.MONGO_URI
 mongo = PyMongo(app)
 
 # Конфигурация Redis
 redis_client = redis.Redis(
-    host='46.101.121.75',
-    port=6379,
-    password='otlehjoq',
-    decode_responses=True
+    host=config.REDIS_HOST,
+    port=config.REDIS_PORT,
+    password=config.REDIS_PASSWORD,
+    decode_responses=config.REDIS_DECODE_RESPONSES
 )
 
 def check_user_registration(user_id):
@@ -846,34 +847,27 @@ def get_user_org_data():
 @app.route('/api/calculate-prices', methods=['POST'])
 def calculate_prices():
     try:
+        logger.debug("Получен запрос на расчет цен")
         data = request.json
-        logger.debug(f"Получен запрос на расчет цен: {data}")
         
-        # Проверка наличия необходимых полей
-        if not data.get('INN_legal_entity'):
-            logger.warning("INN_legal_entity отсутствует в запросе")
-            
-        if not data.get('ID_customer'):
-            logger.warning("ID_customer отсутствует в запросе")
-            
-        if not data.get('positions') or len(data.get('positions')) == 0:
-            logger.warning("Positions пусты или отсутствуют в запросе")
+        # Подробное логирование входящих данных
+        logger.debug("Входящие данные (ID_customer): %s", data.get('ID_customer', ''))
+        logger.debug("Входящие данные (INN_legal_entity): %s", data.get('INN_legal_entity', ''))
+        logger.debug("Входящие данные (количество позиций): %s", len(data.get('positions', [])))
         
-        # Формируем запрос к внешнему API с правильными параметрами
+        # Форматируем данные для передачи в API
         request_body = {
-            "DATE": data.get('DATE', str(int(datetime.now().timestamp()))),
-            "ID_customer": data.get('ID_customer', ''),
-            "INN_legal_entity": data.get('INN_legal_entity', ''),
-            "positions": data.get('positions', [])
+            'DATE': data.get('DATE', str(int(datetime.now().timestamp()))),
+            'ID_customer': data.get('ID_customer', ''),
+            'INN_legal_entity': data.get('INN_legal_entity', ''),
+            'positions': data.get('positions', [])
         }
-        
-        logger.debug(f"Отправляем запрос на расчет цен: {request_body}")
         
         try:
             response = requests.post(
-                'http://87.225.110.142:65531/uttest/hs/int/calculate_checkout',
+                f"{config.API_BASE_URL}{config.API_ENDPOINTS['calculate_checkout']}",
                 json=request_body,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10  # Добавляем тайм-аут
             )
@@ -902,13 +896,11 @@ def calculate_prices():
                 logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
                 # Если JSON не работает, вернем хотя бы текст
                 return jsonify(response.text)
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Ошибка при отправке запроса: {str(e)}")
-            return jsonify({"error": f"Request error: {str(e)}"}), 500
-            
+        except Exception as e:
+            logger.error(f"Ошибка при запросе к API: {str(e)}")
+            return jsonify({"error": f"API request error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Ошибка при расчете цен: {str(e)}")
+        logger.error(f"Общая ошибка при расчете цен: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/create-1c-order', methods=['POST'])
@@ -1117,9 +1109,9 @@ def create_1c_order():
             # Отправляем запрос
             try:
                 response = requests.post(
-                    'http://87.225.110.142:65531/uttest/hs/int/novzakaz',
+                    f"{config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}",
                     json=request_body,
-                    auth=('int2', 'pcKnE8GqXn'),
+                    auth=(config.API_USERNAME, config.API_PASSWORD),
                     headers={'Content-Type': 'application/json'},
                     timeout=10
                 )
@@ -1256,9 +1248,15 @@ def get_order_history():
             
         # Получаем историю заказов из 1С
         try:
+            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_history']}{org_id}"
+            logger.debug(f"Отправка запроса к API 1C: GET {api_url}")
+            
+            api_request_start = datetime.now()
+            logger.debug(f'Начало запроса к API 1C: {(api_request_start - start_time).total_seconds():.3f} сек')
+            
             response = requests.get(
-                f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}',
-                auth=('int2', 'pcKnE8GqXn'),
+                api_url,
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
@@ -1277,13 +1275,11 @@ def get_order_history():
             except Exception as e:
                 logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
                 return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
-                
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Ошибка при отправке запроса истории заказов: {str(e)}")
-            return jsonify({"error": f"Request error: {str(e)}"}), 500
-            
+        except Exception as e:
+            logger.error(f"Ошибка при запросе к API истории заказов: {str(e)}")
+            return jsonify({"error": f"API request error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Ошибка при получении истории заказов: {str(e)}")
+        logger.error(f"Общая ошибка при получении истории заказов: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get-orders-from-1c')
@@ -1293,28 +1289,28 @@ def get_orders_from_1c():
         user_id = request.args.get('user_id')
         
         if not user_id:
-            return jsonify({"error": "User ID is required"}), 400
-        
-        logger.debug(f'Начало получения заказов из 1С для пользователя {user_id}: {start_time.strftime("%H:%M:%S.%f")[:-3]}')
+            return jsonify({"success": False, "error": "User ID is required"}), 400
             
+        logger.debug(f"Получен запрос на получение заказов из 1С для пользователя {user_id}")
+        
         # Получаем данные пользователя из Redis
+        user_data_start = datetime.now()
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        logger.debug(f'Получение данных пользователя из Redis: {(datetime.now() - user_data_start).total_seconds():.3f} сек')
+        
         if not user_data:
-            return jsonify({"error": "User not found"}), 404
-        
-        redis_time = datetime.now()
-        logger.debug(f'Данные пользователя получены из Redis за: {(redis_time - start_time).total_seconds():.3f} сек')
+            logger.warning(f"Пользователь {user_id} не найден в Redis")
+            return jsonify({"success": False, "error": "User not found"}), 404
             
-        # Получаем информацию об организации для получения organizationId
         org_id = user_data.get('org_ID')
-        if not org_id:
-            return jsonify({"error": "Organization ID not found"}), 404
-            
-        logger.debug(f'Получение истории заказов из 1С для организации: {org_id}')
         
-        # Получаем историю заказов из 1С используя новый эндпоинт
+        if not org_id:
+            logger.warning(f"Для пользователя {user_id} не найден ID организации")
+            return jsonify({"success": False, "error": "Organization ID not found"}), 404
+            
+        # Получаем историю заказов из 1С
         try:
-            api_url = f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}'
+            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_history']}{org_id}"
             logger.debug(f"Отправка запроса к API 1C: GET {api_url}")
             
             api_request_start = datetime.now()
@@ -1322,7 +1318,7 @@ def get_orders_from_1c():
             
             response = requests.get(
                 api_url,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
@@ -1529,12 +1525,12 @@ def get_order_status():
         
         # Отправляем запрос к API 1С для получения статуса заказа
         try:
-            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
             logger.debug(f"Отправка запроса: GET {api_url}")
             
             response = requests.get(
                 api_url,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
@@ -1574,12 +1570,12 @@ def proxy_order_status():
         logger.debug(f"Запрос статуса заказа через прокси для UID: {uid}")
         
         # Отправляем запрос к API 1С для получения статуса заказа
-        api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+        api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{uid}"
         logger.debug(f"Отправка запроса: GET {api_url}")
         
         response = requests.get(
             api_url,
-            auth=('int2', 'pcKnE8GqXn'),
+            auth=(config.API_USERNAME, config.API_PASSWORD),
             headers={'Content-Type': 'application/json'},
             timeout=10
         )
@@ -1618,32 +1614,26 @@ def proxy_order_status():
 @app.route('/api/get-combined-order-status')
 def get_combined_order_status():
     try:
-        # Получаем MongoDB ID заказа
-        order_id = request.args.get('order_id')
-        if not order_id:
-            return jsonify({"error": "Order ID is required"}), 400
+        mongo_id = request.args.get('id')
+        if not mongo_id:
+            return jsonify({"success": False, "error": "Order ID is required"}), 400
             
-        logger.debug(f"Запрос комбинированного статуса заказа с ID: {order_id}")
-        
-        # Получаем заказ из MongoDB
+        # Получаем данные заказа из MongoDB
         try:
-            order = mongo.cx.Pivo.Orders.find_one({'_id': ObjectId(order_id)})
+            order = mongo.cx.Pivo.Orders.find_one({'_id': ObjectId(mongo_id)})
             if not order:
-                return jsonify({"error": "Order not found"}), 404
+                return jsonify({"success": False, "error": "Order not found"}), 404
                 
-            # Проверяем наличие ordersUID
-            if not order.get('ordersUID') or not isinstance(order.get('ordersUID'), dict):
-                return jsonify({"success": True, "status": "В обработке", "original": None})
-                
-            # Получаем статусы всех заказов в 1С
+            # Собираем все статусы заказов из 1С
             statuses = []
+            
             for uid_key, order_uid in order.get('ordersUID', {}).items():
                 try:
                     # Запрашиваем статус каждого заказа
-                    api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                    api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
                     response = requests.get(
                         api_url,
-                        auth=('int2', 'pcKnE8GqXn'),
+                        auth=(config.API_USERNAME, config.API_PASSWORD),
                         headers={'Content-Type': 'application/json'},
                         timeout=10
                     )
@@ -1798,7 +1788,7 @@ def get_batch_order_statuses():
         for uid in order_uids:
             try:
                 # Создаем запрос, но не выполняем его сразу
-                api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+                api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{uid}"
                 request_obj = {
                     'uid': uid,
                     'url': api_url
@@ -1821,7 +1811,7 @@ def get_batch_order_statuses():
                     # Запрашиваем статус в 1C
                     response = requests.get(
                         api_url,
-                        auth=('int2', 'pcKnE8GqXn'),
+                        auth=(config.API_USERNAME, config.API_PASSWORD),
                         headers={'Content-Type': 'application/json'},
                         timeout=5  # Уменьшаем тайм-аут для ускорения
                     )
@@ -2041,12 +2031,12 @@ def get_shipped_orders_positions():
                     if order_uid:
                         try:
                             # Запрашиваем статус заказа в 1С
-                            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
                             logger.debug(f"Запрос статуса для заказа с UID {order_uid}")
                             
                             response = requests.get(
                                 api_url,
-                                auth=('int2', 'pcKnE8GqXn'),
+                                auth=(config.API_USERNAME, config.API_PASSWORD),
                                 headers={'Content-Type': 'application/json'},
                                 timeout=5
                             )
