@@ -710,7 +710,7 @@ def get_coefficient():
         coefficient = redis_client.hget('beer:setting', 'coefficient')
         last_date = redis_client.hget('beer:setting', 'coefficient_last_Date')
         return jsonify({
-            "success": True, 
+            "success": True,
             "coefficient": coefficient or "1.0",
             "last_date": last_date
         })
@@ -1111,6 +1111,8 @@ def create_1c_order():
             }
             
             logger.debug(f"Запрос на создание заказа в 1С: {request_body}")
+            logger.info(f"Отправка заказа в 1С с INN_legal_entity: {legal_entity} для {len(positions)} позиций")
+            logger.info(f"Полные данные запроса в 1С: DATE={request_body['DATE']}, ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}, positions={positions}")
             
             # Отправляем запрос
             try:
