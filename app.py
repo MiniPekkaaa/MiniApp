@@ -81,13 +81,13 @@ def index():
         if not user_id:
             return render_template('unauthorized.html')
 
-        # Проверяем регистрацию пользователя
-        if not check_user_registration(user_id):
-            return render_template('unauthorized.html')
-
-        # Проверяем, является ли пользователь администратором
+        # Сначала проверяем, является ли пользователь администратором
         if check_admin_access(user_id):
             return redirect(f'/admin_panel?user_id={user_id}')
+
+        # Если не админ, тогда проверяем регистрацию
+        if not check_user_registration(user_id):
+            return render_template('unauthorized.html')
 
         return render_template('main_menu.html', user_id=user_id)
     
@@ -694,8 +694,9 @@ def admin_panel():
         if not user_id:
             return redirect('/')
 
-        # Проверяем регистрацию и права администратора
-        if not check_user_registration(user_id) or not check_admin_access(user_id):
+        # Для доступа в админ-панель проверяем ТОЛЬКО права администратора
+        if not check_admin_access(user_id):
+            # Если не админ, перенаправляем на главную (или страницу ошибки)
             return redirect('/')
 
         return render_template('admin_panel.html', user_id=user_id)
