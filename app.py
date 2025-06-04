@@ -2342,5 +2342,118 @@ def ping():
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
 
+@app.route('/api/status')
+def app_status():
+    """
+    Общий эндпоинт для проверки работоспособности приложения.
+    Возвращает сводный статус всех компонентов системы в упрощенном формате для мониторинга.
+    """
+    try:
+        result = {
+            "status": "ok",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "components": {},
+            "errors": []
+        }
+        
+        # Проверка MongoDB
+        try:
+            mongo.cx.admin.command('ping')
+            result["components"]["mongodb"] = "ok"
+        except Exception as e:
+            error_msg = f"MongoDB недоступна: {str(e)}"
+            result["components"]["mongodb"] = "error"
+            result["errors"].append(error_msg)
+            result["status"] = "error"
+            logger.error(error_msg)
+        
+        # Проверка Redis
+        try:
+            redis_ping = redis_client.ping()
+            if redis_ping:
+                result["components"]["redis"] = "ok"
+            else:
+                error_msg = "Redis не отвечает на ping"
+                result["components"]["redis"] = "error"
+                result["errors"].append(error_msg)
+                result["status"] = "error"
+                logger.error(error_msg)
+        except Exception as e:
+            error_msg = f"Redis недоступен: {str(e)}"
+            result["components"]["redis"] = "error"
+            result["errors"].append(error_msg)
+            result["status"] = "error"
+            logger.error(error_msg)
+        
+        # Проверка API 1C, если используется
+        try:
+            if hasattr(config, 'C1_API_URL') and config.C1_API_URL:
+                # Пробуем только проверить, что константа существует
+                result["components"]["1c_api"] = "configured"
+            else:
+                result["components"]["1c_api"] = "not_configured"
+        except Exception as e:
+            error_msg = f"Ошибка при проверке конфигурации 1C API: {str(e)}"
+            result["components"]["1c_api"] = "error"
+            result["errors"].append(error_msg)
+            logger.warning(error_msg)
+        
+        # Проверка критических коллекций в MongoDB
+        try:
+            # Проверяем наличие коллекций в БД
+            collections = mongo.cx.Pivo.list_collection_names()
+            required_collections = ["catalog", "Orders", "organizations"]
+            
+            missing_collections = [coll for coll in required_collections if coll not in collections]
+            
+            if missing_collections:
+                error_msg = f"Отсутствуют необходимые коллекции в MongoDB: {', '.join(missing_collections)}"
+                result["components"]["mongodb_collections"] = "error"
+                result["errors"].append(error_msg)
+                result["status"] = "error"
+                logger.error(error_msg)
+            else:
+                result["components"]["mongodb_collections"] = "ok"
+                
+            # Проверяем наличие товаров в каталоге
+            catalog_count = mongo.cx.Pivo.catalog.count_documents({})
+            if catalog_count == 0:
+                warning_msg = "Каталог товаров пуст"
+                result["components"]["catalog"] = "warning"
+                result["errors"].append(warning_msg)
+                if result["status"] == "ok":  # Не переписываем статус, если уже error
+                    result["status"] = "warning"
+                logger.warning(warning_msg)
+            else:
+                result["components"]["catalog"] = "ok"
+                
+        except Exception as e:
+            error_msg = f"Ошибка при проверке коллекций MongoDB: {str(e)}"
+            result["components"]["mongodb_collections"] = "error"
+            result["errors"].append(error_msg)
+            result["status"] = "error"
+            logger.error(error_msg)
+        
+        # Общая информация о системе
+        result["app_uptime"] = format_uptime(int(time.time() - APP_START_TIME))
+        
+        # Устанавливаем HTTP-код ответа в зависимости от статуса
+        http_code = 200
+        if result["status"] == "error":
+            http_code = 500
+        elif result["status"] == "warning":
+            http_code = 200  # Предупреждения не являются ошибкой сервера
+        
+        return jsonify(result), http_code
+        
+    except Exception as e:
+        logger.error(f"Критическая ошибка при проверке статуса приложения: {str(e)}")
+        return jsonify({
+            "status": "critical_error",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "message": "Произошла критическая ошибка при проверке статуса",
+            "error": str(e)
+        }), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
