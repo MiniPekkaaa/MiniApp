@@ -717,9 +717,9 @@ def get_order_status():
             
             response = requests.get(
                 api_url,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=config.API_1C_AUTH,
                 headers={'Content-Type': 'application/json'},
-                timeout=10
+                timeout=config.API_1C_TIMEOUT
             )
             
             logger.debug(f"Статус ответа от API статуса заказа: {response.status_code}")
@@ -762,9 +762,9 @@ def proxy_order_status():
         
         response = requests.get(
             api_url,
-            auth=('int2', 'pcKnE8GqXn'),
+            auth=config.API_1C_AUTH,
             headers={'Content-Type': 'application/json'},
-            timeout=10
+            timeout=config.API_1C_TIMEOUT
         )
         
         logger.debug(f"Статус ответа от API статуса заказа: {response.status_code}")
@@ -828,9 +828,9 @@ def get_combined_order_status():
                     api_url = f'{config.API_1C_BASE_URL}{config.API_1C_ORDER_STATUS_ENDPOINT.format(uid=order_uid)}'
                     response = requests.get(
                         api_url,
-                        auth=('int2', 'pcKnE8GqXn'),
+                        auth=config.API_1C_AUTH,
                         headers={'Content-Type': 'application/json'},
-                        timeout=10
+                        timeout=config.API_1C_TIMEOUT
                     )
                     
                     if response.status_code == 200:
@@ -991,7 +991,7 @@ def get_batch_order_statuses():
                     api_url,
                     auth=config.API_1C_AUTH,
                     headers={'Content-Type': 'application/json'},
-                    timeout=config.API_1C_TIMEOUT / 2  # Уменьшаем тайм-аут для ускорения
+                    timeout=config.API_1C_TIMEOUT
                 )
                 
                 if response.status_code == 200:
@@ -1283,6 +1283,212 @@ def get_n8n_webhook_url():
     except Exception as e:
         logger.error(f"Ошибка при получении URL webhook: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/get-orders-from-1c')
+def get_orders_from_1c():
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"success": False, "error": "User ID is required"}), 400
+            
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        if not user_data:
+            return jsonify({"success": False, "error": "User not found"}), 404
+            
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({"success": False, "error": "Organization ID not found"}), 404
+            
+        logger.debug(f"Запрос истории заказов из 1C для пользователя {user_id} (org_ID: {org_id})")
+        
+        # Формируем URL запроса
+        api_url = f"{config.API_1C_BASE_URL}{config.API_1C_ORDER_HISTORY_ENDPOINT.format(org_id=org_id)}"
+        logger.debug(f"URL запроса истории заказов: {api_url}")
+        
+        # Отправляем запрос к API 1C
+        response = requests.get(
+            api_url,
+            auth=config.API_1C_AUTH,
+            headers={'Content-Type': 'application/json'},
+            timeout=config.API_1C_TIMEOUT
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка API истории заказов: {response.status_code}, {response.text}")
+            return jsonify({"success": False, "error": f"API error: {response.status_code}"}), 500
+            
+        # Обрабатываем ответ
+        try:
+            orders_data = response.json()
+            logger.debug(f"Получено {len(orders_data)} заказов из 1C")
+            
+            return jsonify({
+                "success": True,
+                "orders": orders_data
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при обработке ответа истории заказов: {str(e)}")
+            return jsonify({"success": False, "error": str(e)}), 500
+            
+    except Exception as e:
+        logger.error(f"Общая ошибка при получении истории заказов из 1C: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/create-1c-order', methods=['POST'])
+def create_1c_order():
+    try:
+        data = request.json
+        logger.debug(f"Получен запрос на создание заказа в 1C: {data}")
+        
+        if not data or not data.get('userId') or not data.get('items'):
+            return jsonify({"success": False, "error": "Отсутствуют необходимые данные"}), 400
+            
+        # Получаем данные пользователя из Redis
+        user_id = data.get('userId')
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        
+        if not user_data:
+            return jsonify({"success": False, "error": "Пользователь не найден"}), 404
+            
+        # Получаем ID организации
+        org_id = user_data.get('org_ID')
+        if not org_id:
+            return jsonify({"success": False, "error": "ID организации не найден"}), 404
+            
+        # Формируем данные для запроса в 1C
+        items = data.get('items', [])
+        
+        # Группируем товары по Legal Entity
+        orders_by_legal = {}
+        
+        for item in items:
+            legal_entity = str(item.get('legalEntity', config.STANDARD_LEGAL_ENTITIES[0]))
+            
+            if legal_entity not in orders_by_legal:
+                orders_by_legal[legal_entity] = []
+                
+            orders_by_legal[legal_entity].append(item)
+            
+        # Создаем заказы в 1C для каждого Legal Entity
+        result_orders = []
+        
+        for legal_entity, items in orders_by_legal.items():
+            # Формируем данные для запроса
+            order_data = {
+                "ID_customer": org_id,
+                "INN_legal_entity": legal_entity,
+                "positions": []
+            }
+            
+            # Добавляем позиции
+            for item in items:
+                position = {
+                    "ID_product": item.get('uid') or item.get('id'),
+                    "Amount": float(item.get('quantity', 0))
+                }
+                order_data["positions"].append(position)
+                
+            logger.debug(f"Отправка запроса на создание заказа в 1C: {order_data}")
+            
+            # Отправляем запрос к API 1C
+            api_url = f"{config.API_1C_BASE_URL}/zakaz"
+            
+            try:
+                response = requests.post(
+                    api_url,
+                    auth=config.API_1C_AUTH,
+                    headers={'Content-Type': 'application/json'},
+                    json=order_data,
+                    timeout=config.API_1C_TIMEOUT
+                )
+                
+                if response.status_code == 200:
+                    try:
+                        order_result = response.json()
+                        logger.debug(f"Успешно создан заказ в 1C: {order_result}")
+                        
+                        # Добавляем информацию о товарах и успехе операции
+                        result_orders.append({
+                            "success": True,
+                            "items": items,
+                            "order": order_result
+                        })
+                    except Exception as e:
+                        logger.error(f"Ошибка при обработке ответа создания заказа: {str(e)}")
+                        result_orders.append({
+                            "success": False,
+                            "items": items,
+                            "order": {"error": f"Ошибка обработки ответа: {str(e)}"}
+                        })
+                else:
+                    logger.error(f"Ошибка API создания заказа: {response.status_code}, {response.text}")
+                    result_orders.append({
+                        "success": False,
+                        "items": items,
+                        "order": {"error": f"API error: {response.status_code} - {response.text}"}
+                    })
+            except Exception as e:
+                logger.error(f"Ошибка при отправке запроса создания заказа: {str(e)}")
+                result_orders.append({
+                    "success": False,
+                    "items": items,
+                    "order": {"error": f"Ошибка запроса: {str(e)}"}
+                })
+                
+        # Проверяем, был ли хотя бы один успешный заказ
+        any_success = any(order["success"] for order in result_orders)
+        
+        return jsonify({
+            "success": any_success,
+            "orders": result_orders
+        })
+        
+    except Exception as e:
+        logger.error(f"Общая ошибка при создании заказа в 1C: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/calculate-prices', methods=['POST'])
+def calculate_prices():
+    try:
+        data = request.json
+        logger.debug(f"Получен запрос на расчет цен: {data}")
+        
+        if not data:
+            return jsonify({"error": "Отсутствуют данные запроса"}), 400
+            
+        # Проверяем обязательные поля
+        if not data.get('ID_customer') or not data.get('positions'):
+            return jsonify({"error": "Отсутствуют обязательные поля (ID_customer, positions)"}), 400
+            
+        # Формируем URL запроса к API 1C
+        api_url = f"{config.API_1C_BASE_URL}/raschet"
+        
+        # Отправляем запрос к API 1C
+        response = requests.post(
+            api_url,
+            auth=config.API_1C_AUTH,
+            headers={'Content-Type': 'application/json'},
+            json=data,
+            timeout=config.API_1C_TIMEOUT
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка API расчета цен: {response.status_code}, {response.text}")
+            return jsonify({"error": f"API error: {response.status_code}"}), 500
+            
+        # Обрабатываем ответ
+        try:
+            prices_data = response.json()
+            logger.debug(f"Успешно получены данные о ценах: {prices_data}")
+            return jsonify(prices_data)
+        except Exception as e:
+            logger.error(f"Ошибка при обработке ответа расчета цен: {str(e)}")
+            return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"Общая ошибка при расчете цен: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
