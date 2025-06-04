@@ -751,147 +751,227 @@
                 return;
             }
             
-            // Показываем уведомление
-            showNotification("Создание заказа...", 30000);
+            // Проверяем, есть ли тара в корзине
+            const hasTara = cart.some(item => item.TARA === true);
+            if (!hasTara) {
+                // Создаем и показываем диалог с предупреждением и кнопкой "Закрыть"
+                const confirmDialog = document.createElement('div');
+                confirmDialog.className = 'confirm-dialog';
+                confirmDialog.innerHTML = `
+                    <div class="confirm-dialog-content">
+                        <p>Вы не забыли добавить в корзину тару и углекислоту?</p>
+                        <div class="confirm-dialog-buttons">
+                            <button id="confirmDialogClose" class="button">Закрыть</button>
+                            <button id="confirmDialogContinue" class="button button-primary">Продолжить оформление</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(confirmDialog);
+                
+                // Добавляем стили для диалога
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    .confirm-dialog {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: rgba(0, 0, 0, 0.5);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 1000;
+                    }
+                    .confirm-dialog-content {
+                        background-color: #17212b;
+                        padding: 20px;
+                        border-radius: 8px;
+                        max-width: 300px;
+                        width: 90%;
+                        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                    }
+                    .confirm-dialog-content p {
+                        color: white;
+                        margin-bottom: 20px;
+                        text-align: center;
+                    }
+                    .confirm-dialog-buttons {
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 10px;
+                    }
+                    .confirm-dialog-buttons button {
+                        flex: 1;
+                        padding: 10px;
+                    }
+                    .button-primary {
+                        background-color: #3a6d99;
+                    }
+                `;
+                document.head.appendChild(style);
+                
+                // Обработчики событий для кнопок
+                document.getElementById('confirmDialogClose').addEventListener('click', function() {
+                    document.body.removeChild(confirmDialog);
+                });
+                
+                document.getElementById('confirmDialogContinue').addEventListener('click', function() {
+                    document.body.removeChild(confirmDialog);
+                    // Продолжаем оформление заказа
+                    continueOrderProcess();
+                });
+                
+                return;
+            }
             
-            // Получаем данные организации пользователя
-            getUserOrgData()
-                .then(userData => {
-                    // Сохраняем userData для использования ниже
-                    window.userData = userData;
-                    
-                    // Готовим данные для запроса в 1С
-                    const items = cart.map(item => {
-                        // Пытаемся получить UID из карты соответствия
-                        let uid = null;
+            // Если есть тара, продолжаем обычный процесс оформления заказа
+            continueOrderProcess();
+            
+            // Функция для продолжения процесса оформления заказа
+            function continueOrderProcess() {
+                // Показываем уведомление
+                showNotification("Создание заказа...", 30000);
+                
+                // Получаем данные организации пользователя
+                getUserOrgData()
+                    .then(userData => {
+                        // Сохраняем userData для использования ниже
+                        window.userData = userData;
                         
-                        // Проверяем наличие UID в карте соответствия
-                        if (userData.uid_map && userData.uid_map[item.id]) {
-                            uid = userData.uid_map[item.id];
-                            console.log(`Найден UID для товара ${item.name} (ID: ${item.id}): ${uid}`);
-                        } else {
-                            console.warn(`Не найден UID для товара ${item.name} (ID: ${item.id})`);
-                            // Ищем в каталоге по другим полям, если есть
-                            if (window.initialProducts) {
-                                const catalogItem = window.initialProducts.find(p => p.id === item.id);
-                                if (catalogItem && catalogItem.UID) {
-                                    uid = catalogItem.UID;
-                                    console.log(`Найден UID в каталоге для товара ${item.name}: ${uid}`);
+                        // Готовим данные для запроса в 1С
+                        const items = cart.map(item => {
+                            // Пытаемся получить UID из карты соответствия
+                            let uid = null;
+                            
+                            // Проверяем наличие UID в карте соответствия
+                            if (userData.uid_map && userData.uid_map[item.id]) {
+                                uid = userData.uid_map[item.id];
+                                console.log(`Найден UID для товара ${item.name} (ID: ${item.id}): ${uid}`);
+                            } else {
+                                console.warn(`Не найден UID для товара ${item.name} (ID: ${item.id})`);
+                                // Ищем в каталоге по другим полям, если есть
+                                if (window.initialProducts) {
+                                    const catalogItem = window.initialProducts.find(p => p.id === item.id);
+                                    if (catalogItem && catalogItem.UID) {
+                                        uid = catalogItem.UID;
+                                        console.log(`Найден UID в каталоге для товара ${item.name}: ${uid}`);
+                                    }
                                 }
                             }
-                        }
+                            
+                            // Добавляем UID в объект товара для последующего использования
+                            item.uid = uid;
+                            
+                            // Если UID так и не найден, добавляем особое логирование
+                            if (!uid) {
+                                console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
+                            }
+                            
+                            // Определяем legalEntity (обычно должно быть предустановлено в товаре)
+                            const legalEntity = item.legalEntity || "2724132975";
+                            
+                            // Всегда передаем name, так как сервер может найти UID по имени
+                            return {
+                                id: item.id,
+                                uid: uid, // Передаем UID строкой, даже если null
+                                name: item.name || "Неизвестный товар", // Гарантируем, что name всегда есть
+                                quantity: parseInt(item.quantity),
+                                price: parseFloat(item.price) || 0,
+                                legalEntity: legalEntity
+                            };
+                        });
                         
-                        // Добавляем UID в объект товара для последующего использования
-                        item.uid = uid;
+                        console.log('Подготовлены товары для заказа:', JSON.stringify(items, null, 2));
                         
-                        // Если UID так и не найден, добавляем особое логирование
-                        if (!uid) {
-                            console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
-                        }
-                        
-                        // Определяем legalEntity (обычно должно быть предустановлено в товаре)
-                        const legalEntity = item.legalEntity || "2724132975";
-                        
-                        // Всегда передаем name, так как сервер может найти UID по имени
-                        return {
-                            id: item.id,
-                            uid: uid, // Передаем UID строкой, даже если null
-                            name: item.name || "Неизвестный товар", // Гарантируем, что name всегда есть
-                            quantity: parseInt(item.quantity),
-                            price: parseFloat(item.price) || 0,
-                            legalEntity: legalEntity
-                        };
-                    });
-                    
-                    console.log('Подготовлены товары для заказа:', JSON.stringify(items, null, 2));
-                    
-                    // Отправляем запрос на создание заказа в 1С
-                    return fetch('/api/create-1c-order', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            userId: userId,
-                            items: items
+                        // Отправляем запрос на создание заказа в 1С
+                        return fetch('/api/create-1c-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                userId: userId,
+                                items: items
+                            })
                         })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            return response.json();
+                        });
                     })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    });
-                })
-                .then(ordersData => {
-                    console.log('Результат создания заказов в 1С:', ordersData);
-                    
-                    // Проверяем общий успех операции
-                    if (!ordersData.success) {
-                        // Если ни один заказ не был создан успешно
-                        let errorMessage = "Не удалось создать заказы. ";
+                    .then(ordersData => {
+                        console.log('Результат создания заказов в 1С:', ordersData);
                         
-                        // Собираем информацию об ошибках
-                        const errors = ordersData.orders
-                            .filter(order => !order.success)
-                            .map(order => {
-                                const itemNames = order.items.map(item => item.name).join(", ");
-                                return `Товары (${itemNames}): ${order.order.error || "Неизвестная ошибка"}`;
-                            });
-                        
-                        if (errors.length > 0) {
-                            errorMessage += errors.join("; ");
+                        // Проверяем общий успех операции
+                        if (!ordersData.success) {
+                            // Если ни один заказ не был создан успешно
+                            let errorMessage = "Не удалось создать заказы. ";
+                            
+                            // Собираем информацию об ошибках
+                            const errors = ordersData.orders
+                                .filter(order => !order.success)
+                                .map(order => {
+                                    const itemNames = order.items.map(item => item.name).join(", ");
+                                    return `Товары (${itemNames}): ${order.order.error || "Неизвестная ошибка"}`;
+                                });
+                            
+                            if (errors.length > 0) {
+                                errorMessage += errors.join("; ");
+                            }
+                            
+                            hideNotification();
+                            tg.showAlert(errorMessage);
+                            return Promise.reject(new Error(errorMessage));
                         }
                         
+                        showNotification("Заказы успешно созданы. Сохранение информации...", 10000);
+                        
+                        // Теперь сохраняем единый заказ со всеми позициями
+                        return fetch('/api/save-combined-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                userId: userId,
+                                orders: ordersData.orders,
+                                items: cart // Передаем все товары из корзины
+                            })
+                        })
+                        .then(response => response.json());
+                    })
+                    .then(saveResult => {
+                        console.log('Результат сохранения объединенного заказа:', saveResult);
+                        
+                        if (!saveResult.success) {
+                            throw new Error(saveResult.error || "Не удалось сохранить объединенный заказ");
+                        }
+                        
+                        // Очищаем корзину
+                        cart = [];
+                        sessionStorage.setItem('cart', JSON.stringify(cart));
+                        displayCart();
+                        
+                        // Скрываем уведомление
                         hideNotification();
-                        tg.showAlert(errorMessage);
-                        return Promise.reject(new Error(errorMessage));
-                    }
-                    
-                    showNotification("Заказы успешно созданы. Сохранение информации...", 10000);
-                    
-                    // Теперь сохраняем единый заказ со всеми позициями
-                    return fetch('/api/save-combined-order', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            userId: userId,
-                            orders: ordersData.orders,
-                            items: cart // Передаем все товары из корзины
-                        })
+                        
+                        // Показываем сообщение об успешном создании заказа
+                        tg.showAlert("Заказ успешно создан!");
+                        
+                        // Перенаправляем на главное меню
+                        setTimeout(() => {
+                            window.location.href = `/main_menu?user_id=${userId}`;
+                        }, 1000);
                     })
-                    .then(response => response.json());
-                })
-                .then(saveResult => {
-                    console.log('Результат сохранения объединенного заказа:', saveResult);
-                    
-                    if (!saveResult.success) {
-                        throw new Error(saveResult.error || "Не удалось сохранить объединенный заказ");
-                    }
-                    
-                    // Очищаем корзину
-                    cart = [];
-                    sessionStorage.setItem('cart', JSON.stringify(cart));
-                    displayCart();
-                    
-                    // Скрываем уведомление
-                    hideNotification();
-                    
-                    // Показываем сообщение об успешном создании заказа
-                    tg.showAlert("Заказ успешно создан!");
-                    
-                    // Перенаправляем на главное меню
-                    setTimeout(() => {
-                        window.location.href = `/main_menu?user_id=${userId}`;
-                    }, 1000);
-                })
-                .catch(error => {
-                    console.error('Ошибка при создании заказа:', error);
-                    hideNotification();
-                    tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
-                });
+                    .catch(error => {
+                        console.error('Ошибка при создании заказа:', error);
+                        hideNotification();
+                        tg.showAlert('Произошла ошибка при создании заказа: ' + error.message);
+                    });
+            }
         }
         
         function addMore() {
