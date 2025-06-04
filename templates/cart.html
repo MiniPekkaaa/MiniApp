@@ -754,6 +754,16 @@
             // Проверяем, есть ли тара в корзине
             const hasTara = cart.some(item => item.TARA === true);
             if (!hasTara) {
+                // Проверяем, показывалось ли уже уведомление о тарах
+                const taraWarningShown = sessionStorage.getItem('taraWarningShown');
+                
+                // Если уведомление уже показывалось, позволяем продолжить оформление
+                if (taraWarningShown === 'true') {
+                    // Продолжаем оформление заказа даже без тары
+                    continueOrderProcess();
+                    return;
+                }
+                
                 // Создаем и показываем диалог с предупреждением и кнопкой "Закрыть"
                 const confirmDialog = document.createElement('div');
                 confirmDialog.className = 'confirm-dialog';
@@ -823,6 +833,9 @@
                 // Обработчик события для кнопки "Закрыть"
                 document.getElementById('confirmDialogClose').addEventListener('click', function() {
                     document.body.removeChild(confirmDialog);
+                    
+                    // Устанавливаем флаг, что предупреждение было показано
+                    sessionStorage.setItem('taraWarningShown', 'true');
                 });
                 
                 return;
