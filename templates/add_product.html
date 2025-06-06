@@ -322,8 +322,6 @@
         
         const userId = tg.initDataUnsafe?.user?.id;
         let initialProducts = {{ products|tojson|safe }};
-        // Сортировка всего массива товаров по алфавиту при загрузке
-        initialProducts.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
         let selectedProduct = null;
         const remainders = [];
         

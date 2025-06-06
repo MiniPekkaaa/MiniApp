@@ -1068,11 +1068,12 @@
                     throw error;
                 });
             } else {
-                // Прямой запрос к внешнему API - заменяем на прокси через бэкенд
-                return fetch('/api/calculate-prices', {
+                // Прямой запрос к внешнему API
+                return fetch('http://87.225.110.142:65531/uttest/hs/int/calculate_checkout', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Basic ' + btoa('int2:pcKnE8GqXn')
                     },
                     body: JSON.stringify({
                         DATE: Math.floor(Date.now() / 1000).toString(),
