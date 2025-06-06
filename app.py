@@ -8,6 +8,28 @@ from datetime import datetime, timedelta
 import pytz
 import requests
 import random
+import config
+import platform
+import time
+
+# Глобальная переменная для отслеживания времени запуска приложения
+APP_START_TIME = time.time()
+
+# Функция для форматирования времени работы
+def format_uptime(seconds):
+    """Форматирует время работы в человекочитаемый формат."""
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    if days > 0:
+        return f"{int(days)}д {int(hours)}ч {int(minutes)}м {int(seconds)}с"
+    elif hours > 0:
+        return f"{int(hours)}ч {int(minutes)}м {int(seconds)}с"
+    elif minutes > 0:
+        return f"{int(minutes)}м {int(seconds)}с"
+    else:
+        return f"{int(seconds)}с"
 
 # Настройка логирования
 logging.basicConfig(
@@ -19,15 +41,15 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Конфигурация MongoDB
-app.config["MONGO_URI"] = "mongodb://root:otlehjoq543680@46.101.121.75:27017/admin?authSource=admin&directConnection=true"
+app.config["MONGO_URI"] = config.MONGO_URI
 mongo = PyMongo(app)
 
 # Конфигурация Redis
 redis_client = redis.Redis(
-    host='46.101.121.75',
-    port=6379,
-    password='otlehjoq',
-    decode_responses=True
+    host=config.REDIS_HOST,
+    port=config.REDIS_PORT,
+    password=config.REDIS_PASSWORD,
+    decode_responses=config.REDIS_DECODE_RESPONSES
 )
 
 def check_user_registration(user_id):
@@ -846,34 +868,27 @@ def get_user_org_data():
 @app.route('/api/calculate-prices', methods=['POST'])
 def calculate_prices():
     try:
+        logger.debug("Получен запрос на расчет цен")
         data = request.json
-        logger.debug(f"Получен запрос на расчет цен: {data}")
         
-        # Проверка наличия необходимых полей
-        if not data.get('INN_legal_entity'):
-            logger.warning("INN_legal_entity отсутствует в запросе")
-            
-        if not data.get('ID_customer'):
-            logger.warning("ID_customer отсутствует в запросе")
-            
-        if not data.get('positions') or len(data.get('positions')) == 0:
-            logger.warning("Positions пусты или отсутствуют в запросе")
+        # Подробное логирование входящих данных
+        logger.debug("Входящие данные (ID_customer): %s", data.get('ID_customer', ''))
+        logger.debug("Входящие данные (INN_legal_entity): %s", data.get('INN_legal_entity', ''))
+        logger.debug("Входящие данные (количество позиций): %s", len(data.get('positions', [])))
         
-        # Формируем запрос к внешнему API с правильными параметрами
+        # Форматируем данные для передачи в API
         request_body = {
-            "DATE": data.get('DATE', str(int(datetime.now().timestamp()))),
-            "ID_customer": data.get('ID_customer', ''),
-            "INN_legal_entity": data.get('INN_legal_entity', ''),
-            "positions": data.get('positions', [])
+            'DATE': data.get('DATE', str(int(datetime.now().timestamp()))),
+            'ID_customer': data.get('ID_customer', ''),
+            'INN_legal_entity': data.get('INN_legal_entity', ''),
+            'positions': data.get('positions', [])
         }
-        
-        logger.debug(f"Отправляем запрос на расчет цен: {request_body}")
         
         try:
             response = requests.post(
-                'http://87.225.110.142:65531/uttest/hs/int/calculate_checkout',
+                f"{config.API_BASE_URL}{config.API_ENDPOINTS['calculate_checkout']}",
                 json=request_body,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10  # Добавляем тайм-аут
             )
@@ -902,13 +917,11 @@ def calculate_prices():
                 logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
                 # Если JSON не работает, вернем хотя бы текст
                 return jsonify(response.text)
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Ошибка при отправке запроса: {str(e)}")
-            return jsonify({"error": f"Request error: {str(e)}"}), 500
-            
+        except Exception as e:
+            logger.error(f"Ошибка при запросе к API: {str(e)}")
+            return jsonify({"error": f"API request error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Ошибка при расчете цен: {str(e)}")
+        logger.error(f"Общая ошибка при расчете цен: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/create-1c-order', methods=['POST'])
@@ -1117,9 +1130,9 @@ def create_1c_order():
             # Отправляем запрос
             try:
                 response = requests.post(
-                    'http://87.225.110.142:65531/uttest/hs/int/novzakaz',
+                    f"{config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}",
                     json=request_body,
-                    auth=('int2', 'pcKnE8GqXn'),
+                    auth=(config.API_USERNAME, config.API_PASSWORD),
                     headers={'Content-Type': 'application/json'},
                     timeout=10
                 )
@@ -1256,9 +1269,15 @@ def get_order_history():
             
         # Получаем историю заказов из 1С
         try:
+            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_history']}{org_id}"
+            logger.debug(f"Отправка запроса к API 1C: GET {api_url}")
+            
+            api_request_start = datetime.now()
+            logger.debug(f'Начало запроса к API 1C: {(api_request_start - start_time).total_seconds():.3f} сек')
+            
             response = requests.get(
-                f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}',
-                auth=('int2', 'pcKnE8GqXn'),
+                api_url,
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
@@ -1277,13 +1296,11 @@ def get_order_history():
             except Exception as e:
                 logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
                 return jsonify({"error": f"JSON parsing error: {str(e)}"}), 500
-                
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Ошибка при отправке запроса истории заказов: {str(e)}")
-            return jsonify({"error": f"Request error: {str(e)}"}), 500
-            
+        except Exception as e:
+            logger.error(f"Ошибка при запросе к API истории заказов: {str(e)}")
+            return jsonify({"error": f"API request error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Ошибка при получении истории заказов: {str(e)}")
+        logger.error(f"Общая ошибка при получении истории заказов: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get-orders-from-1c')
@@ -1293,28 +1310,28 @@ def get_orders_from_1c():
         user_id = request.args.get('user_id')
         
         if not user_id:
-            return jsonify({"error": "User ID is required"}), 400
-        
-        logger.debug(f'Начало получения заказов из 1С для пользователя {user_id}: {start_time.strftime("%H:%M:%S.%f")[:-3]}')
+            return jsonify({"success": False, "error": "User ID is required"}), 400
             
+        logger.debug(f"Получен запрос на получение заказов из 1С для пользователя {user_id}")
+        
         # Получаем данные пользователя из Redis
+        user_data_start = datetime.now()
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        logger.debug(f'Получение данных пользователя из Redis: {(datetime.now() - user_data_start).total_seconds():.3f} сек')
+        
         if not user_data:
-            return jsonify({"error": "User not found"}), 404
-        
-        redis_time = datetime.now()
-        logger.debug(f'Данные пользователя получены из Redis за: {(redis_time - start_time).total_seconds():.3f} сек')
+            logger.warning(f"Пользователь {user_id} не найден в Redis")
+            return jsonify({"success": False, "error": "User not found"}), 404
             
-        # Получаем информацию об организации для получения organizationId
         org_id = user_data.get('org_ID')
-        if not org_id:
-            return jsonify({"error": "Organization ID not found"}), 404
-            
-        logger.debug(f'Получение истории заказов из 1С для организации: {org_id}')
         
-        # Получаем историю заказов из 1С используя новый эндпоинт
+        if not org_id:
+            logger.warning(f"Для пользователя {user_id} не найден ID организации")
+            return jsonify({"success": False, "error": "Organization ID not found"}), 404
+            
+        # Получаем историю заказов из 1С
         try:
-            api_url = f'http://87.225.110.142:65531/uttest/hs/int/istorzakaz/{org_id}'
+            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_history']}{org_id}"
             logger.debug(f"Отправка запроса к API 1C: GET {api_url}")
             
             api_request_start = datetime.now()
@@ -1322,7 +1339,7 @@ def get_orders_from_1c():
             
             response = requests.get(
                 api_url,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
@@ -1529,12 +1546,12 @@ def get_order_status():
         
         # Отправляем запрос к API 1С для получения статуса заказа
         try:
-            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
             logger.debug(f"Отправка запроса: GET {api_url}")
             
             response = requests.get(
                 api_url,
-                auth=('int2', 'pcKnE8GqXn'),
+                auth=(config.API_USERNAME, config.API_PASSWORD),
                 headers={'Content-Type': 'application/json'},
                 timeout=10
             )
@@ -1574,12 +1591,12 @@ def proxy_order_status():
         logger.debug(f"Запрос статуса заказа через прокси для UID: {uid}")
         
         # Отправляем запрос к API 1С для получения статуса заказа
-        api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+        api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{uid}"
         logger.debug(f"Отправка запроса: GET {api_url}")
         
         response = requests.get(
             api_url,
-            auth=('int2', 'pcKnE8GqXn'),
+            auth=(config.API_USERNAME, config.API_PASSWORD),
             headers={'Content-Type': 'application/json'},
             timeout=10
         )
@@ -1618,32 +1635,26 @@ def proxy_order_status():
 @app.route('/api/get-combined-order-status')
 def get_combined_order_status():
     try:
-        # Получаем MongoDB ID заказа
-        order_id = request.args.get('order_id')
-        if not order_id:
-            return jsonify({"error": "Order ID is required"}), 400
+        mongo_id = request.args.get('id')
+        if not mongo_id:
+            return jsonify({"success": False, "error": "Order ID is required"}), 400
             
-        logger.debug(f"Запрос комбинированного статуса заказа с ID: {order_id}")
-        
-        # Получаем заказ из MongoDB
+        # Получаем данные заказа из MongoDB
         try:
-            order = mongo.cx.Pivo.Orders.find_one({'_id': ObjectId(order_id)})
+            order = mongo.cx.Pivo.Orders.find_one({'_id': ObjectId(mongo_id)})
             if not order:
-                return jsonify({"error": "Order not found"}), 404
+                return jsonify({"success": False, "error": "Order not found"}), 404
                 
-            # Проверяем наличие ordersUID
-            if not order.get('ordersUID') or not isinstance(order.get('ordersUID'), dict):
-                return jsonify({"success": True, "status": "В обработке", "original": None})
-                
-            # Получаем статусы всех заказов в 1С
+            # Собираем все статусы заказов из 1С
             statuses = []
+            
             for uid_key, order_uid in order.get('ordersUID', {}).items():
                 try:
                     # Запрашиваем статус каждого заказа
-                    api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                    api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
                     response = requests.get(
                         api_url,
-                        auth=('int2', 'pcKnE8GqXn'),
+                        auth=(config.API_USERNAME, config.API_PASSWORD),
                         headers={'Content-Type': 'application/json'},
                         timeout=10
                     )
@@ -1798,7 +1809,7 @@ def get_batch_order_statuses():
         for uid in order_uids:
             try:
                 # Создаем запрос, но не выполняем его сразу
-                api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{uid}'
+                api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{uid}"
                 request_obj = {
                     'uid': uid,
                     'url': api_url
@@ -1821,7 +1832,7 @@ def get_batch_order_statuses():
                     # Запрашиваем статус в 1C
                     response = requests.get(
                         api_url,
-                        auth=('int2', 'pcKnE8GqXn'),
+                        auth=(config.API_USERNAME, config.API_PASSWORD),
                         headers={'Content-Type': 'application/json'},
                         timeout=5  # Уменьшаем тайм-аут для ускорения
                     )
@@ -2041,12 +2052,12 @@ def get_shipped_orders_positions():
                     if order_uid:
                         try:
                             # Запрашиваем статус заказа в 1С
-                            api_url = f'http://87.225.110.142:65531/uttest/hs/int/zakaz-status/{order_uid}'
+                            api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
                             logger.debug(f"Запрос статуса для заказа с UID {order_uid}")
                             
                             response = requests.get(
                                 api_url,
-                                auth=('int2', 'pcKnE8GqXn'),
+                                auth=(config.API_USERNAME, config.API_PASSWORD),
                                 headers={'Content-Type': 'application/json'},
                                 timeout=5
                             )
@@ -2189,6 +2200,258 @@ def get_shipped_orders_for_input():
         logger.error(f"Ошибка при получении отгруженных заказов для ввода остатков: {str(e)}")
         return jsonify({
             "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/health-check')
+def health_check():
+    try:
+        start_time = datetime.now()
+        status = {
+            "status": "ok",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "services": {
+                "app": "running",
+                "mongodb": "unknown",
+                "redis": "unknown"
+            },
+            "response_time_ms": 0
+        }
+        
+        # Проверяем подключение к MongoDB
+        try:
+            # Простой запрос для проверки соединения
+            mongo.cx.admin.command('ping')
+            status["services"]["mongodb"] = "connected"
+        except Exception as e:
+            logger.error(f"MongoDB health check failed: {str(e)}")
+            status["services"]["mongodb"] = "error"
+            status["status"] = "degraded"
+            
+        # Проверяем подключение к Redis
+        try:
+            redis_ping = redis_client.ping()
+            if redis_ping:
+                status["services"]["redis"] = "connected"
+            else:
+                status["services"]["redis"] = "error"
+                status["status"] = "degraded"
+        except Exception as e:
+            logger.error(f"Redis health check failed: {str(e)}")
+            status["services"]["redis"] = "error"
+            status["status"] = "degraded"
+            
+        # Рассчитываем время ответа
+        end_time = datetime.now()
+        response_time = (end_time - start_time).total_seconds() * 1000
+        status["response_time_ms"] = round(response_time, 2)
+        
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/system-stats')
+def system_stats():
+    try:
+        # Рассчитываем время работы приложения
+        uptime_seconds = int(time.time() - APP_START_TIME)
+        
+        # Базовая информация о системе
+        stats = {
+            "status": "ok",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "system_info": {
+                "platform": platform.system(),
+                "platform_version": platform.version(),
+                "python_version": platform.python_version()
+            },
+            "database_stats": {
+                "mongodb": {},
+                "redis": {}
+            },
+            "app_stats": {
+                "uptime_seconds": uptime_seconds,
+                "uptime_formatted": format_uptime(uptime_seconds),
+                "start_time": datetime.fromtimestamp(APP_START_TIME).strftime("%Y-%m-%d %H:%M:%S")
+            }
+        }
+        
+        # Получаем статистику MongoDB
+        try:
+            # Получаем количество заказов
+            order_count = mongo.cx.Pivo.Orders.count_documents({})
+            stats["database_stats"]["mongodb"]["orders_count"] = order_count
+            
+            # Получаем количество товаров в каталоге
+            catalog_count = mongo.cx.Pivo.catalog.count_documents({})
+            stats["database_stats"]["mongodb"]["catalog_items_count"] = catalog_count
+            
+            # Получаем количество организаций
+            org_count = mongo.cx.Pivo.organizations.count_documents({})
+            stats["database_stats"]["mongodb"]["organizations_count"] = org_count
+            
+            # Проверяем размер коллекций
+            db_stats = mongo.cx.Pivo.command("dbStats")
+            stats["database_stats"]["mongodb"]["storage_size_mb"] = round(db_stats.get("storageSize", 0) / (1024 * 1024), 2)
+            stats["database_stats"]["mongodb"]["data_size_mb"] = round(db_stats.get("dataSize", 0) / (1024 * 1024), 2)
+            
+        except Exception as e:
+            logger.error(f"Error getting MongoDB stats: {str(e)}")
+            stats["database_stats"]["mongodb"]["error"] = str(e)
+            stats["status"] = "degraded"
+        
+        # Получаем статистику Redis
+        try:
+            # Получаем информацию о Redis
+            redis_info = redis_client.info()
+            
+            # Извлекаем полезные метрики
+            stats["database_stats"]["redis"]["connected_clients"] = redis_info.get("connected_clients", 0)
+            stats["database_stats"]["redis"]["used_memory_human"] = redis_info.get("used_memory_human", "0")
+            stats["database_stats"]["redis"]["uptime_in_seconds"] = redis_info.get("uptime_in_seconds", 0)
+            
+            # Получаем количество ключей пользователей
+            user_keys_count = len(redis_client.keys("beer:user:*"))
+            stats["database_stats"]["redis"]["user_keys_count"] = user_keys_count
+            
+        except Exception as e:
+            logger.error(f"Error getting Redis stats: {str(e)}")
+            stats["database_stats"]["redis"]["error"] = str(e)
+            stats["status"] = "degraded"
+            
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"System stats check failed: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/ping')
+def ping():
+    """Простой эндпоинт для проверки доступности приложения."""
+    return jsonify({
+        "status": "ok",
+        "message": "pong",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+@app.route('/api/status')
+def app_status():
+    """
+    Общий эндпоинт для проверки работоспособности приложения.
+    Возвращает сводный статус всех компонентов системы в упрощенном формате для мониторинга.
+    """
+    try:
+        result = {
+            "status": "ok",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "components": {},
+            "errors": []
+        }
+        
+        # Проверка MongoDB
+        try:
+            mongo.cx.admin.command('ping')
+            result["components"]["mongodb"] = "ok"
+        except Exception as e:
+            error_msg = f"MongoDB недоступна: {str(e)}"
+            result["components"]["mongodb"] = "error"
+            result["errors"].append(error_msg)
+            result["status"] = "error"
+            logger.error(error_msg)
+        
+        # Проверка Redis
+        try:
+            redis_ping = redis_client.ping()
+            if redis_ping:
+                result["components"]["redis"] = "ok"
+            else:
+                error_msg = "Redis не отвечает на ping"
+                result["components"]["redis"] = "error"
+                result["errors"].append(error_msg)
+                result["status"] = "error"
+                logger.error(error_msg)
+        except Exception as e:
+            error_msg = f"Redis недоступен: {str(e)}"
+            result["components"]["redis"] = "error"
+            result["errors"].append(error_msg)
+            result["status"] = "error"
+            logger.error(error_msg)
+        
+        # Проверка API 1C, если используется
+        try:
+            if hasattr(config, 'C1_API_URL') and config.C1_API_URL:
+                # Пробуем только проверить, что константа существует
+                result["components"]["1c_api"] = "configured"
+            else:
+                result["components"]["1c_api"] = "not_configured"
+        except Exception as e:
+            error_msg = f"Ошибка при проверке конфигурации 1C API: {str(e)}"
+            result["components"]["1c_api"] = "error"
+            result["errors"].append(error_msg)
+            logger.warning(error_msg)
+        
+        # Проверка критических коллекций в MongoDB
+        try:
+            # Проверяем наличие коллекций в БД
+            collections = mongo.cx.Pivo.list_collection_names()
+            required_collections = ["catalog", "Orders", "organizations"]
+            
+            missing_collections = [coll for coll in required_collections if coll not in collections]
+            
+            if missing_collections:
+                error_msg = f"Отсутствуют необходимые коллекции в MongoDB: {', '.join(missing_collections)}"
+                result["components"]["mongodb_collections"] = "error"
+                result["errors"].append(error_msg)
+                result["status"] = "error"
+                logger.error(error_msg)
+            else:
+                result["components"]["mongodb_collections"] = "ok"
+                
+            # Проверяем наличие товаров в каталоге
+            catalog_count = mongo.cx.Pivo.catalog.count_documents({})
+            if catalog_count == 0:
+                warning_msg = "Каталог товаров пуст"
+                result["components"]["catalog"] = "warning"
+                result["errors"].append(warning_msg)
+                if result["status"] == "ok":  # Не переписываем статус, если уже error
+                    result["status"] = "warning"
+                logger.warning(warning_msg)
+            else:
+                result["components"]["catalog"] = "ok"
+                
+        except Exception as e:
+            error_msg = f"Ошибка при проверке коллекций MongoDB: {str(e)}"
+            result["components"]["mongodb_collections"] = "error"
+            result["errors"].append(error_msg)
+            result["status"] = "error"
+            logger.error(error_msg)
+        
+        # Общая информация о системе
+        result["app_uptime"] = format_uptime(int(time.time() - APP_START_TIME))
+        
+        # Устанавливаем HTTP-код ответа в зависимости от статуса
+        http_code = 200
+        if result["status"] == "error":
+            http_code = 500
+        elif result["status"] == "warning":
+            http_code = 200  # Предупреждения не являются ошибкой сервера
+        
+        return jsonify(result), http_code
+        
+    except Exception as e:
+        logger.error(f"Критическая ошибка при проверке статуса приложения: {str(e)}")
+        return jsonify({
+            "status": "critical_error",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "message": "Произошла критическая ошибка при проверке статуса",
             "error": str(e)
         }), 500
 

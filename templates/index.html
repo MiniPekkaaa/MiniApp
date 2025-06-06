@@ -179,6 +179,8 @@
         }
         
         const initialProducts = {{ products|tojson|safe }};
+        // Сортировка всего массива товаров по алфавиту при загрузке
+        initialProducts.sort((a, b) => a.name.localeCompare(b.name));
         console.log("Loaded products:", initialProducts);
         
         let cart = JSON.parse(sessionStorage.getItem('cart') || '[]');
@@ -254,6 +256,9 @@
                 });
                 
                 console.log(`Отфильтровано ${filteredProducts.length - taraFilteredProducts.length} товаров по фильтру ${currentFilter}`);
+                
+                // Сортировка товаров по алфавиту
+                taraFilteredProducts.sort((a, b) => a.name.localeCompare(b.name));
                 
                 taraFilteredProducts.forEach(product => {
                     const item = document.createElement('div');

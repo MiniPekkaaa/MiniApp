@@ -4,10 +4,11 @@
 from pymongo import MongoClient
 import json
 from bson import json_util
+import config
 
 try:
     # MongoDB connection
-    client = MongoClient('mongodb://root:otlehjoq543680@46.101.121.75:27017/admin')
+    client = MongoClient(config.MONGO_URI)
     
     # Switch to Pivo database
     db = client.Pivo
