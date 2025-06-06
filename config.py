@@ -16,7 +16,7 @@ REDIS_PASSWORD = "otlehjoq"
 REDIS_DECODE_RESPONSES = True
 
 # Конфигурация 1C API
-API_BASE_URL = "http://212.19.22.184:9997/UT11/hs/int"
+API_BASE_URL = "http://87.225.110.142:65531/uttest/hs/int"
 API_ENDPOINTS = {
     "calculate_checkout": "/calculate_checkout",
     "order_history": "/istorzakaz/",
