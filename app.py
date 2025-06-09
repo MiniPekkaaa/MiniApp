@@ -1225,25 +1225,10 @@ def create_1c_order():
                 })
                 continue
                 
-            # Формируем дату точно так же, как в JavaScript: Math.floor(Date.now() / 1000).toString()
-            # Используем текущее время в секундах (эквивалент Date.now()/1000)
-            import time
-            timestamp = int(time.time())  # Текущее время в секундах, целое число
-            
-            # Логирование даты в разных форматах
-            logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            timezone = pytz.timezone('Asia/Vladivostok')
-            vladivostok_time = datetime.now(timezone)
-            logger.info(f"Время Владивостока: {vladivostok_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Использованный timestamp (из time.time()): {timestamp}")
-            logger.info(f"Этот timestamp соответствует дате: {datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Сравнение с методом JavaScript
-            logger.info(f"JavaScript эквивалент: Math.floor(Date.now() / 1000) = {timestamp}")
-            
-            # Формируем запрос строго в таком формате, как в образце
+            # Формируем запрос в точном соответствии с форматом API 1С
+            timestamp = int(datetime.now().timestamp())
             request_body = {
-                "DATE": str(int(timestamp)),  # Преобразуем в целое число и затем в строку, без десятичных
+                "DATE": str(timestamp),
                 "ID_customer": organization_id,
                 "INN_legal_entity": str(legal_entity),  # Используем legalEntity из группы товаров
                 "positions": positions
@@ -1467,9 +1452,9 @@ def create_1c_order():
                                     logger.warning(f"Созданный заказ с UID {created_uid} не найден в истории заказов")
                             
                             if found_orders:
-                                logger.info(f"Подтверждено наличие заказов в истории: {', '.join(found_orders[:3])} (всего: {len(found_orders)})")
+                                logger.info(f"Подтверждено наличие заказов в истории: {found_orders}")
                         else:
-                            logger.warning(f"История заказов не является списком")
+                            logger.warning(f"История заказов не является списком: {history_data}")
                     except Exception as e:
                         logger.warning(f"Ошибка при обработке истории заказов: {str(e)}")
                 else:
@@ -2389,73 +2374,56 @@ def get_shipped_orders_for_input():
             
         logger.debug(f"Получение заказов для организации {org_id}")
         
-        # Получаем заказы со статусом "Отгружен" (или подобным)
-        # Используем прямой запрос с regex для проверки статуса
-        shipped_orders_query = {
-            "org_ID": org_id,
-            "$or": [
-                {"status": {"$regex": "отгруж", "$options": "i"}},
-                {"status": {"$regex": "выполнен", "$options": "i"}},
-                {"status": {"$regex": "доставлен", "$options": "i"}}
-            ]
-        }
+        # Получаем последние 10 заказов организации, отсортированные по дате создания
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {"org_ID": org_id},
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(10))
         
-        # Получаем только последние 5 отгруженных заказов
-        shipped_orders_db = list(mongo.cx.Pivo.Orders.find(
-            shipped_orders_query,
-            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "status": 1}
-        ).sort([("createdAt", -1), ("date", -1)]).limit(5))
+        logger.debug(f"Найдено {len(orders)} последних заказов")
         
-        logger.debug(f"Найдено {len(shipped_orders_db)} отгруженных заказов")
-        
-        # Если отгруженных заказов нет, попробуем взять последние заказы независимо от статуса
-        if not shipped_orders_db:
-            logger.debug(f"Отгруженных заказов не найдено, берем последние заказы")
-            shipped_orders_db = list(mongo.cx.Pivo.Orders.find(
-                {"org_ID": org_id},
-                {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "status": 1}
-            ).sort([("createdAt", -1), ("date", -1)]).limit(3))
-            
-            logger.debug(f"Найдено {len(shipped_orders_db)} последних заказов")
-        
-        # Форматируем заказы для ответа API
+        # Фильтруем заказы со статусом "Отгружен" и ограничиваем до 3
         shipped_orders = []
         
-        for order in shipped_orders_db:
-            # Форматируем заказ для ответа API
-            formatted_order = {
-                'order_ID': str(order.get('_id')),
-                'date': order.get('date', ''),
-                'status': order.get('status', 'Новый'),
-                'positions': []
-            }
+        for order in orders:
+            # Проверяем статус заказа (если статус не указан, считаем его "Новый")
+            status = order.get('status', 'Новый')
             
-            # Преобразуем позиции из словаря в список
-            positions = order.get('Positions', {})
-            for pos_key, position in positions.items():
-                beer_id = position.get('Beer_ID')
-                beer_name = position.get('Beer_Name')
-                legal_entity = position.get('Legal_Entity', 1)
-                quantity = position.get('Beer_Count', 0)
-                price = position.get('Price', 0)
+            # Проверяем, является ли статус "Отгружен" или подобным
+            status_lower = status.lower()
+            if 'отгруж' in status_lower or 'выполнен' in status_lower or 'доставлен' in status_lower:
+                # Форматируем заказ для ответа API
+                formatted_order = {
+                    'order_ID': str(order.get('_id')),
+                    'date': order.get('date', ''),
+                    'status': status,
+                    'positions': []
+                }
                 
-                if beer_id is not None and beer_name:
-                    formatted_order['positions'].append({
-                        'id': str(beer_id),
-                        'name': beer_name,
-                        'legal_entity': legal_entity,
-                        'quantity': quantity,
-                        'price': price
-                    })
-            
-            # Добавляем заказ только если есть позиции
-            if formatted_order['positions']:
+                # Преобразуем позиции из словаря в список
+                positions = order.get('Positions', {})
+                for pos_key, position in positions.items():
+                    beer_id = position.get('Beer_ID')
+                    beer_name = position.get('Beer_Name')
+                    legal_entity = position.get('Legal_Entity', 1)
+                    quantity = position.get('Beer_Count', 0)
+                    price = position.get('Price', 0)
+                    
+                    if beer_id is not None and beer_name:
+                        formatted_order['positions'].append({
+                            'id': str(beer_id),
+                            'name': beer_name,
+                            'legal_entity': legal_entity,
+                            'quantity': quantity,
+                            'price': price
+                        })
+                
                 shipped_orders.append(formatted_order)
-                logger.debug(f"Добавлен заказ: {order.get('_id')}, позиций: {len(formatted_order['positions'])}")
-            
-            # Если уже нашли 3 заказа, выходим из цикла
-            if len(shipped_orders) >= 3:
-                break
+                logger.debug(f"Добавлен отгруженный заказ: {order.get('_id')}")
+                
+                # Если уже нашли 3 заказа, выходим из цикла
+                if len(shipped_orders) >= 3:
+                    break
         
         logger.debug(f"Найдено {len(shipped_orders)} отгруженных заказов для ввода остатков")
         
