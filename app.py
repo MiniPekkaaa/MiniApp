@@ -1248,8 +1248,9 @@ def create_1c_order():
             sample_date = datetime.fromtimestamp(1957598704, timezone)
             logger.info(f"Образец даты из timestamp: {sample_date.strftime('%Y-%m-%d %H:%M:%S')}")
             
+            # Формируем запрос строго в таком формате, как в образце
             request_body = {
-                "DATE": str(timestamp),
+                "DATE": str(int(timestamp)),  # Преобразуем в целое число и затем в строку, без десятичных
                 "ID_customer": organization_id,
                 "INN_legal_entity": str(legal_entity),  # Используем legalEntity из группы товаров
                 "positions": positions
