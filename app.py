@@ -803,7 +803,11 @@ def get_user_org_data():
         
         # Если нет organization_id, используем значение по умолчанию
         if not organization_id:
-            organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
+            organization_id = org_id  # Используем org_ID если нет organizationId
+            logger.warning(f"Не найден organizationId, используем org_ID: {organization_id}")
+        
+        # Для диагностики логируем ID_customer
+        logger.info(f"Используем ID_customer: {organization_id}")
             
         # Получаем информацию о товарах для получения UID и legalEntity
         catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1, 'legalEntity': 1}))
@@ -976,7 +980,11 @@ def create_1c_order():
             
         # Если нет organization_id, используем значение по умолчанию
         if not organization_id:
-            organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
+            organization_id = org_id  # Используем org_ID если нет organizationId
+            logger.warning(f"Не найден organizationId, используем org_ID: {organization_id}")
+        
+        # Для диагностики логируем ID_customer
+        logger.info(f"Используем ID_customer: {organization_id}")
             
         # Получаем информацию о каталоге товаров
         catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1}))
@@ -1102,7 +1110,7 @@ def create_1c_order():
                             logger.info(f"Преобразован UID товара {item_name}: {uid} -> {formatted_uid}")
                             uid = formatted_uid
                     
-                    # Формируем позицию в точном соответствии с примером в запросе пользователя
+                    # Формируем позицию с проверкой формата
                     position = {
                         "ID_product": uid,
                         "Amount": int(item.get('quantity', 1))
@@ -1110,6 +1118,10 @@ def create_1c_order():
                     positions.append(position)
                     valid_items.append(item)
                     logger.info(f"Добавлена позиция: {json.dumps(position, ensure_ascii=False)}")
+                    
+                    # Проверяем формат ID_product - должен быть строкой с дефисами в формате UUID
+                    if not re.match(uid_pattern, position["ID_product"]):
+                        logger.error(f"Внимание! ID_product не соответствует формату UUID: {position['ID_product']}")
                 else:
                     logger.warning(f"Товар {item_name} (ID: {item_id}) не имеет действительного UID и не будет добавлен в заказ")
             
@@ -1125,13 +1137,29 @@ def create_1c_order():
                 })
                 continue
                 
-            # Формируем запрос в точном соответствии с примером пользователя
+            # Формируем запрос в точном соответствии с форматом API 1С
+            timestamp = int(datetime.now().timestamp())
             request_body = {
-                "DATE": str(int(datetime.now().timestamp())),
+                "DATE": str(timestamp),
                 "ID_customer": organization_id,
                 "INN_legal_entity": str(legal_entity),
                 "positions": positions
             }
+            
+            # Проверяем форматы важных полей
+            # Проверка ID_customer на формат UUID
+            id_customer_pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            if not re.match(id_customer_pattern, request_body["ID_customer"]):
+                logger.warning(f"ID_customer не соответствует формату UUID: {request_body['ID_customer']}")
+                
+            # Проверка INN_legal_entity на формат ИНН (10 или 12 цифр)
+            inn_pattern = r'^\d{10}(\d{2})?$'
+            if not re.match(inn_pattern, request_body["INN_legal_entity"]):
+                logger.warning(f"INN_legal_entity не соответствует формату ИНН: {request_body['INN_legal_entity']}")
+            
+            # Логируем для диагностики формат параметров
+            logger.info(f"Параметры запроса: DATE={request_body['DATE']} (timestamp: {timestamp})")
+            logger.info(f"ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}")
             
             # Проверяем, нет ли в запросе пустых полей
             empty_fields = []
@@ -1154,11 +1182,23 @@ def create_1c_order():
                 if not position.get("Amount"):
                     logger.error(f"Позиция {pos_idx+1} не имеет Amount")
             
+            # Логируем оригинальный запрос для сравнения с примером пользователя
             logger.debug(f"Запрос на создание заказа в 1С: {request_body}")
             logger.info(f"Отправка заказа в 1С с INN_legal_entity: {legal_entity} для {len(positions)} позиций")
             logger.info(f"Полные данные запроса в 1С: DATE={request_body['DATE']}, ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}, positions={positions}")
             # Полное логирование тела запроса в JSON
             logger.info(f"Полное тело запроса в 1С в формате JSON: {json.dumps(request_body, ensure_ascii=False)}")
+            
+            # Создаем копию запроса с фиксированными данными, которые точно работают
+            hardcoded_test_request = {
+                "DATE": "1957598704",
+                "ID_customer": "16d7a0a9-a651-11ef-895a-005056c00008",
+                "INN_legal_entity": "2724163243",
+                "positions": positions
+            }
+            
+            # Отправляем запрос с фиксированными данными для тестирования
+            logger.info(f"Отправляем запрос с фиксированными данными: {json.dumps(hardcoded_test_request, ensure_ascii=False)}")
             
             # Отправляем запрос
             try:
