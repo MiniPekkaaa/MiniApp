@@ -11,6 +11,7 @@ import random
 import config
 import platform
 import time
+import re
 
 # Глобальная переменная для отслеживания времени запуска приложения
 APP_START_TIME = time.time()
@@ -1019,10 +1020,13 @@ def create_1c_order():
             tara_legal_entity = non_tara_legal_entities[0]
             logger.debug(f"Для тары будет использован legalEntity из других позиций: {tara_legal_entity}")
         else:
-            # Если нет, используем одно из стандартных значений
-            standard_legal_entities = ["2724132975", "2724163243"]
-            tara_legal_entity = random.choice(standard_legal_entities)
-            logger.debug(f"Для тары будет использован случайно выбранный legalEntity: {tara_legal_entity}")
+            # Если нет, используем значение из запроса
+            tara_legal_entity = str(data.get('INN_legal_entity', '2724163243'))
+            logger.debug(f"Для тары будет использован legalEntity из запроса: {tara_legal_entity}")
+            logger.warning(f"Внимание! В запросе нет товаров с legalEntity, используем значение из параметров: {tara_legal_entity}")
+        
+        # Добавляем дополнительное логирование для диагностики
+        logger.info(f"Итоговое значение tara_legal_entity: {tara_legal_entity}")
         
         # Теперь группируем товары, обрабатывая тару специальным образом
         for item in data.get('items', []):
@@ -1080,28 +1084,34 @@ def create_1c_order():
                     elif item_name and item_name in catalog_uid_by_name:
                         uid = catalog_uid_by_name[item_name]
                         logger.info(f"Найден UID по имени в каталоге для товара {item_name}: {uid}")
-                    # Если не нашли ни по ID, ни по имени, делаем прямой запрос в MongoDB
-                    elif item_name:
-                        # Ищем товар в MongoDB по имени
-                        catalog_item = mongo.cx.Pivo.catalog.find_one({'name': item_name})
-                        if catalog_item and 'UID' in catalog_item and catalog_item['UID']:
-                            uid = catalog_item['UID']
-                            logger.info(f"Найден UID через прямой запрос в MongoDB для товара {item_name}: {uid}")
-                        else:
-                            # Если все еще не нашли, используем ID в качестве запасного варианта
-                            uid = item_id
-                            logger.warning(f"Используем ID в качестве UID для товара {item_name}: {uid}")
                 
-                # Если всё еще нет UID или ID, пропускаем товар
-                if uid is None or not str(uid).strip():
-                    logger.warning(f"Товар без UID и ID не будет добавлен в заказ: {item.get('name', 'Неизвестный товар')}")
-                    continue
+                # Если товар имеет действительный UID, добавляем его в позиции
+                if uid:
+                    # Проверяем формат UID - должен быть строкой с дефисами
+                    if not isinstance(uid, str):
+                        uid = str(uid)
                     
-                positions.append({
-                    "ID_product": str(uid),
-                    "Amount": int(item.get('quantity', 0))
-                })
-                valid_items.append(item)
+                    # Проверяем формат UUID (должен быть в формате 8-4-4-4-12)
+                    uid_pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                    if not re.match(uid_pattern, uid):
+                        logger.warning(f"UID товара {item_name} не соответствует формату UUID: {uid}")
+                        # Попытка преобразовать в правильный формат, если возможно
+                        cleaned_uid = re.sub(r'[^0-9a-fA-F]', '', uid)
+                        if len(cleaned_uid) == 32:
+                            formatted_uid = f"{cleaned_uid[:8]}-{cleaned_uid[8:12]}-{cleaned_uid[12:16]}-{cleaned_uid[16:20]}-{cleaned_uid[20:]}"
+                            logger.info(f"Преобразован UID товара {item_name}: {uid} -> {formatted_uid}")
+                            uid = formatted_uid
+                    
+                    # Формируем позицию в точном соответствии с примером в запросе пользователя
+                    position = {
+                        "ID_product": uid,
+                        "Amount": int(item.get('quantity', 1))
+                    }
+                    positions.append(position)
+                    valid_items.append(item)
+                    logger.info(f"Добавлена позиция: {json.dumps(position, ensure_ascii=False)}")
+                else:
+                    logger.warning(f"Товар {item_name} (ID: {item_id}) не имеет действительного UID и не будет добавлен в заказ")
             
             # Проверяем, есть ли товары с действительными UID или ID
             if not positions:
@@ -1115,7 +1125,7 @@ def create_1c_order():
                 })
                 continue
                 
-            # Формируем запрос
+            # Формируем запрос в точном соответствии с примером пользователя
             request_body = {
                 "DATE": str(int(datetime.now().timestamp())),
                 "ID_customer": organization_id,
@@ -1123,9 +1133,32 @@ def create_1c_order():
                 "positions": positions
             }
             
+            # Проверяем, нет ли в запросе пустых полей
+            empty_fields = []
+            if not request_body["DATE"]:
+                empty_fields.append("DATE")
+            if not request_body["ID_customer"]:
+                empty_fields.append("ID_customer")
+            if not request_body["INN_legal_entity"]:
+                empty_fields.append("INN_legal_entity")
+            if not request_body["positions"]:
+                empty_fields.append("positions")
+                
+            if empty_fields:
+                logger.error(f"В запросе на создание заказа в 1С есть пустые поля: {', '.join(empty_fields)}")
+                
+            # Проверяем формат каждой позиции
+            for pos_idx, position in enumerate(positions):
+                if not position.get("ID_product"):
+                    logger.error(f"Позиция {pos_idx+1} не имеет ID_product")
+                if not position.get("Amount"):
+                    logger.error(f"Позиция {pos_idx+1} не имеет Amount")
+            
             logger.debug(f"Запрос на создание заказа в 1С: {request_body}")
             logger.info(f"Отправка заказа в 1С с INN_legal_entity: {legal_entity} для {len(positions)} позиций")
             logger.info(f"Полные данные запроса в 1С: DATE={request_body['DATE']}, ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}, positions={positions}")
+            # Полное логирование тела запроса в JSON
+            logger.info(f"Полное тело запроса в 1С в формате JSON: {json.dumps(request_body, ensure_ascii=False)}")
             
             # Отправляем запрос
             try:
@@ -1138,6 +1171,8 @@ def create_1c_order():
                 )
                 
                 logger.debug(f"Ответ от API 1С: Статус {response.status_code}, Тело: {response.text}")
+                # Полное логирование ответа
+                logger.info(f"Полный ответ от API 1С: Статус {response.status_code}, URL: {config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}, Тело: {response.text}")
                 
                 if response.status_code != 200:
                     logger.error(f"Ошибка API 1С: {response.status_code}, {response.text}")
@@ -1179,11 +1214,15 @@ def create_1c_order():
                 try:
                     order_response = response.json()
                     logger.debug(f"Ответ API 1С (JSON): {order_response}")
+                    # Логируем структуру ответа для анализа
+                    logger.info(f"Структура ответа API 1С: тип={type(order_response)}, ключи={list(order_response.keys()) if isinstance(order_response, dict) else 'не словарь'}")
                     
                     # Проверяем корректность ответа
                     if not isinstance(order_response, dict) or "Nomer" not in order_response or "UID" not in order_response:
                         error_message = "Некорректный ответ от API 1С"
                         logger.error(f"{error_message}: {order_response}")
+                        # Логируем детали проверки
+                        logger.error(f"Детали проверки ответа: является словарем={isinstance(order_response, dict)}, содержит Nomer={'Nomer' in order_response if isinstance(order_response, dict) else False}, содержит UID={'UID' in order_response if isinstance(order_response, dict) else False}")
                         orders_results.append({
                             "legalEntity": legal_entity,
                             "items": items,
@@ -1193,6 +1232,8 @@ def create_1c_order():
                         continue
                     
                     # Сохраняем результат
+                    # Логируем UID заказа для диагностики
+                    logger.info(f"Создан заказ в 1С с UID: {order_response.get('UID')}, номер: {order_response.get('Nomer')}")
                     orders_results.append({
                         "legalEntity": legal_entity,
                         "items": valid_items,
