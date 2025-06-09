@@ -428,10 +428,20 @@
                         console.log('Подготовлены позиции для запроса с UID:', positions);
                         console.log('Карта соответствия UID -> индекс товара:', window.uidToCartItemMap);
                         
-                        // Отправляем запрос на расчет стоимости с параметрами из данных пользователя
+                        // Получаем legalEntity для первой позиции
+                        let legalEntity = '';
+                        if (cart.length > 0 && cart[0].legalEntity) {
+                            legalEntity = String(cart[0].legalEntity);
+                            console.log(`Используем legalEntity из первой позиции: ${legalEntity}`);
+                        } else if (userData.legal_entity) {
+                            legalEntity = String(userData.legal_entity);
+                            console.log(`Используем legalEntity из данных пользователя: ${legalEntity}`);
+                        }
+                        
+                        // Отправляем запрос на расчет стоимости
                         return calculatePrices({
                             ID_customer: String(userData.organization_id || userData.customer_id || ''),
-                            INN_legal_entity: String(userData.legal_entity || ''),
+                            INN_legal_entity: legalEntity,
                             positions: positions
                         });
                     })

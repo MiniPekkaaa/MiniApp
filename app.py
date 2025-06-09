@@ -896,11 +896,33 @@ def calculate_prices():
         logger.debug("Входящие данные (INN_legal_entity): %s", data.get('INN_legal_entity', ''))
         logger.debug("Входящие данные (количество позиций): %s", len(data.get('positions', [])))
         
+        # Получаем INN_legal_entity из первой позиции, если он не указан в запросе
+        inn_legal_entity = data.get('INN_legal_entity', '')
+        
+        # Если INN_legal_entity не указан, пытаемся получить из позиций
+        if not inn_legal_entity and data.get('positions'):
+            # Находим ID_product первой позиции
+            first_position = data.get('positions')[0]
+            product_id = first_position.get('ID_product')
+            
+            if product_id:
+                # Ищем товар в каталоге по UID
+                catalog_item = mongo.cx.Pivo.catalog.find_one({'UID': product_id})
+                
+                # Если не нашли по UID, пробуем найти по ID
+                if not catalog_item:
+                    catalog_item = mongo.cx.Pivo.catalog.find_one({'id': product_id})
+                
+                # Если нашли товар, получаем его legalEntity
+                if catalog_item and 'legalEntity' in catalog_item:
+                    inn_legal_entity = str(catalog_item.get('legalEntity', ''))
+                    logger.info(f"Используем legalEntity из каталога для позиции {product_id}: {inn_legal_entity}")
+        
         # Форматируем данные для передачи в API в точном соответствии с требуемым форматом
         request_body = {
             'DATE': str(int(datetime.now().timestamp())),
             'ID_customer': data.get('ID_customer', ''),
-            'INN_legal_entity': data.get('INN_legal_entity', ''),
+            'INN_legal_entity': inn_legal_entity,
             'positions': data.get('positions', [])
         }
         
@@ -1031,62 +1053,102 @@ def create_1c_order():
         for item in data.get('items', []):
             is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
-            if not is_tara and legal_entity is not None and legal_entity != 1:
-                # Проверяем, что legalEntity не равен 1
+            
+            # Если у товара есть legalEntity, используем его
+            if legal_entity is not None and legal_entity != 1 and str(legal_entity).strip():
                 if str(legal_entity) not in non_tara_legal_entities:
                     non_tara_legal_entities.append(str(legal_entity))
+                    
+                # Группируем товар по его legalEntity
+                if str(legal_entity) not in items_by_legal_entity:
+                    items_by_legal_entity[str(legal_entity)] = []
+                items_by_legal_entity[str(legal_entity)].append(item)
+            else:
+                # Для товаров без legalEntity пытаемся найти его в каталоге
+                item_id = item.get('id')
+                item_uid = item.get('uid')
+                item_name = item.get('name', 'Неизвестный товар')
+                
+                found_legal_entity = None
+                
+                # Пытаемся найти товар в каталоге
+                catalog_item = None
+                if item_uid:
+                    catalog_item = mongo.cx.Pivo.catalog.find_one({'UID': item_uid})
+                if not catalog_item and item_id:
+                    catalog_item = mongo.cx.Pivo.catalog.find_one({'id': item_id})
+                if not catalog_item and item_name:
+                    catalog_item = mongo.cx.Pivo.catalog.find_one({'name': item_name})
+                
+                # Если нашли товар, получаем его legalEntity
+                if catalog_item and 'legalEntity' in catalog_item:
+                    found_legal_entity = str(catalog_item.get('legalEntity', ''))
+                    logger.info(f"Найден legalEntity в каталоге для товара {item_name}: {found_legal_entity}")
+                    
+                    # Обновляем товар с найденным legalEntity
+                    item_copy = dict(item)
+                    item_copy['legalEntity'] = found_legal_entity
+                    
+                    # Добавляем в группу
+                    if found_legal_entity not in items_by_legal_entity:
+                        items_by_legal_entity[found_legal_entity] = []
+                    items_by_legal_entity[found_legal_entity].append(item_copy)
+                    
+                    # Добавляем в список non_tara_legal_entities, если это не тара
+                    if not is_tara and found_legal_entity not in non_tara_legal_entities:
+                        non_tara_legal_entities.append(found_legal_entity)
+                else:
+                    # Если не смогли найти legalEntity, запомним товар для последующей обработки
+                    if 'unknown' not in items_by_legal_entity:
+                        items_by_legal_entity['unknown'] = []
+                    items_by_legal_entity['unknown'].append(item)
         
-        logger.debug(f"Найдены legalEntity из позиций не-тара: {non_tara_legal_entities}")
+        logger.debug(f"Найдены legalEntity из позиций: {non_tara_legal_entities}")
         
-        # Определяем, какой legalEntity использовать для тары
-        tara_legal_entity = None
+        # Определяем, какой legalEntity использовать для тары и неизвестных товаров
+        default_legal_entity = None
         if non_tara_legal_entities:
             # Если есть legalEntity от не-тары, используем первый
-            tara_legal_entity = non_tara_legal_entities[0]
-            logger.debug(f"Для тары будет использован legalEntity из других позиций: {tara_legal_entity}")
+            default_legal_entity = non_tara_legal_entities[0]
+            logger.debug(f"Для товаров без legalEntity будет использован legalEntity из других позиций: {default_legal_entity}")
         else:
-            # Если нет, пытаемся получить из данных пользователя
-            user_legal_entity = None
-            if user_data and 'legal_entity' in user_data:
-                user_legal_entity = user_data.get('legal_entity')
-                
-            # Используем значение из запроса или пользовательских данных
-            tara_legal_entity = str(data.get('INN_legal_entity', user_legal_entity))
+            # Если нет, пытаемся получить из данных пользователя или организации
+            if org_info and 'legalEntity' in org_info:
+                default_legal_entity = str(org_info.get('legalEntity', ''))
+                logger.info(f"Используем legalEntity из данных организации: {default_legal_entity}")
+            elif org_info and 'inn' in org_info:
+                default_legal_entity = str(org_info.get('inn', ''))
+                logger.info(f"Используем ИНН организации как legalEntity: {default_legal_entity}")
+            elif user_data and 'legal_entity' in user_data:
+                default_legal_entity = str(user_data.get('legal_entity', ''))
+                logger.info(f"Используем legalEntity из данных пользователя: {default_legal_entity}")
+            else:
+                # Если нет legalEntity нигде, используем значение из запроса
+                default_legal_entity = str(data.get('INN_legal_entity', ''))
+                logger.debug(f"Используем legalEntity из запроса: {default_legal_entity}")
             
-            if not tara_legal_entity:
-                logger.error("Не удалось определить legalEntity для тары: нет legalEntity в товарах и в данных пользователя")
-                return jsonify({"success": False, "error": "Не удалось определить legalEntity для тары"}), 400
-                
-            logger.debug(f"Для тары будет использован legalEntity из данных запроса/пользователя: {tara_legal_entity}")
+            if not default_legal_entity:
+                logger.error("Не удалось определить legalEntity: нет legalEntity в товарах, организации и данных пользователя")
+                return jsonify({"success": False, "error": "Не удалось определить legalEntity для заказа"}), 400
         
         # Добавляем дополнительное логирование для диагностики
-        logger.info(f"Итоговое значение tara_legal_entity: {tara_legal_entity}")
+        logger.info(f"Итоговое значение default_legal_entity: {default_legal_entity}")
         
-        # Теперь группируем товары, обрабатывая тару специальным образом
-        for item in data.get('items', []):
-            is_tara = item.get('TARA', False)
-            legal_entity = item.get('legalEntity')
+        # Обрабатываем товары с неизвестным legalEntity и группируем их по default_legal_entity
+        if 'unknown' in items_by_legal_entity:
+            unknown_items = items_by_legal_entity.pop('unknown')
+            logger.info(f"Найдено {len(unknown_items)} товаров без legalEntity, будет использован default_legal_entity: {default_legal_entity}")
             
-            # Если это тара или legalEntity некорректный, используем tara_legal_entity
-            if is_tara or legal_entity == 1 or legal_entity is None or not str(legal_entity).strip():
-                legal_entity = tara_legal_entity
+            for item in unknown_items:
                 # Создаем копию товара с обновленным legalEntity
                 item_copy = dict(item)
-                item_copy['legalEntity'] = legal_entity
+                item_copy['legalEntity'] = default_legal_entity
                 
-                if is_tara:
-                    logger.debug(f"Для тары '{item.get('name')}' установлен legalEntity: {legal_entity}")
+                # Добавляем в группу
+                if default_legal_entity not in items_by_legal_entity:
+                    items_by_legal_entity[default_legal_entity] = []
                 
-                if legal_entity not in items_by_legal_entity:
-                    items_by_legal_entity[legal_entity] = []
-                
-                items_by_legal_entity[legal_entity].append(item_copy)
-            else:
-                # Для обычных товаров с корректным legalEntity
-                if legal_entity not in items_by_legal_entity:
-                    items_by_legal_entity[legal_entity] = []
-                
-                items_by_legal_entity[legal_entity].append(item)
+                items_by_legal_entity[default_legal_entity].append(item_copy)
         
         logger.debug(f"Товары сгруппированы по legalEntity: {len(items_by_legal_entity)} групп")
         # Логируем группировку
@@ -1168,7 +1230,7 @@ def create_1c_order():
             request_body = {
                 "DATE": str(timestamp),
                 "ID_customer": organization_id,
-                "INN_legal_entity": str(legal_entity),
+                "INN_legal_entity": str(legal_entity),  # Используем legalEntity из группы товаров
                 "positions": positions
             }
             
@@ -1182,7 +1244,7 @@ def create_1c_order():
             inn_pattern = r'^\d{10}(\d{2})?$'
             if not re.match(inn_pattern, request_body["INN_legal_entity"]):
                 logger.warning(f"INN_legal_entity не соответствует формату ИНН: {request_body['INN_legal_entity']}")
-            
+                
             # Логируем для диагностики формат параметров
             logger.info(f"Параметры запроса: DATE={request_body['DATE']} (timestamp: {timestamp})")
             logger.info(f"ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}")
