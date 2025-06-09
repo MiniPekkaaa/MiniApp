@@ -816,8 +816,23 @@ def get_user_org_data():
         # Создаем словарь сопоставления id -> UID для товаров
         uid_map = {}
         
-        # Устанавливаем фиксированное значение legalEntity для всех запросов
-        legal_entity = "2724132975"  # Фиксированное значение ИНН
+        # Получаем legalEntity из данных пользователя
+        legal_entity = None
+        
+        # Пытаемся получить из организации
+        if org_info and 'legalEntity' in org_info:
+            legal_entity = org_info.get('legalEntity')
+            logger.info(f"Найден legalEntity в данных организации: {legal_entity}")
+        
+        # Если не нашли, пытаемся получить из ИНН
+        if not legal_entity and org_info and 'inn' in org_info:
+            legal_entity = org_info.get('inn')
+            logger.info(f"Используем ИНН организации как legalEntity: {legal_entity}")
+        
+        # Если всё еще нет legalEntity, сообщаем в логах
+        if not legal_entity:
+            logger.warning("Не удалось определить legalEntity для пользователя")
+            legal_entity = ""
         
         # Подробное логирование товаров без UID
         items_without_uid = []
@@ -881,13 +896,16 @@ def calculate_prices():
         logger.debug("Входящие данные (INN_legal_entity): %s", data.get('INN_legal_entity', ''))
         logger.debug("Входящие данные (количество позиций): %s", len(data.get('positions', [])))
         
-        # Форматируем данные для передачи в API
+        # Форматируем данные для передачи в API в точном соответствии с требуемым форматом
         request_body = {
-            'DATE': data.get('DATE', str(int(datetime.now().timestamp()))),
+            'DATE': str(int(datetime.now().timestamp())),
             'ID_customer': data.get('ID_customer', ''),
             'INN_legal_entity': data.get('INN_legal_entity', ''),
             'positions': data.get('positions', [])
         }
+        
+        # Добавляем подробное логирование запроса
+        logger.info(f"Запрос на расчет цен: {json.dumps(request_body, ensure_ascii=False)}")
         
         try:
             response = requests.post(
@@ -899,7 +917,7 @@ def calculate_prices():
             )
             
             logger.debug(f"Статус ответа от API: {response.status_code}")
-            logger.debug(f"Текст ответа от API: {response.text[:200]}...")
+            logger.debug(f"Текст ответа от API: {response.text}")
             
             # Проверяем ответ
             if response.status_code != 200:
@@ -958,10 +976,9 @@ def create_1c_order():
         items_without_legal = [item for item in items if item.get('legalEntity') is None]
         if items_without_legal:
             logger.warning("Товары без legalEntity: %s", json.dumps(items_without_legal, ensure_ascii=False))
-            # Устанавливаем значение по умолчанию
-            for item in items_without_legal:
-                item['legalEntity'] = "2724132975"
-
+            # Не устанавливаем значение по умолчанию, так как это хардкод
+            logger.warning("Товары без legalEntity могут вызвать ошибки при создании заказа")
+            
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         
@@ -1028,10 +1045,19 @@ def create_1c_order():
             tara_legal_entity = non_tara_legal_entities[0]
             logger.debug(f"Для тары будет использован legalEntity из других позиций: {tara_legal_entity}")
         else:
-            # Если нет, используем значение из запроса
-            tara_legal_entity = str(data.get('INN_legal_entity', '2724163243'))
-            logger.debug(f"Для тары будет использован legalEntity из запроса: {tara_legal_entity}")
-            logger.warning(f"Внимание! В запросе нет товаров с legalEntity, используем значение из параметров: {tara_legal_entity}")
+            # Если нет, пытаемся получить из данных пользователя
+            user_legal_entity = None
+            if user_data and 'legal_entity' in user_data:
+                user_legal_entity = user_data.get('legal_entity')
+                
+            # Используем значение из запроса или пользовательских данных
+            tara_legal_entity = str(data.get('INN_legal_entity', user_legal_entity))
+            
+            if not tara_legal_entity:
+                logger.error("Не удалось определить legalEntity для тары: нет legalEntity в товарах и в данных пользователя")
+                return jsonify({"success": False, "error": "Не удалось определить legalEntity для тары"}), 400
+                
+            logger.debug(f"Для тары будет использован legalEntity из данных запроса/пользователя: {tara_legal_entity}")
         
         # Добавляем дополнительное логирование для диагностики
         logger.info(f"Итоговое значение tara_legal_entity: {tara_legal_entity}")
@@ -1188,17 +1214,6 @@ def create_1c_order():
             logger.info(f"Полные данные запроса в 1С: DATE={request_body['DATE']}, ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}, positions={positions}")
             # Полное логирование тела запроса в JSON
             logger.info(f"Полное тело запроса в 1С в формате JSON: {json.dumps(request_body, ensure_ascii=False)}")
-            
-            # Создаем копию запроса с фиксированными данными, которые точно работают
-            hardcoded_test_request = {
-                "DATE": "1957598704",
-                "ID_customer": "16d7a0a9-a651-11ef-895a-005056c00008",
-                "INN_legal_entity": "2724163243",
-                "positions": positions
-            }
-            
-            # Отправляем запрос с фиксированными данными для тестирования
-            logger.info(f"Отправляем запрос с фиксированными данными: {json.dumps(hardcoded_test_request, ensure_ascii=False)}")
             
             # Отправляем запрос
             try:
