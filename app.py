@@ -1045,19 +1045,6 @@ def create_1c_order():
         logger.debug(f"Создано {len(catalog_uid_by_id)} сопоставлений ID->UID")
         logger.debug(f"Создано {len(catalog_uid_by_name)} сопоставлений name->UID")
             
-        # Определяем константы для товаров тара
-        TARA_LEGAL_ENTITY_1 = "2724132975"
-        TARA_LEGAL_ENTITY_2 = "2724163243"
-        
-        # Добавляем проверку на наличие товаров типа "тара" без legalEntity
-        tara_items_without_legal = [item for item in data.get('items', []) if item.get('TARA', False) and (not item.get('legalEntity') or item.get('legalEntity') == '1')]
-        if tara_items_without_legal:
-            logger.warning("Товары ТАРА без legalEntity: %s", json.dumps(tara_items_without_legal, ensure_ascii=False))
-            # Принудительно устанавливаем legalEntity для товаров типа "тара"
-            for item in tara_items_without_legal:
-                item['legalEntity'] = TARA_LEGAL_ENTITY_1
-                logger.info(f"Установлен legalEntity={TARA_LEGAL_ENTITY_1} для товара тары {item.get('name')}")
-                
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
         
@@ -1066,12 +1053,6 @@ def create_1c_order():
         for item in data.get('items', []):
             is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
-            
-            # Принудительно устанавливаем legalEntity для товаров типа "тара"
-            if is_tara:
-                legal_entity = TARA_LEGAL_ENTITY_1
-                item['legalEntity'] = TARA_LEGAL_ENTITY_1
-                logger.info(f"[TARA_FIX] Жестко установлен legalEntity={TARA_LEGAL_ENTITY_1} для товара тары {item.get('name')}")
             
             # Если у товара есть legalEntity, используем его
             if legal_entity is not None and legal_entity != 1 and str(legal_entity).strip():
@@ -1199,14 +1180,6 @@ def create_1c_order():
                     elif item_name and item_name in catalog_uid_by_name:
                         uid = catalog_uid_by_name[item_name]
                         logger.info(f"Найден UID по имени в каталоге для товара {item_name}: {uid}")
-                
-                # Проверка, является ли товар тарой
-                is_tara = item.get('TARA', False)
-                
-                # Принудительно проверяем legalEntity для товаров типа "тара"
-                if is_tara and (not item.get('legalEntity') or item.get('legalEntity') == '1' or item.get('legalEntity') != TARA_LEGAL_ENTITY_1):
-                    item['legalEntity'] = TARA_LEGAL_ENTITY_1
-                    logger.info(f"[TARA_FIX] ПЕРЕД ФОРМИРОВАНИЕМ ПОЗИЦИИ: Обнаружен товар тары {item.get('name')} без валидного legalEntity, установлен {TARA_LEGAL_ENTITY_1}")
                 
                 # Если товар имеет действительный UID, добавляем его в позиции
                 if uid:
