@@ -1279,13 +1279,8 @@ def create_1c_order():
             
             # Отправляем запрос
             try:
-                full_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}"
-                logger.info(f"Отправка запроса на URL: {full_url}")
-                logger.info(f"Метод: POST, Заголовки: Content-Type: application/json, Auth: Basic")
-                logger.info(f"Полное тело запроса: {json.dumps(request_body, ensure_ascii=False, indent=2)}")
-                
                 response = requests.post(
-                    full_url,
+                    f"{config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}",
                     json=request_body,
                     auth=(config.API_USERNAME, config.API_PASSWORD),
                     headers={'Content-Type': 'application/json'},
@@ -1294,8 +1289,7 @@ def create_1c_order():
                 
                 logger.debug(f"Ответ от API 1С: Статус {response.status_code}, Тело: {response.text}")
                 # Полное логирование ответа
-                logger.info(f"Полный ответ от API 1С: Статус {response.status_code}, URL: {full_url}, Тело: {response.text}")
-                logger.info(f"Заголовки ответа: {dict(response.headers)}")
+                logger.info(f"Полный ответ от API 1С: Статус {response.status_code}, URL: {config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}, Тело: {response.text}")
                 
                 if response.status_code != 200:
                     logger.error(f"Ошибка API 1С: {response.status_code}, {response.text}")
@@ -1356,34 +1350,7 @@ def create_1c_order():
                     
                     # Сохраняем результат
                     # Логируем UID заказа для диагностики
-                    order_uid = order_response.get('UID')
-                    order_number = order_response.get('Nomer')
-                    logger.info(f"Создан заказ в 1С с UID: {order_uid}, номер: {order_number}")
-                    
-                    # Проверяем созданный заказ через API
-                    try:
-                        verify_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
-                        logger.info(f"Проверка созданного заказа по URL: {verify_url}")
-                        
-                        verify_response = requests.get(
-                            verify_url,
-                            auth=(config.API_USERNAME, config.API_PASSWORD),
-                            headers={'Content-Type': 'application/json'},
-                            timeout=10
-                        )
-                        
-                        if verify_response.status_code == 200:
-                            try:
-                                verify_data = verify_response.json()
-                                logger.info(f"Подтверждение заказа: {json.dumps(verify_data, ensure_ascii=False)}")
-                            except Exception as e:
-                                logger.warning(f"Не удалось получить JSON ответ при проверке заказа: {str(e)}")
-                                logger.info(f"Текст ответа при проверке: {verify_response.text}")
-                        else:
-                            logger.warning(f"Не удалось проверить заказ, статус: {verify_response.status_code}, ответ: {verify_response.text}")
-                    except Exception as e:
-                        logger.warning(f"Ошибка при проверке созданного заказа: {str(e)}")
-                    
+                    logger.info(f"Создан заказ в 1С с UID: {order_response.get('UID')}, номер: {order_response.get('Nomer')}")
                     orders_results.append({
                         "legalEntity": legal_entity,
                         "items": valid_items,
@@ -1416,51 +1383,6 @@ def create_1c_order():
         }
         
         logger.debug(f"Результаты создания заказов: {response_data}")
-        
-        # Проверяем историю заказов, чтобы убедиться, что заказ отображается в 1С
-        try:
-            if org_id and any(order.get("success", False) for order in orders_results):
-                history_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_history']}{org_id}"
-                logger.info(f"Проверка истории заказов по URL: {history_url}")
-                
-                history_response = requests.get(
-                    history_url,
-                    auth=(config.API_USERNAME, config.API_PASSWORD),
-                    headers={'Content-Type': 'application/json'},
-                    timeout=10
-                )
-                
-                if history_response.status_code == 200:
-                    try:
-                        history_data = history_response.json()
-                        logger.info(f"Получена история заказов, количество: {len(history_data) if isinstance(history_data, list) else 'не список'}")
-                        
-                        # Проверяем наличие созданного заказа в истории
-                        created_orders = [order['order']['UID'] for order in orders_results if order.get('success') and 'order' in order and 'UID' in order['order']]
-                        
-                        if isinstance(history_data, list):
-                            found_orders = []
-                            for created_uid in created_orders:
-                                found = False
-                                for history_order in history_data:
-                                    if 'UID' in history_order and history_order['UID'] == created_uid:
-                                        found = True
-                                        found_orders.append(created_uid)
-                                        break
-                                
-                                if not found:
-                                    logger.warning(f"Созданный заказ с UID {created_uid} не найден в истории заказов")
-                            
-                            if found_orders:
-                                logger.info(f"Подтверждено наличие заказов в истории: {found_orders}")
-                        else:
-                            logger.warning(f"История заказов не является списком: {history_data}")
-                    except Exception as e:
-                        logger.warning(f"Ошибка при обработке истории заказов: {str(e)}")
-                else:
-                    logger.warning(f"Не удалось получить историю заказов, статус: {history_response.status_code}")
-        except Exception as e:
-            logger.warning(f"Ошибка при проверке истории заказов: {str(e)}")
         
         return jsonify(response_data)
                 
