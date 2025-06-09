@@ -1229,11 +1229,24 @@ def create_1c_order():
             # Используем часовой пояс Владивостока (UTC+10)
             timezone = pytz.timezone('Asia/Vladivostok')
             local_time = datetime.now(timezone)
+            
+            # Форматируем дату в timestamp как в образце (без изменения самой даты)
             timestamp = int(local_time.timestamp())
             
             logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info(f"Время Владивостока: {local_time.strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info(f"Timestamp по времени Владивостока: {timestamp}")
+            
+            # Дополнительное логирование разных форматов даты для анализа
+            moscow_timezone = pytz.timezone('Europe/Moscow')
+            moscow_time = datetime.now(moscow_timezone)
+            logger.info(f"Время Москвы: {moscow_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Timestamp по времени Москвы: {int(moscow_time.timestamp())}")
+            
+            # Сравнение с образцом из запроса
+            logger.info(f"Образец timestamp из запроса: 1957598704")
+            sample_date = datetime.fromtimestamp(1957598704, timezone)
+            logger.info(f"Образец даты из timestamp: {sample_date.strftime('%Y-%m-%d %H:%M:%S')}")
             
             request_body = {
                 "DATE": str(timestamp),
