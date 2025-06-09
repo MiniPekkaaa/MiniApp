@@ -1226,7 +1226,15 @@ def create_1c_order():
                 continue
                 
             # Формируем запрос в точном соответствии с форматом API 1С
-            timestamp = int(datetime.now().timestamp())
+            # Используем часовой пояс Владивостока (UTC+10)
+            timezone = pytz.timezone('Asia/Vladivostok')
+            local_time = datetime.now(timezone)
+            timestamp = int(local_time.timestamp())
+            
+            logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Время Владивостока: {local_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Timestamp по времени Владивостока: {timestamp}")
+            
             request_body = {
                 "DATE": str(timestamp),
                 "ID_customer": organization_id,
@@ -1452,9 +1460,9 @@ def create_1c_order():
                                     logger.warning(f"Созданный заказ с UID {created_uid} не найден в истории заказов")
                             
                             if found_orders:
-                                logger.info(f"Подтверждено наличие заказов в истории: {found_orders}")
+                                logger.info(f"Подтверждено наличие заказов в истории: {', '.join(found_orders[:3])} (всего: {len(found_orders)})")
                         else:
-                            logger.warning(f"История заказов не является списком: {history_data}")
+                            logger.warning(f"История заказов не является списком")
                     except Exception as e:
                         logger.warning(f"Ошибка при обработке истории заказов: {str(e)}")
                 else:
@@ -2374,56 +2382,73 @@ def get_shipped_orders_for_input():
             
         logger.debug(f"Получение заказов для организации {org_id}")
         
-        # Получаем последние 10 заказов организации, отсортированные по дате создания
-        orders = list(mongo.cx.Pivo.Orders.find(
-            {"org_ID": org_id},
-            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
-        ).sort([("createdAt", -1), ("date", -1)]).limit(10))
+        # Получаем заказы со статусом "Отгружен" (или подобным)
+        # Используем прямой запрос с regex для проверки статуса
+        shipped_orders_query = {
+            "org_ID": org_id,
+            "$or": [
+                {"status": {"$regex": "отгруж", "$options": "i"}},
+                {"status": {"$regex": "выполнен", "$options": "i"}},
+                {"status": {"$regex": "доставлен", "$options": "i"}}
+            ]
+        }
         
-        logger.debug(f"Найдено {len(orders)} последних заказов")
+        # Получаем только последние 5 отгруженных заказов
+        shipped_orders_db = list(mongo.cx.Pivo.Orders.find(
+            shipped_orders_query,
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "status": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(5))
         
-        # Фильтруем заказы со статусом "Отгружен" и ограничиваем до 3
+        logger.debug(f"Найдено {len(shipped_orders_db)} отгруженных заказов")
+        
+        # Если отгруженных заказов нет, попробуем взять последние заказы независимо от статуса
+        if not shipped_orders_db:
+            logger.debug(f"Отгруженных заказов не найдено, берем последние заказы")
+            shipped_orders_db = list(mongo.cx.Pivo.Orders.find(
+                {"org_ID": org_id},
+                {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "status": 1}
+            ).sort([("createdAt", -1), ("date", -1)]).limit(3))
+            
+            logger.debug(f"Найдено {len(shipped_orders_db)} последних заказов")
+        
+        # Форматируем заказы для ответа API
         shipped_orders = []
         
-        for order in orders:
-            # Проверяем статус заказа (если статус не указан, считаем его "Новый")
-            status = order.get('status', 'Новый')
+        for order in shipped_orders_db:
+            # Форматируем заказ для ответа API
+            formatted_order = {
+                'order_ID': str(order.get('_id')),
+                'date': order.get('date', ''),
+                'status': order.get('status', 'Новый'),
+                'positions': []
+            }
             
-            # Проверяем, является ли статус "Отгружен" или подобным
-            status_lower = status.lower()
-            if 'отгруж' in status_lower or 'выполнен' in status_lower or 'доставлен' in status_lower:
-                # Форматируем заказ для ответа API
-                formatted_order = {
-                    'order_ID': str(order.get('_id')),
-                    'date': order.get('date', ''),
-                    'status': status,
-                    'positions': []
-                }
+            # Преобразуем позиции из словаря в список
+            positions = order.get('Positions', {})
+            for pos_key, position in positions.items():
+                beer_id = position.get('Beer_ID')
+                beer_name = position.get('Beer_Name')
+                legal_entity = position.get('Legal_Entity', 1)
+                quantity = position.get('Beer_Count', 0)
+                price = position.get('Price', 0)
                 
-                # Преобразуем позиции из словаря в список
-                positions = order.get('Positions', {})
-                for pos_key, position in positions.items():
-                    beer_id = position.get('Beer_ID')
-                    beer_name = position.get('Beer_Name')
-                    legal_entity = position.get('Legal_Entity', 1)
-                    quantity = position.get('Beer_Count', 0)
-                    price = position.get('Price', 0)
-                    
-                    if beer_id is not None and beer_name:
-                        formatted_order['positions'].append({
-                            'id': str(beer_id),
-                            'name': beer_name,
-                            'legal_entity': legal_entity,
-                            'quantity': quantity,
-                            'price': price
-                        })
-                
+                if beer_id is not None and beer_name:
+                    formatted_order['positions'].append({
+                        'id': str(beer_id),
+                        'name': beer_name,
+                        'legal_entity': legal_entity,
+                        'quantity': quantity,
+                        'price': price
+                    })
+            
+            # Добавляем заказ только если есть позиции
+            if formatted_order['positions']:
                 shipped_orders.append(formatted_order)
-                logger.debug(f"Добавлен отгруженный заказ: {order.get('_id')}")
-                
-                # Если уже нашли 3 заказа, выходим из цикла
-                if len(shipped_orders) >= 3:
-                    break
+                logger.debug(f"Добавлен заказ: {order.get('_id')}, позиций: {len(formatted_order['positions'])}")
+            
+            # Если уже нашли 3 заказа, выходим из цикла
+            if len(shipped_orders) >= 3:
+                break
         
         logger.debug(f"Найдено {len(shipped_orders)} отгруженных заказов для ввода остатков")
         

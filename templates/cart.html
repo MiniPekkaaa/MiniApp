@@ -409,29 +409,134 @@
                         // Создаем обратную карту: UID -> индекс товара в корзине
                         window.uidToCartItemMap = {};
                         
-                        // Группируем товары по legalEntity
+                        // ШАГИ ДЛЯ ОБРАБОТКИ ТАРЫ:
+                        // 1. Определяем товары с TARA=true
+                        // 2. Находим все валидные legalEntity от обычных товаров (не тары)
+                        // 3. Присваиваем legalEntity от обычных товаров всем товарам тары ЗАРАНЕЕ
+                        // 4. Только после этого группируем все товары по legalEntity
+                        
+                        console.log('[TARA_DEBUG] ============ НАЧАЛО ОБРАБОТКИ ТАРЫ ============');
+                        
+                        // Шаг 1: Определение товаров с TARA=true из каталога
+                        console.log('[TARA_DEBUG] Шаг 1: Определяем все товары с TARA=true');
+                        const taraProducts = [];
+                        const nonTaraProducts = [];
+                        
+                        // Сначала проверяем свойство TARA для всех товаров
+                        cart.forEach((item, index) => {
+                            // Проверяем, является ли товар тарой
+                            let isTara = false;
+                            
+                            // Если свойство TARA уже установлено
+                            if (item.TARA === true) {
+                                isTara = true;
+                            } 
+                            // Ищем в каталоге товаров
+                            else if (window.initialProducts) {
+                                const catalogItem = window.initialProducts.find(p => p.id === item.id);
+                                if (catalogItem && catalogItem.TARA === true) {
+                                    item.TARA = true; // Устанавливаем свойство
+                                    isTara = true;
+                                    console.log(`[TARA_DEBUG] Товар ${item.name} (ID: ${item.id}) определен как тара из каталога`);
+                                }
+                            }
+                            
+                            // Распределяем товар в соответствующий массив
+                            if (isTara) {
+                                taraProducts.push({item, index});
+                            } else {
+                                nonTaraProducts.push({item, index});
+                            }
+                        });
+                        
+                        console.log(`[TARA_DEBUG] Найдено ${taraProducts.length} товаров тары и ${nonTaraProducts.length} обычных товаров`);
+                        
+                        // Шаг 2: Находим все валидные legalEntity от обычных товаров
+                        console.log('[TARA_DEBUG] Шаг 2: Поиск валидных legalEntity от обычных товаров');
+                        const validLegalEntities = [];
+                        
+                        nonTaraProducts.forEach(({item}) => {
+                            if (item.legalEntity && item.legalEntity !== '1' && String(item.legalEntity).trim() !== '') {
+                                // Проверяем, не добавлен ли уже такой legalEntity
+                                if (validLegalEntities.indexOf(String(item.legalEntity)) === -1) {
+                                    validLegalEntities.push(String(item.legalEntity));
+                                    console.log(`[TARA_DEBUG] Найден валидный legalEntity ${item.legalEntity} у товара ${item.name} (ID: ${item.id})`);
+                                }
+                            }
+                        });
+                        
+                        console.log(`[TARA_DEBUG] Найдено ${validLegalEntities.length} валидных legalEntity: ${validLegalEntities.join(', ')}`);
+                        
+                        // Шаг 3: Присваиваем legalEntity всем товарам тары
+                        console.log('[TARA_DEBUG] Шаг 3: Присваиваем legalEntity товарам тары');
+                        
+                        if (validLegalEntities.length > 0) {
+                            // Берем первый валидный legalEntity
+                            const targetLegalEntity = validLegalEntities[0];
+                            console.log(`[TARA_DEBUG] Выбран legalEntity ${targetLegalEntity} для тары`);
+                            
+                            // Присваиваем этот legalEntity всем товарам тары
+                            taraProducts.forEach(({item}) => {
+                                // Сохраняем предыдущее значение для логирования
+                                const oldValue = item.legalEntity;
+                                
+                                // Устанавливаем новое значение
+                                item.legalEntity = targetLegalEntity;
+                                
+                                console.log(`[TARA_DEBUG] Товару тары ${item.name} (ID: ${item.id}) присвоен legalEntity ${targetLegalEntity} (было: ${oldValue || 'не задано'})`);
+                            });
+                            
+                            console.log(`[TARA_DEBUG] Обновлены все ${taraProducts.length} товаров тары с legalEntity ${targetLegalEntity}`);
+                        } else {
+                            console.log('[TARA_DEBUG] ⚠️ ВНИМАНИЕ! Не найдено валидных legalEntity у обычных товаров!');
+                            console.log('[TARA_DEBUG] Невозможно корректно присвоить legalEntity товарам тары!');
+                            console.log('[TARA_DEBUG] Необходимо добавить в корзину хотя бы один обычный товар с валидным legalEntity');
+                        }
+                        
+                        console.log('[TARA_DEBUG] Шаг 4: Группировка товаров по legalEntity');
+                        
+                        // Шаг 4: Группируем товары по legalEntity
                         const itemsByLegalEntity = {};
                         
-                        // Сначала определяем legalEntity для каждого товара
+                        // Функция для получения "безопасного" legalEntity (никогда не возвращает "1")
+                        function getSafeLegalEntity(item) {
+                            if (item.legalEntity && item.legalEntity !== '1') {
+                                return String(item.legalEntity);
+                            }
+                            
+                            // Если товар - тара, но у него не задан legalEntity (хотя мы должны были его задать выше)
+                            if (item.TARA === true) {
+                                console.log(`[TARA_DEBUG] ⚠️ ОШИБКА: У товара тары ${item.name} (ID: ${item.id}) не задан legalEntity!`);
+                                
+                                // Пробуем ещё раз найти любой валидный legalEntity
+                                if (validLegalEntities.length > 0) {
+                                    return validLegalEntities[0];
+                                }
+                            }
+                            
+                            // Для обычных товаров без legalEntity пробуем userData
+                            if (userData.legal_entity && userData.legal_entity !== '1') {
+                                return String(userData.legal_entity);
+                            }
+                            
+                            // В крайнем случае возвращаем первый валидный или "UNKNOWN"
+                            return validLegalEntities.length > 0 ? validLegalEntities[0] : "UNKNOWN";
+                        }
+                        
+                        // Группируем товары
                         cart.forEach((item, index) => {
                             // Проверяем, есть ли UID в карте соответствия
                             const uid = userData.uid_map && userData.uid_map[item.id] ? 
-                                      userData.uid_map[item.id] : item.id;
+                                    userData.uid_map[item.id] : item.id;
                             
                             // Сохраняем соответствие UID -> индекс товара
                             window.uidToCartItemMap = window.uidToCartItemMap || {};
                             window.uidToCartItemMap[uid] = index;
                             
-                            // Определяем legalEntity товара
-                            let itemLegalEntity = '';
-                            if (item.legalEntity) {
-                                itemLegalEntity = String(item.legalEntity);
-                            } else if (userData.legal_entity) {
-                                itemLegalEntity = String(userData.legal_entity);
-                            } else {
-                                // Если нет legalEntity, используем значение по умолчанию
-                                itemLegalEntity = '1';
-                            }
+                            // Получаем безопасный legalEntity
+                            const itemLegalEntity = getSafeLegalEntity(item);
+                            
+                            console.log(`[TARA_DEBUG] Товар ${item.name} (ID: ${item.id}, TARA: ${item.TARA ? 'да' : 'нет'}) отнесен к группе с legalEntity ${itemLegalEntity}`);
                             
                             // Группируем товар по его legalEntity
                             if (!itemsByLegalEntity[itemLegalEntity]) {
@@ -448,6 +553,8 @@
                                 }
                             });
                         });
+                        
+                        console.log('[TARA_DEBUG] ============ ЗАВЕРШЕНИЕ ОБРАБОТКИ ТАРЫ ============');
                         
                         console.log('Товары сгруппированы по legalEntity:', itemsByLegalEntity);
                         
