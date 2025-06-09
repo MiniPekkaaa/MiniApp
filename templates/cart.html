@@ -409,300 +409,157 @@
                         // Создаем обратную карту: UID -> индекс товара в корзине
                         window.uidToCartItemMap = {};
                         
-                        // Группируем товары по legalEntity
-                        const itemsByLegalEntity = {};
-                        const itemsWithTara = []; // Массив для хранения товаров со свойством TARA без legalEntity
-                        
-                        // Проверяем свойство TARA для всех товаров заранее
-                        cart.forEach(item => {
-                            // Если у товара нет установленного свойства TARA, проверяем его в каталоге
-                            if (item.TARA === undefined && window.initialProducts) {
-                                const catalogItem = window.initialProducts.find(p => p.id === item.id);
-                                if (catalogItem && catalogItem.TARA === true) {
-                                    console.log(`[TARA_DEBUG] Устанавливаем TARA=true для товара ${item.name} на основе каталога`);
-                                    item.TARA = true;
-                                }
-                            }
-                        });
-                        
-                        // Сначала группируем все товары, кроме тары без legalEntity
-                        cart.forEach((item, index) => {
+                        // Формируем данные для запроса цен с использованием UID
+                        const positions = cart.map((item, index) => {
                             // Проверяем, есть ли UID в карте соответствия
                             const uid = userData.uid_map && userData.uid_map[item.id] ? 
                                       userData.uid_map[item.id] : item.id;
                             
                             // Сохраняем соответствие UID -> индекс товара
-                            window.uidToCartItemMap = window.uidToCartItemMap || {};
                             window.uidToCartItemMap[uid] = index;
+                            console.log(`Сопоставление UID ${uid} -> товар ${item.name} (индекс ${index})`);
                             
-                            // Если это тара и у неё нет legalEntity
-                            if (item.TARA === true && !item.legalEntity) {
-                                console.log(`[TARA_DEBUG] Товар ${item.name} (ID: ${item.id}) является тарой без legalEntity, откладываем для последующей обработки`);
-                                itemsWithTara.push({
-                                    index: index,
-                                    uid: uid,
-                                    item: item,
-                                    position: {
-                                        ID_product: uid,
-                                        Amount: item.quantity
-                                    }
-                                });
-                                return; // Пропускаем этот товар на данном этапе
-                            }
-                            
-                            // Определяем legalEntity товара
-                            let itemLegalEntity = '';
-                            
-                            // Специальные legalEntity для тары
-                            const taraLegalEntities = ['2724163243', '2724132975'];
-                            
-                            if (item.TARA === true) {
-                                // Для тары используем специальный legalEntity
-                                if (item.legalEntity && taraLegalEntities.includes(String(item.legalEntity))) {
-                                    // Если у тары уже установлен один из специальных legalEntity, оставляем его
-                                    itemLegalEntity = String(item.legalEntity);
-                                } else if (userData.legal_entity && taraLegalEntities.includes(String(userData.legal_entity))) {
-                                    // Если у пользователя установлен один из специальных legalEntity, используем его
-                                    itemLegalEntity = String(userData.legal_entity);
-                                } else {
-                                    // Используем случайный legalEntity из списка специальных для тары
-                                    const randomIndex = Math.floor(Math.random() * taraLegalEntities.length);
-                                    itemLegalEntity = taraLegalEntities[randomIndex];
-                                }
-                                console.log(`[TARA_DEBUG] Для товара тары ${item.name} установлен legalEntity: ${itemLegalEntity}`);
-                            } else if (item.legalEntity) {
-                                // Для обычных товаров используем имеющийся legalEntity
-                                itemLegalEntity = String(item.legalEntity);
-                            } else if (userData.legal_entity) {
-                                itemLegalEntity = String(userData.legal_entity);
-                            } else {
-                                // Если нет legalEntity, используем значение по умолчанию
-                                itemLegalEntity = '1';
-                            }
-                            
-                            // Группируем товар по его legalEntity
-                            if (!itemsByLegalEntity[itemLegalEntity]) {
-                                itemsByLegalEntity[itemLegalEntity] = [];
-                            }
-                            
-                            itemsByLegalEntity[itemLegalEntity].push({
-                                index: index,
-                                uid: uid,
-                                item: item,
-                                position: {
-                                    ID_product: uid,
-                                    Amount: item.quantity
-                                }
-                            });
+                            return {
+                                ID_product: uid,
+                                Amount: item.quantity
+                            };
                         });
                         
-                        // Обрабатываем товары TARA без legalEntity
-                        if (itemsWithTara.length > 0) {
-                            console.log(`[TARA_DEBUG] Найдено ${itemsWithTara.length} товаров тары без legalEntity`);
-                            
-                            // Находим доступные legalEntity из других товаров
-                            let defaultLegalEntity = '';
-                            
-                            // Получаем все ключи из объекта itemsByLegalEntity
-                            const availableLegalEntities = Object.keys(itemsByLegalEntity);
-                            
-                            // Специальные legalEntity для тары
-                            const taraLegalEntities = ['2724163243', '2724132975'];
-                            
-                            // Проверяем, есть ли в корзине товары с одним из специальных legalEntity для тары
-                            let foundSpecialLegalEntity = null;
-                            for (const legalEntity of availableLegalEntities) {
-                                if (taraLegalEntities.includes(legalEntity)) {
-                                    foundSpecialLegalEntity = legalEntity;
-                                    break;
-                                }
-                            }
-                            
-                            if (foundSpecialLegalEntity) {
-                                // Если есть товар с одним из специальных legalEntity, используем его
-                                defaultLegalEntity = foundSpecialLegalEntity;
-                                console.log(`[TARA_DEBUG] Используем специальный legalEntity ${defaultLegalEntity} из других товаров для тары`);
-                            } else if (availableLegalEntities.length > 0) {
-                                // Если нет специального legalEntity, но есть другие товары с legalEntity
-                                defaultLegalEntity = availableLegalEntities[0];
-                                console.log(`[TARA_DEBUG] Используем legalEntity ${defaultLegalEntity} из других товаров для тары`);
-                            } else if (userData.legal_entity) {
-                                // Если в корзине нет товаров с legalEntity, используем из данных пользователя
-                                defaultLegalEntity = String(userData.legal_entity);
-                                console.log(`[TARA_DEBUG] Используем legalEntity ${defaultLegalEntity} из данных пользователя для тары`);
-                            } else {
-                                // В крайнем случае используем случайное значение из специальных legalEntity для тары
-                                const randomIndex = Math.floor(Math.random() * taraLegalEntities.length);
-                                defaultLegalEntity = taraLegalEntities[randomIndex];
-                                console.log(`[TARA_DEBUG] Используем случайный специальный legalEntity ${defaultLegalEntity} для тары`);
-                            }
-                            
-                            // Создаем группу для тары, если она еще не создана
-                            if (!itemsByLegalEntity[defaultLegalEntity]) {
-                                itemsByLegalEntity[defaultLegalEntity] = [];
-                            }
-                            
-                            // Добавляем все товары TARA в эту группу
-                            itemsWithTara.forEach(taraItem => {
-                                // Обновляем legalEntity непосредственно в объекте товара
-                                taraItem.item.legalEntity = defaultLegalEntity;
-                                
-                                itemsByLegalEntity[defaultLegalEntity].push(taraItem);
-                                console.log(`[TARA_DEBUG] Добавлен товар тары ${taraItem.item.name} (ID: ${taraItem.item.id}) в группу с legalEntity ${defaultLegalEntity}`);
-                            });
-                        }
+                        console.log('Подготовлены позиции для запроса с UID:', positions);
+                        console.log('Карта соответствия UID -> индекс товара:', window.uidToCartItemMap);
                         
-                        console.log('Товары сгруппированы по legalEntity:', itemsByLegalEntity);
-                        
-                        // Массив для хранения всех промисов запросов цен
-                        const pricePromises = [];
-                        
-                        // Для каждой группы товаров выполняем отдельный запрос цен
-                        for (const legalEntity in itemsByLegalEntity) {
-                            const group = itemsByLegalEntity[legalEntity];
-                            const positions = group.map(item => item.position);
-                            
-                            console.log(`Подготовлены позиции для legalEntity ${legalEntity}:`, positions);
-                            
-                            // Создаем промис для расчета цен данной группы
-                            const pricePromise = calculatePrices({
-                                ID_customer: String(userData.organization_id || userData.customer_id || ''),
-                                INN_legal_entity: legalEntity,
-                                positions: positions
-                            }).then(priceData => {
-                                return {
-                                    legalEntity: legalEntity,
-                                    priceData: priceData,
-                                    group: group
-                                };
-                            });
-                            
-                            pricePromises.push(pricePromise);
-                        }
-                        
-                        // Ждем выполнения всех запросов цен
-                        return Promise.all(pricePromises);
+                        // Отправляем запрос на расчет стоимости с правильными параметрами
+                        return calculatePrices({
+                            ID_customer: String(userData.organization_id || userData.customer_id || ''),
+                            INN_legal_entity: String(userData.legal_entity || '2724132975'),
+                            positions: positions
+                        });
                     })
-                    .then(groupResults => {
-                        console.log('Получены результаты всех запросов на цены:', groupResults);
+                    .then(priceData => {
+                        console.log('Данные о ценах получены успешно:', priceData);
                         
-                        // Считаем общую сумму заказа
-                        let totalSum = 0;
-                        let hasErrors = false;
-                        
-                        // Выводим подробную информацию о товарах в корзине и их ID
-                        console.log('Товары в корзине:');
-                        cart.forEach((item, index) => {
-                            console.log(`[${index}] Товар: ${item.name}, ID: ${item.id}, UID из карты: ${window.uidMap && window.uidMap[item.id] || 'нет'}, TARA: ${item.TARA ? 'да' : 'нет'}`);
-                        });
-                        
-                        // Отладочный вывод о свойстве TARA
-                        const taraCatalogItems = initialProducts ? initialProducts.filter(p => p.TARA).map(p => p.id) : [];
-                        console.log('Товары с TARA=true в каталоге (ID):', taraCatalogItems);
-                        
-                        // Добавляем проверку TARA для каждого товара в корзине
-                        cart.forEach(item => {
-                            // Если у товара нет установленного свойства TARA, проверяем его в каталоге
-                            if (item.TARA === undefined && window.initialProducts) {
-                                const catalogItem = window.initialProducts.find(p => p.id === item.id);
-                                if (catalogItem && catalogItem.TARA) {
-                                    console.log(`Устанавливаем TARA=true для товара ${item.name} на основе каталога`);
-                                    item.TARA = true;
-                                }
-                            }
-                        });
-                        
-                        // Обрабатываем результаты для каждой группы
-                        groupResults.forEach(groupResult => {
-                            const { legalEntity, priceData, group } = groupResult;
+                        // Проверяем наличие ошибки в ответе
+                        if (typeof priceData === 'string' && priceData.includes('Не нашли организацию')) {
+                            console.error('Ошибка API:', priceData);
+                            showNotification('Ошибка API: ' + priceData);
                             
-                            console.log(`Обрабатываем результаты для legalEntity ${legalEntity}:`, priceData);
-                            
-                            // Проверяем наличие ошибки в ответе
-                            if (typeof priceData === 'string' && priceData.includes('Не нашли организацию')) {
-                                console.error(`Ошибка API для legalEntity ${legalEntity}:`, priceData);
-                                
-                                // Проверяем, есть ли в группе товары с TARA=true
-                                const hasTaraItems = group.some(groupItem => groupItem.item.TARA === true);
-                                
-                                // Показываем уведомление об ошибке только если в группе нет тары
-                                if (!hasTaraItems) {
-                                    showNotification(`Ошибка API для legalEntity ${legalEntity}: ${priceData}`);
-                                } else {
-                                    console.log(`[TARA_DEBUG] Подавлено уведомление об ошибке для группы с тарой, legalEntity: ${legalEntity}`);
-                                }
-                                
-                                hasErrors = true;
-                                return; // пропускаем текущую итерацию
+                            // Используем цены из API даже если ошибка
+                            // Устанавливаем общую сумму из ответа API, если доступна
+                            if (priceData && priceData.Summa !== undefined) {
+                                document.getElementById('total_amount').textContent = parseFloat(priceData.Summa).toFixed(2);
+                                console.log(`Установлена общая сумма из API: ${priceData.Summa}`);
                             }
                             
-                            // Добавляем информацию о ценах в объекты корзины
-                            if (priceData && priceData.Korzina) {
-                                console.log(`Получены данные о ценах для legalEntity ${legalEntity}:`, priceData);
-                                
-                                // Добавляем к общей сумме
-                                if (priceData.Summa !== undefined) {
-                                    const groupTotal = parseFloat(priceData.Summa) || 0;
-                                    totalSum += groupTotal;
-                                    console.log(`Добавлена сумма группы ${legalEntity}: ${groupTotal}, общая сумма: ${totalSum}`);
+                            renderCartItems();
+                            return;
+                        }
+                        
+                        // Добавляем информацию о ценах в объекты корзины
+                        if (priceData && priceData.Korzina) {
+                            console.log('Получены данные о ценах:', priceData);
+                            
+                            // Выводим подробную информацию о товарах в корзине и их ID
+                            console.log('Товары в корзине:');
+                            cart.forEach((item, index) => {
+                                console.log(`[${index}] Товар: ${item.name}, ID: ${item.id}, UID из карты: ${window.uidMap && window.uidMap[item.id] || 'нет'}, TARA: ${item.TARA ? 'да' : 'нет'}`);
+                            });
+                            
+                            // Отладочный вывод о свойстве TARA
+                            const taraCatalogItems = initialProducts ? initialProducts.filter(p => p.TARA).map(p => p.id) : [];
+                            console.log('Товары с TARA=true в каталоге (ID):', taraCatalogItems);
+                            
+                            // Добавляем проверку TARA для каждого товара в корзине
+                            cart.forEach(item => {
+                                // Если у товара нет установленного свойства TARA, проверяем его в каталоге
+                                if (item.TARA === undefined && window.initialProducts) {
+                                    const catalogItem = window.initialProducts.find(p => p.id === item.id);
+                                    if (catalogItem && catalogItem.TARA) {
+                                        console.log(`Устанавливаем TARA=true для товара ${item.name} на основе каталога`);
+                                        item.TARA = true;
+                                    }
                                 }
-                                
-                                // Создаем карту цен по UID
-                                const priceMap = {};
-                                priceData.Korzina.forEach(priceItem => {
-                                    priceMap[priceItem.ID_product] = priceItem.Price;
-                                });
-                                
-                                // Отдельно сохраняем все цены по индексу в группе
-                                const priceByIndex = priceData.Korzina.map(item => item.Price);
-                                
-                                // Применяем цены к товарам в корзине для данной группы
-                                let appliedCount = 0;
-                                
-                                // Сначала применяем цены по UID
-                                group.forEach((groupItem, indexInGroup) => {
-                                    const item = groupItem.item;
-                                    const uid = groupItem.uid;
-                                    
-                                    // Если цена есть в карте цен по UID
-                                    if (priceMap[uid]) {
-                                        const price = priceMap[uid];
-                                        console.log(`✅ По UID: Установлена цена ${price} для товара ${item.name} (ID: ${item.id}, UID: ${uid}, legalEntity: ${legalEntity})`);
-                                        item.price = price;
-                                        appliedCount++;
-                                    } 
-                                    // Если нет, пробуем по индексу в группе
-                                    else if (priceByIndex[indexInGroup]) {
-                                        const price = priceByIndex[indexInGroup];
-                                        console.log(`✅ По индексу в группе: Установлена цена ${price} для товара ${item.name} (индекс в группе: ${indexInGroup}, legalEntity: ${legalEntity})`);
+                            });
+                            
+                            // Выводим информацию о товарах в ответе API
+                            console.log('Товары в ответе API:');
+                            priceData.Korzina.forEach((priceItem, index) => {
+                                console.log(`[${index}] ID_product: ${priceItem.ID_product}, Price: ${priceItem.Price}`);
+                            });
+                            
+                            // Сначала создаем карту цен по UID
+                            const priceMap = {};
+                            priceData.Korzina.forEach(priceItem => {
+                                priceMap[priceItem.ID_product] = priceItem.Price;
+                            });
+                            
+                            // Отдельно сохраняем все цены по индексу
+                            const priceByIndex = priceData.Korzina.map(item => item.Price);
+                            
+                            // Применяем цены к товарам в корзине
+                            let appliedCount = 0;
+                            
+                            // Проверяем, есть ли карта UID
+                            if (window.uidMap) {
+                                console.log('Применяем цены по карте UID');
+                                cart.forEach((item, index) => {
+                                    const itemUid = window.uidMap[item.id];
+                                    if (itemUid && priceMap[itemUid]) {
+                                        const price = priceMap[itemUid];
+                                        console.log(`✅ По UID: Установлена цена ${price} для товара ${item.name} (ID: ${item.id}, UID: ${itemUid})`);
                                         item.price = price;
                                         appliedCount++;
                                     } else {
-                                        console.log(`❌ Не найдена цена для товара ${item.name} (ID: ${item.id}, legalEntity: ${legalEntity})`);
+                                        console.log(`❌ Не найдена цена по UID для товара ${item.name} (ID: ${item.id})`);
                                     }
                                 });
-                                
-                                console.log(`Итог для legalEntity ${legalEntity}: Успешно применено ${appliedCount} цен из ${priceData.Korzina.length} возможных для ${group.length} товаров`);
-                            } else {
-                                console.warn(`В ответе API для legalEntity ${legalEntity} отсутствуют данные о ценах`);
                             }
-                        });
-                        
-                        // Проверка на товары без цен
-                        const itemsWithoutPrice = cart.filter(item => !item.price).length;
-                        if (itemsWithoutPrice > 0) {
-                            console.warn(`⚠️ ${itemsWithoutPrice} товаров не получили цены после всех запросов`);
+                            
+                            // Если остались товары без цен, пробуем прямое сопоставление по ID
+                            cart.forEach((item, index) => {
+                                if (!item.price && priceMap[item.id]) {
+                                    const price = priceMap[item.id];
+                                    console.log(`✅ По ID: Установлена цена ${price} для товара ${item.name} (ID: ${item.id})`);
+                                    item.price = price;
+                                    appliedCount++;
+                                }
+                            });
+                            
+                            // Если все еще есть товары без цен, и количество товаров совпадает - присваиваем по индексу
+                            if (appliedCount < cart.length && cart.length === priceData.Korzina.length) {
+                                console.log('Применяем цены по индексу (количество товаров совпадает)');
+                                cart.forEach((item, index) => {
+                                    if (!item.price && priceByIndex[index]) {
+                                        const price = priceByIndex[index];
+                                        console.log(`✅ По индексу: Установлена цена ${price} для товара ${item.name} (индекс: ${index})`);
+                                        item.price = price;
+                                        appliedCount++;
+                                    }
+                                });
+                            }
+                            
+                            // Проверяем, все ли товары получили цены
+                            const itemsWithoutPrice = cart.filter(item => !item.price).length;
+                            if (itemsWithoutPrice > 0) {
+                                console.warn(`⚠️ ${itemsWithoutPrice} товаров не получили цены`);
+                            }
+                            
+                            console.log(`Итог: Успешно применено ${appliedCount} цен из ${priceData.Korzina.length} возможных для ${cart.length} товаров`);
+                            
+                            // Отладочная информация о товарах после обработки цен
+                            console.log('Товары в корзине после обработки цен:', JSON.stringify(cart, null, 2));
+                            
+                            // Обновляем отображение корзины с ценами
+                            renderCartItems();
+                            
+                            // Устанавливаем общую сумму из ответа API - всегда берем из API, если доступно
+                            if (priceData && priceData.Summa !== undefined) {
+                                document.getElementById('total_amount').textContent = parseFloat(priceData.Summa).toFixed(2);
+                                console.log(`Установлена общая сумма из API: ${priceData.Summa}`);
+                            }
+                        } else {
+                            console.warn('В ответе API отсутствуют данные о ценах');
+                            renderCartItems();
                         }
-                        
-                        // Отладочная информация о товарах после обработки цен
-                        console.log('Товары в корзине после обработки цен:', JSON.stringify(cart, null, 2));
-                        
-                        // Обновляем отображение корзины с ценами
-                        renderCartItems();
-                        
-                        // Устанавливаем общую сумму
-                        document.getElementById('total_amount').textContent = parseFloat(totalSum).toFixed(2);
-                        console.log(`Установлена общая сумма: ${totalSum}`);
                     })
                     .catch(error => {
                         console.error('Ошибка при получении цен:', error);

@@ -11,7 +11,6 @@ import random
 import config
 import platform
 import time
-import re
 
 # Глобальная переменная для отслеживания времени запуска приложения
 APP_START_TIME = time.time()
@@ -803,11 +802,7 @@ def get_user_org_data():
         
         # Если нет organization_id, используем значение по умолчанию
         if not organization_id:
-            organization_id = org_id  # Используем org_ID если нет organizationId
-            logger.warning(f"Не найден organizationId, используем org_ID: {organization_id}")
-        
-        # Для диагностики логируем ID_customer
-        logger.info(f"Используем ID_customer: {organization_id}")
+            organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
             
         # Получаем информацию о товарах для получения UID и legalEntity
         catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1, 'legalEntity': 1}))
@@ -816,23 +811,8 @@ def get_user_org_data():
         # Создаем словарь сопоставления id -> UID для товаров
         uid_map = {}
         
-        # Получаем legalEntity из данных пользователя
-        legal_entity = None
-        
-        # Пытаемся получить из организации
-        if org_info and 'legalEntity' in org_info:
-            legal_entity = org_info.get('legalEntity')
-            logger.info(f"Найден legalEntity в данных организации: {legal_entity}")
-        
-        # Если не нашли, пытаемся получить из ИНН
-        if not legal_entity and org_info and 'inn' in org_info:
-            legal_entity = org_info.get('inn')
-            logger.info(f"Используем ИНН организации как legalEntity: {legal_entity}")
-        
-        # Если всё еще нет legalEntity, сообщаем в логах
-        if not legal_entity:
-            logger.warning("Не удалось определить legalEntity для пользователя")
-            legal_entity = ""
+        # Устанавливаем фиксированное значение legalEntity для всех запросов
+        legal_entity = "2724132975"  # Фиксированное значение ИНН
         
         # Подробное логирование товаров без UID
         items_without_uid = []
@@ -896,38 +876,13 @@ def calculate_prices():
         logger.debug("Входящие данные (INN_legal_entity): %s", data.get('INN_legal_entity', ''))
         logger.debug("Входящие данные (количество позиций): %s", len(data.get('positions', [])))
         
-        # Получаем INN_legal_entity из первой позиции, если он не указан в запросе
-        inn_legal_entity = data.get('INN_legal_entity', '')
-        
-        # Если INN_legal_entity не указан, пытаемся получить из позиций
-        if not inn_legal_entity and data.get('positions'):
-            # Находим ID_product первой позиции
-            first_position = data.get('positions')[0]
-            product_id = first_position.get('ID_product')
-            
-            if product_id:
-                # Ищем товар в каталоге по UID
-                catalog_item = mongo.cx.Pivo.catalog.find_one({'UID': product_id})
-                
-                # Если не нашли по UID, пробуем найти по ID
-                if not catalog_item:
-                    catalog_item = mongo.cx.Pivo.catalog.find_one({'id': product_id})
-                
-                # Если нашли товар, получаем его legalEntity
-                if catalog_item and 'legalEntity' in catalog_item:
-                    inn_legal_entity = str(catalog_item.get('legalEntity', ''))
-                    logger.info(f"Используем legalEntity из каталога для позиции {product_id}: {inn_legal_entity}")
-        
-        # Форматируем данные для передачи в API в точном соответствии с требуемым форматом
+        # Форматируем данные для передачи в API
         request_body = {
-            'DATE': str(int(datetime.now().timestamp())),
+            'DATE': data.get('DATE', str(int(datetime.now().timestamp()))),
             'ID_customer': data.get('ID_customer', ''),
-            'INN_legal_entity': inn_legal_entity,
+            'INN_legal_entity': data.get('INN_legal_entity', ''),
             'positions': data.get('positions', [])
         }
-        
-        # Добавляем подробное логирование запроса
-        logger.info(f"Запрос на расчет цен: {json.dumps(request_body, ensure_ascii=False)}")
         
         try:
             response = requests.post(
@@ -939,7 +894,7 @@ def calculate_prices():
             )
             
             logger.debug(f"Статус ответа от API: {response.status_code}")
-            logger.debug(f"Текст ответа от API: {response.text}")
+            logger.debug(f"Текст ответа от API: {response.text[:200]}...")
             
             # Проверяем ответ
             if response.status_code != 200:
@@ -998,9 +953,10 @@ def create_1c_order():
         items_without_legal = [item for item in items if item.get('legalEntity') is None]
         if items_without_legal:
             logger.warning("Товары без legalEntity: %s", json.dumps(items_without_legal, ensure_ascii=False))
-            # Не устанавливаем значение по умолчанию, так как это хардкод
-            logger.warning("Товары без legalEntity могут вызвать ошибки при создании заказа")
-            
+            # Устанавливаем значение по умолчанию
+            for item in items_without_legal:
+                item['legalEntity'] = "2724132975"
+
         # Получаем данные пользователя из Redis
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
         
@@ -1019,11 +975,7 @@ def create_1c_order():
             
         # Если нет organization_id, используем значение по умолчанию
         if not organization_id:
-            organization_id = org_id  # Используем org_ID если нет organizationId
-            logger.warning(f"Не найден organizationId, используем org_ID: {organization_id}")
-        
-        # Для диагностики логируем ID_customer
-        logger.info(f"Используем ID_customer: {organization_id}")
+            organization_id = '16d7a1a8-a651-11ef-895a-005056c00008'  # Значение по умолчанию
             
         # Получаем информацию о каталоге товаров
         catalog_items = list(mongo.cx.Pivo.catalog.find({}, {'id': 1, 'name': 1, 'UID': 1}))
@@ -1053,102 +1005,50 @@ def create_1c_order():
         for item in data.get('items', []):
             is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
-            
-            # Если у товара есть legalEntity, используем его
-            if legal_entity is not None and legal_entity != 1 and str(legal_entity).strip():
+            if not is_tara and legal_entity is not None and legal_entity != 1:
+                # Проверяем, что legalEntity не равен 1
                 if str(legal_entity) not in non_tara_legal_entities:
                     non_tara_legal_entities.append(str(legal_entity))
-                    
-                # Группируем товар по его legalEntity
-                if str(legal_entity) not in items_by_legal_entity:
-                    items_by_legal_entity[str(legal_entity)] = []
-                items_by_legal_entity[str(legal_entity)].append(item)
-            else:
-                # Для товаров без legalEntity пытаемся найти его в каталоге
-                item_id = item.get('id')
-                item_uid = item.get('uid')
-                item_name = item.get('name', 'Неизвестный товар')
-                
-                found_legal_entity = None
-                
-                # Пытаемся найти товар в каталоге
-                catalog_item = None
-                if item_uid:
-                    catalog_item = mongo.cx.Pivo.catalog.find_one({'UID': item_uid})
-                if not catalog_item and item_id:
-                    catalog_item = mongo.cx.Pivo.catalog.find_one({'id': item_id})
-                if not catalog_item and item_name:
-                    catalog_item = mongo.cx.Pivo.catalog.find_one({'name': item_name})
-                
-                # Если нашли товар, получаем его legalEntity
-                if catalog_item and 'legalEntity' in catalog_item:
-                    found_legal_entity = str(catalog_item.get('legalEntity', ''))
-                    logger.info(f"Найден legalEntity в каталоге для товара {item_name}: {found_legal_entity}")
-                    
-                    # Обновляем товар с найденным legalEntity
-                    item_copy = dict(item)
-                    item_copy['legalEntity'] = found_legal_entity
-                    
-                    # Добавляем в группу
-                    if found_legal_entity not in items_by_legal_entity:
-                        items_by_legal_entity[found_legal_entity] = []
-                    items_by_legal_entity[found_legal_entity].append(item_copy)
-                    
-                    # Добавляем в список non_tara_legal_entities, если это не тара
-                    if not is_tara and found_legal_entity not in non_tara_legal_entities:
-                        non_tara_legal_entities.append(found_legal_entity)
-                else:
-                    # Если не смогли найти legalEntity, запомним товар для последующей обработки
-                    if 'unknown' not in items_by_legal_entity:
-                        items_by_legal_entity['unknown'] = []
-                    items_by_legal_entity['unknown'].append(item)
         
-        logger.debug(f"Найдены legalEntity из позиций: {non_tara_legal_entities}")
+        logger.debug(f"Найдены legalEntity из позиций не-тара: {non_tara_legal_entities}")
         
-        # Определяем, какой legalEntity использовать для тары и неизвестных товаров
-        default_legal_entity = None
+        # Определяем, какой legalEntity использовать для тары
+        tara_legal_entity = None
         if non_tara_legal_entities:
             # Если есть legalEntity от не-тары, используем первый
-            default_legal_entity = non_tara_legal_entities[0]
-            logger.debug(f"Для товаров без legalEntity будет использован legalEntity из других позиций: {default_legal_entity}")
+            tara_legal_entity = non_tara_legal_entities[0]
+            logger.debug(f"Для тары будет использован legalEntity из других позиций: {tara_legal_entity}")
         else:
-            # Если нет, пытаемся получить из данных пользователя или организации
-            if org_info and 'legalEntity' in org_info:
-                default_legal_entity = str(org_info.get('legalEntity', ''))
-                logger.info(f"Используем legalEntity из данных организации: {default_legal_entity}")
-            elif org_info and 'inn' in org_info:
-                default_legal_entity = str(org_info.get('inn', ''))
-                logger.info(f"Используем ИНН организации как legalEntity: {default_legal_entity}")
-            elif user_data and 'legal_entity' in user_data:
-                default_legal_entity = str(user_data.get('legal_entity', ''))
-                logger.info(f"Используем legalEntity из данных пользователя: {default_legal_entity}")
-            else:
-                # Если нет legalEntity нигде, используем значение из запроса
-                default_legal_entity = str(data.get('INN_legal_entity', ''))
-                logger.debug(f"Используем legalEntity из запроса: {default_legal_entity}")
-            
-            if not default_legal_entity:
-                logger.error("Не удалось определить legalEntity: нет legalEntity в товарах, организации и данных пользователя")
-                return jsonify({"success": False, "error": "Не удалось определить legalEntity для заказа"}), 400
+            # Если нет, используем одно из стандартных значений
+            standard_legal_entities = ["2724132975", "2724163243"]
+            tara_legal_entity = random.choice(standard_legal_entities)
+            logger.debug(f"Для тары будет использован случайно выбранный legalEntity: {tara_legal_entity}")
         
-        # Добавляем дополнительное логирование для диагностики
-        logger.info(f"Итоговое значение default_legal_entity: {default_legal_entity}")
-        
-        # Обрабатываем товары с неизвестным legalEntity и группируем их по default_legal_entity
-        if 'unknown' in items_by_legal_entity:
-            unknown_items = items_by_legal_entity.pop('unknown')
-            logger.info(f"Найдено {len(unknown_items)} товаров без legalEntity, будет использован default_legal_entity: {default_legal_entity}")
+        # Теперь группируем товары, обрабатывая тару специальным образом
+        for item in data.get('items', []):
+            is_tara = item.get('TARA', False)
+            legal_entity = item.get('legalEntity')
             
-            for item in unknown_items:
+            # Если это тара или legalEntity некорректный, используем tara_legal_entity
+            if is_tara or legal_entity == 1 or legal_entity is None or not str(legal_entity).strip():
+                legal_entity = tara_legal_entity
                 # Создаем копию товара с обновленным legalEntity
                 item_copy = dict(item)
-                item_copy['legalEntity'] = default_legal_entity
+                item_copy['legalEntity'] = legal_entity
                 
-                # Добавляем в группу
-                if default_legal_entity not in items_by_legal_entity:
-                    items_by_legal_entity[default_legal_entity] = []
+                if is_tara:
+                    logger.debug(f"Для тары '{item.get('name')}' установлен legalEntity: {legal_entity}")
                 
-                items_by_legal_entity[default_legal_entity].append(item_copy)
+                if legal_entity not in items_by_legal_entity:
+                    items_by_legal_entity[legal_entity] = []
+                
+                items_by_legal_entity[legal_entity].append(item_copy)
+            else:
+                # Для обычных товаров с корректным legalEntity
+                if legal_entity not in items_by_legal_entity:
+                    items_by_legal_entity[legal_entity] = []
+                
+                items_by_legal_entity[legal_entity].append(item)
         
         logger.debug(f"Товары сгруппированы по legalEntity: {len(items_by_legal_entity)} групп")
         # Логируем группировку
@@ -1180,38 +1080,28 @@ def create_1c_order():
                     elif item_name and item_name in catalog_uid_by_name:
                         uid = catalog_uid_by_name[item_name]
                         logger.info(f"Найден UID по имени в каталоге для товара {item_name}: {uid}")
+                    # Если не нашли ни по ID, ни по имени, делаем прямой запрос в MongoDB
+                    elif item_name:
+                        # Ищем товар в MongoDB по имени
+                        catalog_item = mongo.cx.Pivo.catalog.find_one({'name': item_name})
+                        if catalog_item and 'UID' in catalog_item and catalog_item['UID']:
+                            uid = catalog_item['UID']
+                            logger.info(f"Найден UID через прямой запрос в MongoDB для товара {item_name}: {uid}")
+                        else:
+                            # Если все еще не нашли, используем ID в качестве запасного варианта
+                            uid = item_id
+                            logger.warning(f"Используем ID в качестве UID для товара {item_name}: {uid}")
                 
-                # Если товар имеет действительный UID, добавляем его в позиции
-                if uid:
-                    # Проверяем формат UID - должен быть строкой с дефисами
-                    if not isinstance(uid, str):
-                        uid = str(uid)
+                # Если всё еще нет UID или ID, пропускаем товар
+                if uid is None or not str(uid).strip():
+                    logger.warning(f"Товар без UID и ID не будет добавлен в заказ: {item.get('name', 'Неизвестный товар')}")
+                    continue
                     
-                    # Проверяем формат UUID (должен быть в формате 8-4-4-4-12)
-                    uid_pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-                    if not re.match(uid_pattern, uid):
-                        logger.warning(f"UID товара {item_name} не соответствует формату UUID: {uid}")
-                        # Попытка преобразовать в правильный формат, если возможно
-                        cleaned_uid = re.sub(r'[^0-9a-fA-F]', '', uid)
-                        if len(cleaned_uid) == 32:
-                            formatted_uid = f"{cleaned_uid[:8]}-{cleaned_uid[8:12]}-{cleaned_uid[12:16]}-{cleaned_uid[16:20]}-{cleaned_uid[20:]}"
-                            logger.info(f"Преобразован UID товара {item_name}: {uid} -> {formatted_uid}")
-                            uid = formatted_uid
-                    
-                    # Формируем позицию с проверкой формата
-                    position = {
-                        "ID_product": uid,
-                        "Amount": int(item.get('quantity', 1))
-                    }
-                    positions.append(position)
-                    valid_items.append(item)
-                    logger.info(f"Добавлена позиция: {json.dumps(position, ensure_ascii=False)}")
-                    
-                    # Проверяем формат ID_product - должен быть строкой с дефисами в формате UUID
-                    if not re.match(uid_pattern, position["ID_product"]):
-                        logger.error(f"Внимание! ID_product не соответствует формату UUID: {position['ID_product']}")
-                else:
-                    logger.warning(f"Товар {item_name} (ID: {item_id}) не имеет действительного UID и не будет добавлен в заказ")
+                positions.append({
+                    "ID_product": str(uid),
+                    "Amount": int(item.get('quantity', 0))
+                })
+                valid_items.append(item)
             
             # Проверяем, есть ли товары с действительными UID или ID
             if not positions:
@@ -1225,89 +1115,22 @@ def create_1c_order():
                 })
                 continue
                 
-            # Формируем запрос в точном соответствии с форматом API 1С
-            # Используем часовой пояс Владивостока (UTC+10)
-            timezone = pytz.timezone('Asia/Vladivostok')
-            local_time = datetime.now(timezone)
-            
-            # Форматируем дату в timestamp как в образце (без изменения самой даты)
-            timestamp = int(local_time.timestamp())
-            
-            logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Время Владивостока: {local_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Timestamp по времени Владивостока: {timestamp}")
-            
-            # Дополнительное логирование разных форматов даты для анализа
-            moscow_timezone = pytz.timezone('Europe/Moscow')
-            moscow_time = datetime.now(moscow_timezone)
-            logger.info(f"Время Москвы: {moscow_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Timestamp по времени Москвы: {int(moscow_time.timestamp())}")
-            
-            # Сравнение с образцом из запроса
-            logger.info(f"Образец timestamp из запроса: 1957598704")
-            sample_date = datetime.fromtimestamp(1957598704, timezone)
-            logger.info(f"Образец даты из timestamp: {sample_date.strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Формируем запрос строго в таком формате, как в образце
+            # Формируем запрос
             request_body = {
-                "DATE": str(int(timestamp)),  # Преобразуем в целое число и затем в строку, без десятичных
+                "DATE": str(int(datetime.now().timestamp())),
                 "ID_customer": organization_id,
-                "INN_legal_entity": str(legal_entity),  # Используем legalEntity из группы товаров
+                "INN_legal_entity": str(legal_entity),
                 "positions": positions
             }
             
-            # Проверяем форматы важных полей
-            # Проверка ID_customer на формат UUID
-            id_customer_pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-            if not re.match(id_customer_pattern, request_body["ID_customer"]):
-                logger.warning(f"ID_customer не соответствует формату UUID: {request_body['ID_customer']}")
-                
-            # Проверка INN_legal_entity на формат ИНН (10 или 12 цифр)
-            inn_pattern = r'^\d{10}(\d{2})?$'
-            if not re.match(inn_pattern, request_body["INN_legal_entity"]):
-                logger.warning(f"INN_legal_entity не соответствует формату ИНН: {request_body['INN_legal_entity']}")
-                
-            # Логируем для диагностики формат параметров
-            logger.info(f"Параметры запроса: DATE={request_body['DATE']} (timestamp: {timestamp})")
-            logger.info(f"ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}")
-            
-            # Проверяем, нет ли в запросе пустых полей
-            empty_fields = []
-            if not request_body["DATE"]:
-                empty_fields.append("DATE")
-            if not request_body["ID_customer"]:
-                empty_fields.append("ID_customer")
-            if not request_body["INN_legal_entity"]:
-                empty_fields.append("INN_legal_entity")
-            if not request_body["positions"]:
-                empty_fields.append("positions")
-                
-            if empty_fields:
-                logger.error(f"В запросе на создание заказа в 1С есть пустые поля: {', '.join(empty_fields)}")
-                
-            # Проверяем формат каждой позиции
-            for pos_idx, position in enumerate(positions):
-                if not position.get("ID_product"):
-                    logger.error(f"Позиция {pos_idx+1} не имеет ID_product")
-                if not position.get("Amount"):
-                    logger.error(f"Позиция {pos_idx+1} не имеет Amount")
-            
-            # Логируем оригинальный запрос для сравнения с примером пользователя
             logger.debug(f"Запрос на создание заказа в 1С: {request_body}")
             logger.info(f"Отправка заказа в 1С с INN_legal_entity: {legal_entity} для {len(positions)} позиций")
             logger.info(f"Полные данные запроса в 1С: DATE={request_body['DATE']}, ID_customer={request_body['ID_customer']}, INN_legal_entity={request_body['INN_legal_entity']}, positions={positions}")
-            # Полное логирование тела запроса в JSON
-            logger.info(f"Полное тело запроса в 1С в формате JSON: {json.dumps(request_body, ensure_ascii=False)}")
             
             # Отправляем запрос
             try:
-                full_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}"
-                logger.info(f"Отправка запроса на URL: {full_url}")
-                logger.info(f"Метод: POST, Заголовки: Content-Type: application/json, Auth: Basic")
-                logger.info(f"Полное тело запроса: {json.dumps(request_body, ensure_ascii=False, indent=2)}")
-                
                 response = requests.post(
-                    full_url,
+                    f"{config.API_BASE_URL}{config.API_ENDPOINTS['new_order']}",
                     json=request_body,
                     auth=(config.API_USERNAME, config.API_PASSWORD),
                     headers={'Content-Type': 'application/json'},
@@ -1315,9 +1138,6 @@ def create_1c_order():
                 )
                 
                 logger.debug(f"Ответ от API 1С: Статус {response.status_code}, Тело: {response.text}")
-                # Полное логирование ответа
-                logger.info(f"Полный ответ от API 1С: Статус {response.status_code}, URL: {full_url}, Тело: {response.text}")
-                logger.info(f"Заголовки ответа: {dict(response.headers)}")
                 
                 if response.status_code != 200:
                     logger.error(f"Ошибка API 1С: {response.status_code}, {response.text}")
@@ -1359,15 +1179,11 @@ def create_1c_order():
                 try:
                     order_response = response.json()
                     logger.debug(f"Ответ API 1С (JSON): {order_response}")
-                    # Логируем структуру ответа для анализа
-                    logger.info(f"Структура ответа API 1С: тип={type(order_response)}, ключи={list(order_response.keys()) if isinstance(order_response, dict) else 'не словарь'}")
                     
                     # Проверяем корректность ответа
                     if not isinstance(order_response, dict) or "Nomer" not in order_response or "UID" not in order_response:
                         error_message = "Некорректный ответ от API 1С"
                         logger.error(f"{error_message}: {order_response}")
-                        # Логируем детали проверки
-                        logger.error(f"Детали проверки ответа: является словарем={isinstance(order_response, dict)}, содержит Nomer={'Nomer' in order_response if isinstance(order_response, dict) else False}, содержит UID={'UID' in order_response if isinstance(order_response, dict) else False}")
                         orders_results.append({
                             "legalEntity": legal_entity,
                             "items": items,
@@ -1377,35 +1193,6 @@ def create_1c_order():
                         continue
                     
                     # Сохраняем результат
-                    # Логируем UID заказа для диагностики
-                    order_uid = order_response.get('UID')
-                    order_number = order_response.get('Nomer')
-                    logger.info(f"Создан заказ в 1С с UID: {order_uid}, номер: {order_number}")
-                    
-                    # Проверяем созданный заказ через API
-                    try:
-                        verify_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
-                        logger.info(f"Проверка созданного заказа по URL: {verify_url}")
-                        
-                        verify_response = requests.get(
-                            verify_url,
-                            auth=(config.API_USERNAME, config.API_PASSWORD),
-                            headers={'Content-Type': 'application/json'},
-                            timeout=10
-                        )
-                        
-                        if verify_response.status_code == 200:
-                            try:
-                                verify_data = verify_response.json()
-                                logger.info(f"Подтверждение заказа: {json.dumps(verify_data, ensure_ascii=False)}")
-                            except Exception as e:
-                                logger.warning(f"Не удалось получить JSON ответ при проверке заказа: {str(e)}")
-                                logger.info(f"Текст ответа при проверке: {verify_response.text}")
-                        else:
-                            logger.warning(f"Не удалось проверить заказ, статус: {verify_response.status_code}, ответ: {verify_response.text}")
-                    except Exception as e:
-                        logger.warning(f"Ошибка при проверке созданного заказа: {str(e)}")
-                    
                     orders_results.append({
                         "legalEntity": legal_entity,
                         "items": valid_items,
@@ -1438,51 +1225,6 @@ def create_1c_order():
         }
         
         logger.debug(f"Результаты создания заказов: {response_data}")
-        
-        # Проверяем историю заказов, чтобы убедиться, что заказ отображается в 1С
-        try:
-            if org_id and any(order.get("success", False) for order in orders_results):
-                history_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_history']}{org_id}"
-                logger.info(f"Проверка истории заказов по URL: {history_url}")
-                
-                history_response = requests.get(
-                    history_url,
-                    auth=(config.API_USERNAME, config.API_PASSWORD),
-                    headers={'Content-Type': 'application/json'},
-                    timeout=10
-                )
-                
-                if history_response.status_code == 200:
-                    try:
-                        history_data = history_response.json()
-                        logger.info(f"Получена история заказов, количество: {len(history_data) if isinstance(history_data, list) else 'не список'}")
-                        
-                        # Проверяем наличие созданного заказа в истории
-                        created_orders = [order['order']['UID'] for order in orders_results if order.get('success') and 'order' in order and 'UID' in order['order']]
-                        
-                        if isinstance(history_data, list):
-                            found_orders = []
-                            for created_uid in created_orders:
-                                found = False
-                                for history_order in history_data:
-                                    if 'UID' in history_order and history_order['UID'] == created_uid:
-                                        found = True
-                                        found_orders.append(created_uid)
-                                        break
-                                
-                                if not found:
-                                    logger.warning(f"Созданный заказ с UID {created_uid} не найден в истории заказов")
-                            
-                            if found_orders:
-                                logger.info(f"Подтверждено наличие заказов в истории: {', '.join(found_orders[:3])} (всего: {len(found_orders)})")
-                        else:
-                            logger.warning(f"История заказов не является списком")
-                    except Exception as e:
-                        logger.warning(f"Ошибка при обработке истории заказов: {str(e)}")
-                else:
-                    logger.warning(f"Не удалось получить историю заказов, статус: {history_response.status_code}")
-        except Exception as e:
-            logger.warning(f"Ошибка при проверке истории заказов: {str(e)}")
         
         return jsonify(response_data)
                 
@@ -2396,73 +2138,56 @@ def get_shipped_orders_for_input():
             
         logger.debug(f"Получение заказов для организации {org_id}")
         
-        # Получаем заказы со статусом "Отгружен" (или подобным)
-        # Используем прямой запрос с regex для проверки статуса
-        shipped_orders_query = {
-            "org_ID": org_id,
-            "$or": [
-                {"status": {"$regex": "отгруж", "$options": "i"}},
-                {"status": {"$regex": "выполнен", "$options": "i"}},
-                {"status": {"$regex": "доставлен", "$options": "i"}}
-            ]
-        }
+        # Получаем последние 10 заказов организации, отсортированные по дате создания
+        orders = list(mongo.cx.Pivo.Orders.find(
+            {"org_ID": org_id},
+            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
+        ).sort([("createdAt", -1), ("date", -1)]).limit(10))
         
-        # Получаем только последние 5 отгруженных заказов
-        shipped_orders_db = list(mongo.cx.Pivo.Orders.find(
-            shipped_orders_query,
-            {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "status": 1}
-        ).sort([("createdAt", -1), ("date", -1)]).limit(5))
+        logger.debug(f"Найдено {len(orders)} последних заказов")
         
-        logger.debug(f"Найдено {len(shipped_orders_db)} отгруженных заказов")
-        
-        # Если отгруженных заказов нет, попробуем взять последние заказы независимо от статуса
-        if not shipped_orders_db:
-            logger.debug(f"Отгруженных заказов не найдено, берем последние заказы")
-            shipped_orders_db = list(mongo.cx.Pivo.Orders.find(
-                {"org_ID": org_id},
-                {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "status": 1}
-            ).sort([("createdAt", -1), ("date", -1)]).limit(3))
-            
-            logger.debug(f"Найдено {len(shipped_orders_db)} последних заказов")
-        
-        # Форматируем заказы для ответа API
+        # Фильтруем заказы со статусом "Отгружен" и ограничиваем до 3
         shipped_orders = []
         
-        for order in shipped_orders_db:
-            # Форматируем заказ для ответа API
-            formatted_order = {
-                'order_ID': str(order.get('_id')),
-                'date': order.get('date', ''),
-                'status': order.get('status', 'Новый'),
-                'positions': []
-            }
+        for order in orders:
+            # Проверяем статус заказа (если статус не указан, считаем его "Новый")
+            status = order.get('status', 'Новый')
             
-            # Преобразуем позиции из словаря в список
-            positions = order.get('Positions', {})
-            for pos_key, position in positions.items():
-                beer_id = position.get('Beer_ID')
-                beer_name = position.get('Beer_Name')
-                legal_entity = position.get('Legal_Entity', 1)
-                quantity = position.get('Beer_Count', 0)
-                price = position.get('Price', 0)
+            # Проверяем, является ли статус "Отгружен" или подобным
+            status_lower = status.lower()
+            if 'отгруж' in status_lower or 'выполнен' in status_lower or 'доставлен' in status_lower:
+                # Форматируем заказ для ответа API
+                formatted_order = {
+                    'order_ID': str(order.get('_id')),
+                    'date': order.get('date', ''),
+                    'status': status,
+                    'positions': []
+                }
                 
-                if beer_id is not None and beer_name:
-                    formatted_order['positions'].append({
-                        'id': str(beer_id),
-                        'name': beer_name,
-                        'legal_entity': legal_entity,
-                        'quantity': quantity,
-                        'price': price
-                    })
-            
-            # Добавляем заказ только если есть позиции
-            if formatted_order['positions']:
+                # Преобразуем позиции из словаря в список
+                positions = order.get('Positions', {})
+                for pos_key, position in positions.items():
+                    beer_id = position.get('Beer_ID')
+                    beer_name = position.get('Beer_Name')
+                    legal_entity = position.get('Legal_Entity', 1)
+                    quantity = position.get('Beer_Count', 0)
+                    price = position.get('Price', 0)
+                    
+                    if beer_id is not None and beer_name:
+                        formatted_order['positions'].append({
+                            'id': str(beer_id),
+                            'name': beer_name,
+                            'legal_entity': legal_entity,
+                            'quantity': quantity,
+                            'price': price
+                        })
+                
                 shipped_orders.append(formatted_order)
-                logger.debug(f"Добавлен заказ: {order.get('_id')}, позиций: {len(formatted_order['positions'])}")
-            
-            # Если уже нашли 3 заказа, выходим из цикла
-            if len(shipped_orders) >= 3:
-                break
+                logger.debug(f"Добавлен отгруженный заказ: {order.get('_id')}")
+                
+                # Если уже нашли 3 заказа, выходим из цикла
+                if len(shipped_orders) >= 3:
+                    break
         
         logger.debug(f"Найдено {len(shipped_orders)} отгруженных заказов для ввода остатков")
         
