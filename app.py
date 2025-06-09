@@ -1225,28 +1225,21 @@ def create_1c_order():
                 })
                 continue
                 
-            # Формируем запрос в точном соответствии с форматом API 1С
-            # Используем часовой пояс Владивостока (UTC+10)
-            timezone = pytz.timezone('Asia/Vladivostok')
-            local_time = datetime.now(timezone)
+            # Формируем дату точно так же, как в JavaScript: Math.floor(Date.now() / 1000).toString()
+            # Используем текущее время в секундах (эквивалент Date.now()/1000)
+            import time
+            timestamp = int(time.time())  # Текущее время в секундах, целое число
             
-            # Форматируем дату в timestamp как в образце (без изменения самой даты)
-            timestamp = int(local_time.timestamp())
-            
+            # Логирование даты в разных форматах
             logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Время Владивостока: {local_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Timestamp по времени Владивостока: {timestamp}")
+            timezone = pytz.timezone('Asia/Vladivostok')
+            vladivostok_time = datetime.now(timezone)
+            logger.info(f"Время Владивостока: {vladivostok_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Использованный timestamp (из time.time()): {timestamp}")
+            logger.info(f"Этот timestamp соответствует дате: {datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
             
-            # Дополнительное логирование разных форматов даты для анализа
-            moscow_timezone = pytz.timezone('Europe/Moscow')
-            moscow_time = datetime.now(moscow_timezone)
-            logger.info(f"Время Москвы: {moscow_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Timestamp по времени Москвы: {int(moscow_time.timestamp())}")
-            
-            # Сравнение с образцом из запроса
-            logger.info(f"Образец timestamp из запроса: 1957598704")
-            sample_date = datetime.fromtimestamp(1957598704, timezone)
-            logger.info(f"Образец даты из timestamp: {sample_date.strftime('%Y-%m-%d %H:%M:%S')}")
+            # Сравнение с методом JavaScript
+            logger.info(f"JavaScript эквивалент: Math.floor(Date.now() / 1000) = {timestamp}")
             
             # Формируем запрос строго в таком формате, как в образце
             request_body = {
