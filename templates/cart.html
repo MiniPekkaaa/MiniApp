@@ -986,8 +986,23 @@
                                 console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
                             }
                             
-                            // Определяем legalEntity (обычно должно быть предустановлено в товаре)
-                            const legalEntity = item.legalEntity || "2724132975";
+                            // ВАЖНО: Для товаров тары ВСЕГДА используем фиксированное значение VALID_LEGAL_ENTITY_1
+                            // Для не-тары используем предустановленное значение или VALID_LEGAL_ENTITY_2
+                            let legalEntity;
+                            
+                            if (item.TARA === true) {
+                                // Для товаров типа "тара" всегда используем первое значение
+                                legalEntity = VALID_LEGAL_ENTITY_1;
+                                console.log(`[TARA_DEBUG] ФИНАЛЬНАЯ ПРОВЕРКА ПЕРЕД ОТПРАВКОЙ: Товару тары ${item.name} (ID: ${item.id}) жестко задан legalEntity ${VALID_LEGAL_ENTITY_1}`);
+                            } else if (!item.legalEntity || item.legalEntity === '1' || item.legalEntity === '') {
+                                // Для не-тары с пустым legalEntity используем второе значение
+                                legalEntity = VALID_LEGAL_ENTITY_2;
+                                console.log(`[TARA_DEBUG] ФИНАЛЬНАЯ ПРОВЕРКА ПЕРЕД ОТПРАВКОЙ: Товару не-тары ${item.name} (ID: ${item.id}) с пустым legalEntity задан ${VALID_LEGAL_ENTITY_2}`);
+                            } else {
+                                // Используем существующий legalEntity
+                                legalEntity = item.legalEntity;
+                                console.log(`[TARA_DEBUG] ФИНАЛЬНАЯ ПРОВЕРКА ПЕРЕД ОТПРАВКОЙ: Товар ${item.name} (ID: ${item.id}) использует существующий legalEntity ${legalEntity}`);
+                            }
                             
                             // Всегда передаем name, так как сервер может найти UID по имени
                             return {
@@ -996,7 +1011,8 @@
                                 name: item.name || "Неизвестный товар", // Гарантируем, что name всегда есть
                                 quantity: parseInt(item.quantity),
                                 price: parseFloat(item.price) || 0,
-                                legalEntity: legalEntity
+                                legalEntity: legalEntity,
+                                TARA: item.TARA === true // Явно передаем признак TARA
                             };
                         });
                         
