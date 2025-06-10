@@ -1048,15 +1048,43 @@ def create_1c_order():
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
         
+        # Специальные legalEntity для тары
+        tara_legal_entities = ['2724163243', '2724132975']
+        
         # Сначала собираем все legalEntity из позиций, которые не являются тарой
         non_tara_legal_entities = []
         for item in data.get('items', []):
             is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
             
+            # Если это тара, присваиваем ей один из специальных legalEntity
+            if is_tara:
+                logger.info(f"Обрабатываем товар тары: {item.get('name')} с текущим legalEntity={legal_entity}")
+                
+                # Проверяем, есть ли уже товары с одним из специальных legalEntity для тары
+                existing_tara_le = None
+                for other_item in data.get('items', []):
+                    other_le = str(other_item.get('legalEntity', ''))
+                    if other_le in tara_legal_entities:
+                        existing_tara_le = other_le
+                        break
+                
+                # Если нашли существующий специальный legalEntity, используем его
+                if existing_tara_le:
+                    item['legalEntity'] = existing_tara_le
+                    legal_entity = existing_tara_le
+                    logger.info(f"Использован существующий legalEntity для тары: {existing_tara_le}")
+                else:
+                    # Если не нашли, выбираем случайный из специальных
+                    import random
+                    selected_le = random.choice(tara_legal_entities)
+                    item['legalEntity'] = selected_le
+                    legal_entity = selected_le
+                    logger.info(f"Присвоен случайный legalEntity для тары: {selected_le}")
+            
             # Если у товара есть legalEntity, используем его
-            if legal_entity is not None and legal_entity != 1 and str(legal_entity).strip():
-                if str(legal_entity) not in non_tara_legal_entities:
+            if legal_entity is not None and legal_entity != 1 and str(legal_entity).strip() and str(legal_entity) != 'None':
+                if str(legal_entity) not in non_tara_legal_entities and not is_tara:
                     non_tara_legal_entities.append(str(legal_entity))
                     
                 # Группируем товар по его legalEntity
