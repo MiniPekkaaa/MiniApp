@@ -1254,9 +1254,11 @@ def create_1c_order():
                 continue
                 
             # Формируем дату точно так же, как в JavaScript: Math.floor(Date.now() / 1000).toString()
-            # Используем текущее время в секундах (эквивалент Date.now()/1000)
+            # Используем время по Владивостоку (UTC+10)
             import time
-            timestamp = int(time.time())  # Текущее время в секундах, целое число
+            timezone = pytz.timezone('Asia/Vladivostok')
+            vladivostok_time = datetime.now(timezone)
+            timestamp = int(vladivostok_time.timestamp())  # Время Владивостока в секундах, целое число
             
             # Логирование даты в разных форматах
             logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

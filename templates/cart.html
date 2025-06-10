@@ -1219,7 +1219,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        DATE: Math.floor(Date.now() / 1000).toString(),
+                        DATE: Math.floor((Date.now() + 10 * 60 * 60 * 1000) / 1000).toString(), // Время по Владивостоку (UTC+10)
                         ID_customer: requestData.ID_customer || '',
                         INN_legal_entity: requestData.INN_legal_entity || '',
                         positions: requestData.positions || []
@@ -1248,7 +1248,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        DATE: Math.floor(Date.now() / 1000).toString(),
+                        DATE: Math.floor((Date.now() + 10 * 60 * 60 * 1000) / 1000).toString(), // Время по Владивостоку (UTC+10)
                         ID_customer: requestData.ID_customer || '',
                         INN_legal_entity: requestData.INN_legal_entity || '',
                         positions: requestData.positions || []
