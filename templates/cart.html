@@ -1027,8 +1027,38 @@
                                 console.warn(`ВНИМАНИЕ: Товар ${item.name} (ID: ${item.id}) не имеет UID!`);
                             }
                             
-                            // Определяем legalEntity (обычно должно быть предустановлено в товаре)
-                            const legalEntity = item.legalEntity || "2724132975";
+                            // Определяем legalEntity с учетом специальной логики для тары
+                            let legalEntity;
+                            
+                            // Специальные legalEntity для тары
+                            const taraLegalEntities = ['2724163243', '2724132975'];
+                            
+                            if (item.TARA === true) {
+                                // Для тары ищем существующий legalEntity из других товаров
+                                let existingLegalEntity = null;
+                                
+                                // Проверяем другие товары в корзине на наличие специального legalEntity
+                                for (const otherItem of cart) {
+                                    if (otherItem.legalEntity && taraLegalEntities.includes(String(otherItem.legalEntity))) {
+                                        existingLegalEntity = String(otherItem.legalEntity);
+                                        break;
+                                    }
+                                }
+                                
+                                // Если нашли подходящий legalEntity, используем его, иначе выбираем случайный
+                                if (existingLegalEntity) {
+                                    legalEntity = existingLegalEntity;
+                                    console.log(`[TARA] Использован существующий legalEntity для тары: ${legalEntity}`);
+                                } else {
+                                    // Выбираем случайный из специальных legalEntity для тары
+                                    const randomIndex = Math.floor(Math.random() * taraLegalEntities.length);
+                                    legalEntity = taraLegalEntities[randomIndex];
+                                    console.log(`[TARA] Присвоен случайный legalEntity для тары: ${legalEntity}`);
+                                }
+                            } else {
+                                // Для обычных товаров используем имеющийся legalEntity или значение по умолчанию
+                                legalEntity = item.legalEntity || "2724132975";
+                            }
                             
                             // Всегда передаем name, так как сервер может найти UID по имени
                             return {
