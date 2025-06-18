@@ -100,7 +100,16 @@ def check_auth():
 @app.route('/')
 def index():
     try:
-        user_id = request.args.get('user_id')
+        # Поддерживаем два параметра: user_id (стандартный) и userid (для тестирования в браузере)
+        user_id = request.args.get('user_id') or request.args.get('userid')
+        
+        # Если userid был передан, перенаправляем на стандартный формат с user_id
+        if request.args.get('userid') and not request.args.get('user_id'):
+            userid_param = request.args.get('userid')
+            logger.info(f"Получен userid параметр для тестирования: {userid_param}")
+            # Перенаправляем с правильным параметром
+            return redirect(f'/?user_id={userid_param}')
+        
         if not user_id:
             return render_template('unauthorized.html')
 
@@ -121,7 +130,7 @@ def index():
 @app.route('/main_menu')
 def main_menu():
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.args.get('user_id') or request.args.get('userid')
         if not user_id or not check_user_registration(user_id):
             return redirect('/')
         return render_template('main_menu.html', user_id=user_id)
@@ -143,7 +152,7 @@ def order_type():
 @app.route('/products')
 def products():
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.args.get('user_id') or request.args.get('userid')
         if not user_id or not check_user_registration(user_id):
             return redirect('/')
         
@@ -178,7 +187,7 @@ def products():
 
 @app.route('/cart')
 def cart():
-    user_id = request.args.get('user_id')
+    user_id = request.args.get('user_id') or request.args.get('userid')
     if not user_id or not check_user_registration(user_id):
         return redirect('/')
     return render_template('cart.html', user_id=user_id)
@@ -186,7 +195,7 @@ def cart():
 @app.route('/add_product')
 def add_product():
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.args.get('user_id') or request.args.get('userid')
         if not user_id or not check_user_registration(user_id):
             return redirect('/')
 

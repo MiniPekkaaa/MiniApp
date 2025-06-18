@@ -47,9 +47,42 @@
                 border-radius: 8px;
                 font-size: 16px;
                 cursor: pointer;
+                margin-bottom: 20px;
             ">
                 Регистрация
             </button>
+            
+            <!-- Раздел для тестирования -->
+            <div style="margin-top: 30px; padding: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <h3 style="color: var(--tg-theme-text-color); margin-bottom: 15px; font-size: 14px;">
+                    Тестирование в браузере
+                </h3>
+                <input 
+                    type="text" 
+                    id="testUserId" 
+                    placeholder="Введите Telegram ID"
+                    style="
+                        padding: 10px;
+                        border: 1px solid #ccc;
+                        border-radius: 5px;
+                        width: 200px;
+                        margin-bottom: 10px;
+                        font-size: 14px;
+                    "
+                />
+                <br>
+                <button onclick="testWithUserId()" style="
+                    background-color: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    font-size: 14px;
+                    cursor: pointer;
+                ">
+                    Войти с этим ID
+                </button>
+            </div>
         </div>
     </div>
 
@@ -66,10 +99,15 @@
         }
 
         function checkAuthAndRedirect() {
-            if (!window.location.search.includes('user_id') && userId) {
+            // Проверяем наличие userid или user_id параметров
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasUserId = urlParams.has('user_id');
+            const hasUserid = urlParams.has('userid');
+            
+            if (!hasUserId && !hasUserid && userId) {
                 window.location.href = `${window.location.pathname}?user_id=${userId}`;
             } else {
-                // Если user_id нет или уже есть в URL, показываем сообщение через 1 секунду
+                // Если user_id/userid нет или уже есть в URL, показываем сообщение через 1 секунду
                 setTimeout(showUnauthorized, 1000);
             }
         }
@@ -80,6 +118,36 @@
                 tg.close();
             }, 1000);
         }
+
+        function testWithUserId() {
+            const testUserId = document.getElementById('testUserId').value.trim();
+            if (!testUserId) {
+                alert('Пожалуйста, введите Telegram ID');
+                return;
+            }
+            
+            // Проверяем, что введено число
+            if (!/^\d+$/.test(testUserId)) {
+                alert('Telegram ID должен содержать только цифры');
+                return;
+            }
+            
+            console.log(`Тестирование с user_id: ${testUserId}`);
+            // Перенаправляем на главную страницу с тестовым user_id
+            window.location.href = `/?user_id=${testUserId}`;
+        }
+
+        // Добавляем обработчик Enter для поля ввода
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('testUserId');
+            if (input) {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        testWithUserId();
+                    }
+                });
+            }
+        });
 
         // Запускаем проверку
         checkAuthAndRedirect();
