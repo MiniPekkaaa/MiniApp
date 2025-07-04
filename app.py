@@ -1290,8 +1290,7 @@ def create_1c_order():
             vladivostok_time = datetime.now(timezone)
             next_day = get_next_day(vladivostok_time)
             
-            # Устанавливаем время на начало дня (например, 09:00)
-            next_day = next_day.replace(hour=9, minute=0, second=0, microsecond=0)
+            # Сохраняем текущее время, но на следующий день
             timestamp = int(next_day.timestamp())  # Время следующего дня в секундах
             
             # Логирование даты в разных форматах
