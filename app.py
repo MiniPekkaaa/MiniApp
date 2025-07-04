@@ -32,28 +32,24 @@ def format_uptime(seconds):
     else:
         return f"{int(seconds)}с"
 
-def get_next_business_day(current_date=None):
+def get_next_day(current_date=None):
     """
-    Возвращает следующий рабочий день (исключая субботу и воскресенье).
+    Возвращает следующий день (завтра).
     
     Args:
-        current_date: datetime объект, для которого нужно найти следующий рабочий день.
+        current_date: datetime объект, для которого нужно найти следующий день.
                      Если не указан, используется текущая дата.
     
     Returns:
-        datetime: дата следующего рабочего дня
+        datetime: дата следующего дня
     """
     if current_date is None:
         # Используем время по Владивостоку
         timezone = pytz.timezone('Asia/Vladivostok')
         current_date = datetime.now(timezone)
     
-    # Начинаем с завтрашнего дня
+    # Просто добавляем один день
     next_day = current_date + timedelta(days=1)
-    
-    # Проверяем день недели (0=понедельник, 6=воскресенье)
-    while next_day.weekday() > 4:  # 5=суббота, 6=воскресенье
-        next_day += timedelta(days=1)
     
     return next_day
 
@@ -1287,28 +1283,28 @@ def create_1c_order():
                 })
                 continue
                 
-            # Получаем дату следующего рабочего дня
+            # Получаем дату следующего дня
             # Используем время по Владивостоку (UTC+10)
             import time
             timezone = pytz.timezone('Asia/Vladivostok')
             vladivostok_time = datetime.now(timezone)
-            next_business_day = get_next_business_day(vladivostok_time)
+            next_day = get_next_day(vladivostok_time)
             
-            # Устанавливаем время на начало рабочего дня (например, 09:00)
-            next_business_day = next_business_day.replace(hour=9, minute=0, second=0, microsecond=0)
-            timestamp = int(next_business_day.timestamp())  # Время следующего рабочего дня в секундах
+            # Устанавливаем время на начало дня (например, 09:00)
+            next_day = next_day.replace(hour=9, minute=0, second=0, microsecond=0)
+            timestamp = int(next_day.timestamp())  # Время следующего дня в секундах
             
             # Логирование даты в разных форматах
             logger.info(f"Текущее время UTC: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info(f"Время Владивостока: {vladivostok_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Следующий рабочий день: {next_business_day.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Использованный timestamp для следующего рабочего дня: {timestamp}")
+            logger.info(f"Следующий день: {next_day.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Использованный timestamp для следующего дня: {timestamp}")
             logger.info(f"Этот timestamp соответствует дате: {datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
             
             # Информация о логике выбора даты
             current_weekday = vladivostok_time.weekday()  # 0=понедельник, 6=воскресенье
             weekdays = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
-            logger.info(f"Сегодня {weekdays[current_weekday]}, заказ будет отправлен на {weekdays[next_business_day.weekday()]}")
+            logger.info(f"Сегодня {weekdays[current_weekday]}, заказ будет отправлен на {weekdays[next_day.weekday()]}")
             
             # Формируем запрос строго в таком формате, как в образце
             request_body = {
