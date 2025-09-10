@@ -16,7 +16,7 @@ REDIS_PASSWORD = "otlehjoq"
 REDIS_DECODE_RESPONSES = True
 
 # Конфигурация 1C API
-API_BASE_URL = "http://212.19.22.184:9997/UT11/hs/int"
+API_BASE_URL = "https://proxy.3r.agency/api/pridebeer"
 API_ENDPOINTS = {
     "calculate_checkout": "/calculate_checkout",
     "order_history": "/istorzakaz/",
