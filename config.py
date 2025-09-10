@@ -19,9 +19,9 @@ REDIS_DECODE_RESPONSES = True
 API_BASE_URL = "https://proxy.3r.agency/api/pridebeer"
 API_ENDPOINTS = {
     "calculate_checkout": "/calculate_checkout",
-    "order_history": "/istorzakaz/",
-    "order_status": "/zakaz-status/",
-    "new_order": "/novzakaz"
+    "order_history": "/order_history/",
+    "order_status": "/order_status/",
+    "new_order": "/order_create"
 }
 API_USERNAME = "int2"
 API_PASSWORD = "pcKnE8GqXn"
