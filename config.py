@@ -26,6 +26,11 @@ API_ENDPOINTS = {
 API_USERNAME = "int2"
 API_PASSWORD = "pcKnE8GqXn"
 
+# Конфигурация Supabase
+SUPABASE_URL = "https://lirlyqxkhoxkerpxsbwy.supabase.co"
+SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxpcmx5cXhraG94a2VycHhzYnd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEwMjg4NjEsImV4cCI6MjA2NjYwNDg2MX0.Coh9ssTudttft8RdKG14kL3nSpc2sndN7zzTGL79m0Y"
+SUPABASE_TABLE_PRIDE_BEER_TARA = "pride_beer_tara"
+
 # Значения по умолчанию
 #DEFAULT_ORGANIZATION_ID = "16d7a1a8-a651-11ef-895a-005056c00008"
 #DEFAULT_LEGAL_ENTITY = "2724132975" 

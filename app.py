@@ -12,6 +12,7 @@ import config
 import platform
 import time
 import re
+from supabase import create_client, Client
 
 # Глобальная переменная для отслеживания времени запуска приложения
 APP_START_TIME = time.time()
@@ -73,6 +74,121 @@ redis_client = redis.Redis(
     password=config.REDIS_PASSWORD,
     decode_responses=config.REDIS_DECODE_RESPONSES
 )
+
+# Конфигурация Supabase
+supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_API_KEY)
+
+def save_tara_to_supabase(client_id, tara_name, tara_uid, count):
+    """
+    Сохраняет данные о таре в Supabase
+    
+    Args:
+        client_id: UID организации пользователя
+        tara_name: название тары (TARA_NAME)
+        tara_uid: UID тары (TARA_UID)
+        count: количество тары
+    """
+    try:
+        # Подготавливаем данные для вставки
+        tara_data = {
+            "client": client_id,
+            "tara": tara_name,
+            "tara_id": tara_uid,
+            "count": f"+{count}"  # Добавляем префикс +
+        }
+        
+        logger.debug(f"Сохраняем данные о таре в Supabase: {tara_data}")
+        
+        # Вставляем данные в таблицу
+        result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).insert(tara_data).execute()
+        
+        logger.debug(f"Данные о таре успешно сохранены: {result.data}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении данных о таре в Supabase: {str(e)}")
+        return False
+
+def process_tara_for_order(order_items, client_id):
+    """
+    Обрабатывает тару для заказа - проверяет товары на наличие NEED_TARA=true
+    и записывает соответствующие данные о таре в Supabase
+    
+    Args:
+        order_items: список товаров в заказе
+        client_id: UID организации пользователя
+    """
+    try:
+        logger.debug(f"Начинаем обработку тары для {len(order_items)} товаров")
+        
+        # Создаем словарь для группировки тары по TARA_UID
+        tara_groups = {}
+        
+        for item in order_items:
+            # Получаем UID товара для поиска в каталоге
+            item_uid = item.get('uid')
+            item_id = item.get('id')
+            item_name = item.get('name', 'Неизвестный товар')
+            quantity = int(item.get('quantity', 1))
+            
+            if not item_uid:
+                logger.debug(f"Товар {item_name} не имеет UID, пропускаем")
+                continue
+                
+            # Ищем товар в каталоге MongoDB для получения полной информации
+            catalog_item = mongo.cx.Pivo.catalog.find_one({"UID": item_uid})
+            
+            if not catalog_item:
+                logger.debug(f"Товар с UID {item_uid} не найден в каталоге")
+                continue
+                
+            # Проверяем, есть ли у товара NEED_TARA = true
+            need_tara = catalog_item.get('NEED_TARA', False)
+            
+            if need_tara:
+                logger.debug(f"Товар {item_name} имеет NEED_TARA=true")
+                
+                # Получаем данные о таре
+                tara_name = catalog_item.get('TARA_NAME')
+                tara_uid = catalog_item.get('TARA_UID')
+                
+                if tara_name and tara_uid and tara_uid != "00000000-0000-0000-0000-000000000000":
+                    logger.debug(f"Найдена тара для товара {item_name}: {tara_name} (UID: {tara_uid})")
+                    
+                    # Группируем тару по UID для подсчета общего количества
+                    if tara_uid not in tara_groups:
+                        tara_groups[tara_uid] = {
+                            'name': tara_name,
+                            'count': 0
+                        }
+                    
+                    tara_groups[tara_uid]['count'] += quantity
+                    
+                    logger.debug(f"Добавлено {quantity} единиц тары {tara_name}")
+                else:
+                    logger.warning(f"Товар {item_name} имеет NEED_TARA=true, но отсутствуют данные о таре (TARA_NAME: {tara_name}, TARA_UID: {tara_uid})")
+            else:
+                logger.debug(f"Товар {item_name} не требует тары (NEED_TARA={need_tara})")
+        
+        # Сохраняем данные о таре в Supabase
+        for tara_uid, tara_info in tara_groups.items():
+            success = save_tara_to_supabase(
+                client_id=client_id,
+                tara_name=tara_info['name'],
+                tara_uid=tara_uid,
+                count=tara_info['count']
+            )
+            
+            if success:
+                logger.info(f"Успешно сохранена тара в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+            else:
+                logger.error(f"Ошибка при сохранении тары: {tara_info['name']}")
+        
+        logger.debug(f"Обработка тары завершена. Сохранено {len(tara_groups)} видов тары")
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке тары для заказа: {str(e)}")
+        raise
 
 def check_user_registration(user_id):
     try:
@@ -317,6 +433,14 @@ def create_order():
         
         result = mongo.cx.Pivo.Orders.insert_one(order_data)
         logger.debug(f"Заказ создан, ID: {result.inserted_id}")
+
+        # Обрабатываем тару для созданного заказа
+        try:
+            org_id = user_data.get('org_ID')
+            if org_id:
+                process_tara_for_order(data.get('items', []), org_id)
+        except Exception as tara_error:
+            logger.error(f"Ошибка при обработке тары для заказа: {str(tara_error)}")
 
         return jsonify({"success": True, "orderId": str(result.inserted_id)})
     except Exception as e:
@@ -1470,6 +1594,12 @@ def create_1c_order():
                         "success": True
                     })
                     
+                    # Обрабатываем тару для успешно созданного заказа
+                    try:
+                        process_tara_for_order(valid_items, organization_id)
+                    except Exception as tara_error:
+                        logger.error(f"Ошибка при обработке тары для заказа: {str(tara_error)}")
+                    
                 except Exception as e:
                     logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
                     orders_results.append({
@@ -1844,6 +1974,14 @@ def save_combined_order():
         # Сохраняем заказ в MongoDB
         result = mongo.cx.Pivo.Orders.insert_one(combined_order)
         logger.debug(f"Объединенный заказ сохранен в MongoDB, ID: {result.inserted_id}")
+        
+        # Обрабатываем тару для объединенного заказа
+        try:
+            org_id = user_data.get('org_ID')
+            if org_id:
+                process_tara_for_order(data.get('items', []), org_id)
+        except Exception as tara_error:
+            logger.error(f"Ошибка при обработке тары для объединенного заказа: {str(tara_error)}")
         
         return jsonify({"success": True, "orderId": str(result.inserted_id)})
     except Exception as e:

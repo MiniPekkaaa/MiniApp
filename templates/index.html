@@ -250,7 +250,8 @@
                     if (currentFilter === 'beer') {
                         return product.TARA !== true;
                     } else if (currentFilter === 'tara') {
-                        return product.TARA === true;
+                        // Возвратная тара временно очищена для будущих изменений
+                        return false;
                     }
                     return true; // На случай, если добавятся другие фильтры
                 });
