@@ -12,6 +12,7 @@ import config
 import platform
 import time
 import re
+import hashlib
 from supabase import create_client, Client
 
 # Глобальная переменная для отслеживания времени запуска приложения
@@ -78,6 +79,10 @@ redis_client = redis.Redis(
 # Конфигурация Supabase
 supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_API_KEY)
 
+# Глобальный кэш для предотвращения дублирования обработки тары
+processed_tara_orders = set()
+tara_cache_last_cleanup = time.time()
+
 def save_tara_to_supabase(client_id, tara_name, tara_uid, count):
     """
     Сохраняет данные о таре в Supabase
@@ -97,12 +102,12 @@ def save_tara_to_supabase(client_id, tara_name, tara_uid, count):
             "count": f"+{count}"  # Добавляем префикс +
         }
         
-        logger.debug(f"Сохраняем данные о таре в Supabase: {tara_data}")
+        logger.info(f"[SUPABASE] Сохраняем данные о таре: {tara_data}")
         
         # Вставляем данные в таблицу
         result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).insert(tara_data).execute()
         
-        logger.debug(f"Данные о таре успешно сохранены: {result.data}")
+        logger.info(f"[SUPABASE] Данные о таре успешно сохранены: {result.data}")
         return True
         
     except Exception as e:
@@ -119,10 +124,38 @@ def process_tara_for_order(order_items, client_id):
         client_id: UID организации пользователя
     """
     try:
-        logger.debug(f"Начинаем обработку тары для {len(order_items)} товаров")
+        global tara_cache_last_cleanup
+        
+        # Очищаем кэш каждые 30 минут для предотвращения переполнения памяти
+        current_time = time.time()
+        if current_time - tara_cache_last_cleanup > 1800:  # 30 минут
+            logger.info(f"[TARA_PROCESSING] Очищаем кэш обработанных заказов ({len(processed_tara_orders)} записей)")
+            processed_tara_orders.clear()
+            tara_cache_last_cleanup = current_time
+        
+        # Создаем уникальный хеш заказа для предотвращения дублирования
+        order_data = []
+        for item in order_items:
+            order_data.append(f"{item.get('uid', '')}:{item.get('quantity', 0)}")
+        order_data.sort()  # Сортируем для обеспечения одинакового хеша
+        order_hash = hashlib.md5(f"{client_id}:{'|'.join(order_data)}".encode()).hexdigest()
+        
+        logger.info(f"[TARA_PROCESSING] Начинаем обработку тары для {len(order_items)} товаров для клиента {client_id}, хеш заказа: {order_hash}")
+        
+        # Проверяем, не обрабатывался ли уже этот заказ
+        if order_hash in processed_tara_orders:
+            logger.info(f"[TARA_PROCESSING] Заказ с хешем {order_hash} уже был обработан, пропускаем")
+            return
+        
+        # Добавляем хеш в список обработанных
+        processed_tara_orders.add(order_hash)
         
         # Создаем словарь для группировки тары по TARA_UID
         tara_groups = {}
+        
+        # Логируем все товары в заказе для отладки
+        for idx, item in enumerate(order_items):
+            logger.debug(f"[TARA_PROCESSING] Товар {idx+1}: {item.get('name')} (UID: {item.get('uid')}, количество: {item.get('quantity')})")
         
         for item in order_items:
             # Получаем UID товара для поиска в каталоге
@@ -153,25 +186,35 @@ def process_tara_for_order(order_items, client_id):
                 tara_uid = catalog_item.get('TARA_UID')
                 
                 if tara_name and tara_uid and tara_uid != "00000000-0000-0000-0000-000000000000":
-                    logger.debug(f"Найдена тара для товара {item_name}: {tara_name} (UID: {tara_uid})")
+                    logger.info(f"[TARA_PROCESSING] Найдена тара для товара {item_name}: {tara_name} (UID: {tara_uid})")
                     
                     # Группируем тару по UID для подсчета общего количества
                     if tara_uid not in tara_groups:
+                        logger.info(f"[TARA_PROCESSING] Создаем новую группу для тары {tara_name} (UID: {tara_uid})")
                         tara_groups[tara_uid] = {
                             'name': tara_name,
                             'count': 0
                         }
+                    else:
+                        logger.info(f"[TARA_PROCESSING] Добавляем к существующей группе тары {tara_name} (UID: {tara_uid})")
                     
+                    old_count = tara_groups[tara_uid]['count']
                     tara_groups[tara_uid]['count'] += quantity
+                    new_count = tara_groups[tara_uid]['count']
                     
-                    logger.debug(f"Добавлено {quantity} единиц тары {tara_name}")
+                    logger.info(f"[TARA_PROCESSING] Тара {tara_name}: количество изменено с {old_count} на {new_count} (+{quantity})")
                 else:
-                    logger.warning(f"Товар {item_name} имеет NEED_TARA=true, но отсутствуют данные о таре (TARA_NAME: {tara_name}, TARA_UID: {tara_uid})")
+                    logger.warning(f"[TARA_PROCESSING] Товар {item_name} имеет NEED_TARA=true, но отсутствуют данные о таре (TARA_NAME: {tara_name}, TARA_UID: {tara_uid})")
             else:
                 logger.debug(f"Товар {item_name} не требует тары (NEED_TARA={need_tara})")
         
         # Сохраняем данные о таре в Supabase
+        logger.info(f"[TARA_PROCESSING] Готовы к сохранению {len(tara_groups)} видов тары:")
         for tara_uid, tara_info in tara_groups.items():
+            logger.info(f"[TARA_PROCESSING] - {tara_info['name']} (UID: {tara_uid}): {tara_info['count']} единиц")
+        
+        for tara_uid, tara_info in tara_groups.items():
+            logger.info(f"[TARA_PROCESSING] Сохраняем в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
             success = save_tara_to_supabase(
                 client_id=client_id,
                 tara_name=tara_info['name'],
@@ -180,11 +223,11 @@ def process_tara_for_order(order_items, client_id):
             )
             
             if success:
-                logger.info(f"Успешно сохранена тара в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+                logger.info(f"[TARA_PROCESSING] ✓ Успешно сохранена тара в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
             else:
-                logger.error(f"Ошибка при сохранении тары: {tara_info['name']}")
+                logger.error(f"[TARA_PROCESSING] ✗ Ошибка при сохранении тары: {tara_info['name']}")
         
-        logger.debug(f"Обработка тары завершена. Сохранено {len(tara_groups)} видов тары")
+        logger.info(f"[TARA_PROCESSING] Обработка тары завершена. Сохранено {len(tara_groups)} видов тары")
         
     except Exception as e:
         logger.error(f"Ошибка при обработке тары для заказа: {str(e)}")
