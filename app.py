@@ -1,4 +1,4 @@
-теfrom flask import Flask, render_template, jsonify, request, redirect
+from flask import Flask, render_template, jsonify, request, redirect
 from flask_pymongo import PyMongo
 import logging
 from bson import json_util, ObjectId
@@ -305,23 +305,13 @@ def get_client_tara_balance(client_id):
             tara_name = record.get('tara')
             count_str = record.get('count', '0')
             
-            # Обрабатываем значение count
+            # Извлекаем число из строки (убираем + или -)
             try:
-                # Если строка начинается с '-', то это отрицательное значение
-                if str(count_str).startswith('-'):
-                    count = int(str(count_str)[1:])  # Убираем знак '-' и преобразуем в число
-                    count = -count  # Делаем отрицательным
-                # Если строка начинается с '+', то это положительное значение
-                elif str(count_str).startswith('+'):
-                    count = int(str(count_str)[1:])  # Убираем знак '+' и преобразуем в число
-                # Если нет префикса, то число положительное
-                else:
-                    count = int(str(count_str))  # Преобразуем как есть (положительное)
-                    
-                logger.debug(f"[TARA_BALANCE] Обработано значение count: '{count_str}' -> {count}")
-                    
-            except (ValueError, AttributeError) as e:
-                logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str}, ошибка: {e}")
+                count = int(count_str.replace('+', '').replace('-', ''))
+                if count_str.startswith('-'):
+                    count = -count
+            except (ValueError, AttributeError):
+                logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str}")
                 continue
             
             if tara_id not in tara_balance:
