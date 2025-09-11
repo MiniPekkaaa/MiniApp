@@ -305,14 +305,23 @@ def get_client_tara_balance(client_id):
             tara_name = record.get('tara')
             count_str = record.get('count', '0')
             
-            # Извлекаем число из строки (убираем + или -)
+            # Обрабатываем значение count (может быть числом или строкой)
             try:
-                count = int(count_str.replace('+', '').replace('-', ''))
-                if count_str.startswith('-'):
-                    count = -count
-            except (ValueError, AttributeError):
-                logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str}")
-                continue
+                if isinstance(count_str, (int, float)):
+                    # Если пришло число, используем его как есть
+                    count = int(count_str)
+                else:
+                    # Если пришла строка, извлекаем число
+                    count_str = str(count_str)
+                    count = int(count_str.replace('+', '').replace('-', ''))
+                    if count_str.startswith('-'):
+                        count = -count
+                        
+                logger.debug(f"[TARA_BALANCE] Обработано значение count: {count_str} -> {count}")
+                        
+            except (ValueError, AttributeError, TypeError):
+                logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str} (тип: {type(count_str)})")
+те                continue
             
             if tara_id not in tara_balance:
                 tara_balance[tara_id] = {
