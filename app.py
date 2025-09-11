@@ -321,7 +321,7 @@ def get_client_tara_balance(client_id):
                         
             except (ValueError, AttributeError, TypeError):
                 logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str} (тип: {type(count_str)})")
-те                continue
+                continue
             
             if tara_id not in tara_balance:
                 tara_balance[tara_id] = {
