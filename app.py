@@ -1870,8 +1870,8 @@ def create_1c_order():
                     # Обрабатываем тару для успешно созданного заказа
                     try:
                         process_tara_for_order(valid_items, organization_id)
-                        # Обрабатываем возврат тары
-                        process_tara_return_for_order(valid_items, organization_id)
+                        # ПРИМЕЧАНИЕ: Возврат тары уже обработан при создании заказа в боте
+                        # process_tara_return_for_order(valid_items, organization_id)
                     except Exception as tara_error:
                         logger.error(f"Ошибка при обработке тары для заказа: {str(tara_error)}")
                     
