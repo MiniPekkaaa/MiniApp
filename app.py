@@ -415,8 +415,8 @@ def process_tara_return_for_order(order_items, client_id):
             if is_tara:
                 logger.info(f"[TARA_RETURN] Товар {item_name} является тарой (TARA=true)")
                 
-                # Получаем название тары
-                tara_name = catalog_item.get('name', item_name)
+                # Получаем название тары (используем TARA_NAME если доступно, иначе name)
+                tara_name = catalog_item.get('TARA_NAME', catalog_item.get('name', item_name))
                 
                 # Группируем тару по UID для подсчета общего количества возврата
                 if item_uid not in tara_return_groups:
@@ -1867,13 +1867,9 @@ def create_1c_order():
                         "success": True
                     })
                     
-                    # Обрабатываем тару для успешно созданного заказа
-                    try:
-                        process_tara_for_order(valid_items, organization_id)
-                        # ПРИМЕЧАНИЕ: Возврат тары уже обработан при создании заказа в боте
-                        # process_tara_return_for_order(valid_items, organization_id)
-                    except Exception as tara_error:
-                        logger.error(f"Ошибка при обработке тары для заказа: {str(tara_error)}")
+                    # ПРИМЕЧАНИЕ: Тара уже обработана при создании заказа в боте
+                    # process_tara_for_order(valid_items, organization_id)
+                    # process_tara_return_for_order(valid_items, organization_id)
                     
                 except Exception as e:
                     logger.error(f"Ошибка при обработке JSON ответа: {str(e)}")
