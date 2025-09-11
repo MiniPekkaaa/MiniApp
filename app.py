@@ -248,10 +248,55 @@ def get_client_tara_balance(client_id):
         
         # Получаем все записи тары для клиента из Supabase
         logger.info(f"[TARA_BALANCE] Выполняем запрос к Supabase для клиента {client_id}")
-        result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).select("*").eq("client", client_id).execute()
         
-        logger.info(f"[TARA_BALANCE] Результат запроса к Supabase: {result}")
-        logger.info(f"[TARA_BALANCE] Данные result.data: {result.data}")
+        try:
+            # Добавляем обработку исключений для Supabase запроса
+            result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).select("*").eq("client", client_id).execute()
+            logger.info(f"[TARA_BALANCE] Запрос к Supabase выполнен успешно")
+            
+        except Exception as supabase_error:
+            logger.error(f"[TARA_BALANCE] Ошибка при выполнении запроса к Supabase: {str(supabase_error)}", exc_info=True)
+            
+            # Попробуем альтернативный способ через прямой HTTP запрос
+            logger.info(f"[TARA_BALANCE] Пробуем альтернативный HTTP запрос к Supabase")
+            try:
+                import urllib.parse
+                encoded_client_id = urllib.parse.quote(client_id)
+                url = f"{config.SUPABASE_URL}/rest/v1/pride_beer_tara?client=eq.{encoded_client_id}"
+                headers = {
+                    'apikey': config.SUPABASE_API_KEY,
+                    'Authorization': f'Bearer {config.SUPABASE_API_KEY}',
+                    'Content-Type': 'application/json'
+                }
+                
+                logger.info(f"[TARA_BALANCE] HTTP запрос: GET {url}")
+                response = requests.get(url, headers=headers, timeout=10)
+                logger.info(f"[TARA_BALANCE] HTTP ответ: статус {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"[TARA_BALANCE] HTTP данные: {data}")
+                    # Создаем объект-заглушку для совместимости
+                    class FakeResult:
+                        def __init__(self, data):
+                            self.data = data
+                    result = FakeResult(data)
+                else:
+                    logger.error(f"[TARA_BALANCE] HTTP ошибка: {response.status_code}, {response.text}")
+                    return {}
+                    
+            except Exception as http_error:
+                logger.error(f"[TARA_BALANCE] Ошибка HTTP запроса: {str(http_error)}", exc_info=True)
+                return {}
+        
+        logger.info(f"[TARA_BALANCE] Тип result: {type(result)}")
+        
+        try:
+            logger.info(f"[TARA_BALANCE] result.data: {result.data}")
+            logger.info(f"[TARA_BALANCE] Тип result.data: {type(result.data)}")
+        except Exception as data_error:
+            logger.error(f"[TARA_BALANCE] Ошибка при доступе к result.data: {str(data_error)}")
+            return {}
         
         if not result.data:
             logger.info(f"[TARA_BALANCE] Для клиента {client_id} не найдено записей о таре")
