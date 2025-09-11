@@ -233,6 +233,183 @@ def process_tara_for_order(order_items, client_id):
         logger.error(f"Ошибка при обработке тары для заказа: {str(e)}")
         raise
 
+def get_client_tara_balance(client_id):
+    """
+    Получает баланс тары для клиента из Supabase
+    
+    Args:
+        client_id: UID организации пользователя
+        
+    Returns:
+        dict: словарь {tara_uid: {name, balance}}
+    """
+    try:
+        logger.info(f"[TARA_BALANCE] Получение баланса тары для клиента {client_id}")
+        
+        # Получаем все записи тары для клиента из Supabase
+        result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).select("*").eq("client", client_id).execute()
+        
+        if not result.data:
+            logger.info(f"[TARA_BALANCE] Для клиента {client_id} не найдено записей о таре")
+            return {}
+        
+        logger.info(f"[TARA_BALANCE] Найдено {len(result.data)} записей о таре для клиента {client_id}")
+        
+        # Группируем по tara_id и считаем баланс
+        tara_balance = {}
+        
+        for record in result.data:
+            tara_id = record.get('tara_id')
+            tara_name = record.get('tara')
+            count_str = record.get('count', '0')
+            
+            # Извлекаем число из строки (убираем + или -)
+            try:
+                count = int(count_str.replace('+', '').replace('-', ''))
+                if count_str.startswith('-'):
+                    count = -count
+            except (ValueError, AttributeError):
+                logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str}")
+                continue
+            
+            if tara_id not in tara_balance:
+                tara_balance[tara_id] = {
+                    'name': tara_name,
+                    'balance': 0
+                }
+            
+            tara_balance[tara_id]['balance'] += count
+            logger.debug(f"[TARA_BALANCE] {tara_name} (UID: {tara_id}): добавлено {count}, баланс: {tara_balance[tara_id]['balance']}")
+        
+        # Фильтруем только позиции с положительным балансом
+        positive_balance = {tara_id: data for tara_id, data in tara_balance.items() if data['balance'] > 0}
+        
+        logger.info(f"[TARA_BALANCE] Итоговый баланс для клиента {client_id}: {len(positive_balance)} позиций с положительным балансом")
+        for tara_id, data in positive_balance.items():
+            logger.info(f"[TARA_BALANCE] - {data['name']} (UID: {tara_id}): {data['balance']} шт.")
+        
+        return positive_balance
+        
+    except Exception as e:
+        logger.error(f"[TARA_BALANCE] Ошибка при получении баланса тары: {str(e)}")
+        return {}
+
+def save_tara_return_to_supabase(client_id, tara_name, tara_uid, count):
+    """
+    Сохраняет возврат тары в Supabase (отрицательное значение)
+    
+    Args:
+        client_id: UID организации пользователя
+        tara_name: название тары
+        tara_uid: UID тары
+        count: количество возвращаемой тары
+    """
+    try:
+        # Подготавливаем данные для вставки с отрицательным значением
+        tara_data = {
+            "client": client_id,
+            "tara": tara_name,
+            "tara_id": tara_uid,
+            "count": f"-{count}"  # Добавляем префикс -
+        }
+        
+        logger.info(f"[SUPABASE] Сохраняем возврат тары: {tara_data}")
+        
+        # Вставляем данные в таблицу
+        result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).insert(tara_data).execute()
+        
+        logger.info(f"[SUPABASE] Возврат тары успешно сохранен: {result.data}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении возврата тары в Supabase: {str(e)}")
+        return False
+
+def process_tara_return_for_order(order_items, client_id):
+    """
+    Обрабатывает возврат тары для заказа - проверяет товары с TARA=true
+    и записывает отрицательные значения в Supabase
+    
+    Args:
+        order_items: список товаров в заказе
+        client_id: UID организации пользователя
+    """
+    try:
+        logger.info(f"[TARA_RETURN] Начинаем обработку возврата тары для {len(order_items)} товаров для клиента {client_id}")
+        
+        # Создаем словарь для группировки возвращаемой тары по UID
+        tara_return_groups = {}
+        
+        for item in order_items:
+            # Получаем UID товара для поиска в каталоге
+            item_uid = item.get('uid')
+            item_id = item.get('id')
+            item_name = item.get('name', 'Неизвестный товар')
+            quantity = int(item.get('quantity', 1))
+            
+            if not item_uid:
+                logger.debug(f"[TARA_RETURN] Товар {item_name} не имеет UID, пропускаем")
+                continue
+                
+            # Ищем товар в каталоге MongoDB для получения полной информации
+            catalog_item = mongo.cx.Pivo.catalog.find_one({"UID": item_uid})
+            
+            if not catalog_item:
+                logger.debug(f"[TARA_RETURN] Товар с UID {item_uid} не найден в каталоге")
+                continue
+                
+            # Проверяем, является ли товар тарой
+            is_tara = catalog_item.get('TARA', False)
+            
+            if is_tara:
+                logger.info(f"[TARA_RETURN] Товар {item_name} является тарой (TARA=true)")
+                
+                # Получаем название тары
+                tara_name = catalog_item.get('name', item_name)
+                
+                # Группируем тару по UID для подсчета общего количества возврата
+                if item_uid not in tara_return_groups:
+                    logger.info(f"[TARA_RETURN] Создаем новую группу для возврата тары {tara_name} (UID: {item_uid})")
+                    tara_return_groups[item_uid] = {
+                        'name': tara_name,
+                        'count': 0
+                    }
+                else:
+                    logger.info(f"[TARA_RETURN] Добавляем к существующей группе возврата тары {tara_name} (UID: {item_uid})")
+                
+                old_count = tara_return_groups[item_uid]['count']
+                tara_return_groups[item_uid]['count'] += quantity
+                new_count = tara_return_groups[item_uid]['count']
+                
+                logger.info(f"[TARA_RETURN] Возврат тары {tara_name}: количество изменено с {old_count} на {new_count} (+{quantity})")
+            else:
+                logger.debug(f"[TARA_RETURN] Товар {item_name} не является тарой (TARA={is_tara})")
+        
+        # Сохраняем данные о возврате тары в Supabase
+        logger.info(f"[TARA_RETURN] Готовы к сохранению возврата {len(tara_return_groups)} видов тары:")
+        for tara_uid, tara_info in tara_return_groups.items():
+            logger.info(f"[TARA_RETURN] - {tara_info['name']} (UID: {tara_uid}): {tara_info['count']} единиц к возврату")
+        
+        for tara_uid, tara_info in tara_return_groups.items():
+            logger.info(f"[TARA_RETURN] Сохраняем возврат в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+            success = save_tara_return_to_supabase(
+                client_id=client_id,
+                tara_name=tara_info['name'],
+                tara_uid=tara_uid,
+                count=tara_info['count']
+            )
+            
+            if success:
+                logger.info(f"[TARA_RETURN] ✓ Успешно сохранен возврат тары в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+            else:
+                logger.error(f"[TARA_RETURN] ✗ Ошибка при сохранении возврата тары: {tara_info['name']}")
+        
+        logger.info(f"[TARA_RETURN] Обработка возврата тары завершена. Сохранено {len(tara_return_groups)} видов тары")
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке возврата тары для заказа: {str(e)}")
+        raise
+
 def check_user_registration(user_id):
     try:
         # Проверяем существование пользователя в Redis
@@ -482,6 +659,8 @@ def create_order():
             org_id = user_data.get('org_ID')
             if org_id:
                 process_tara_for_order(data.get('items', []), org_id)
+                # Обрабатываем возврат тары
+                process_tara_return_for_order(data.get('items', []), org_id)
         except Exception as tara_error:
             logger.error(f"Ошибка при обработке тары для заказа: {str(tara_error)}")
 
@@ -1640,6 +1819,8 @@ def create_1c_order():
                     # Обрабатываем тару для успешно созданного заказа
                     try:
                         process_tara_for_order(valid_items, organization_id)
+                        # Обрабатываем возврат тары
+                        process_tara_return_for_order(valid_items, organization_id)
                     except Exception as tara_error:
                         logger.error(f"Ошибка при обработке тары для заказа: {str(tara_error)}")
                     
@@ -2023,6 +2204,8 @@ def save_combined_order():
             org_id = user_data.get('org_ID')
             if org_id:
                 process_tara_for_order(data.get('items', []), org_id)
+                # Обрабатываем возврат тары
+                process_tara_return_for_order(data.get('items', []), org_id)
         except Exception as tara_error:
             logger.error(f"Ошибка при обработке тары для объединенного заказа: {str(tara_error)}")
         
@@ -2965,6 +3148,63 @@ def app_status():
             "status": "critical_error",
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message": "Произошла критическая ошибка при проверке статуса",
+            "error": str(e)
+        }), 500
+
+@app.route('/api/get-client-tara-balance')
+def get_client_tara_balance_api():
+    """API endpoint для получения баланса тары клиента"""
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"success": False, "error": "User ID is required"}), 400
+            
+        if not check_user_registration(user_id):
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+        
+        # Получаем данные пользователя из Redis
+        user_data = redis_client.hgetall(f'beer:user:{user_id}')
+        org_id = user_data.get('org_ID')
+        
+        if not org_id:
+            return jsonify({"success": False, "error": "Organization ID not found"}), 400
+        
+        # Получаем баланс тары
+        tara_balance = get_client_tara_balance(org_id)
+        
+        # Обогащаем данные из каталога товаров
+        enriched_tara = []
+        
+        for tara_uid, balance_data in tara_balance.items():
+            # Ищем товар в каталоге по UID
+            catalog_item = mongo.cx.Pivo.catalog.find_one({"UID": tara_uid})
+            
+            if catalog_item:
+                tara_item = {
+                    'uid': tara_uid,
+                    'id': catalog_item.get('id', ''),
+                    'name': balance_data['name'],
+                    'fullName': catalog_item.get('fullName', balance_data['name']),
+                    'volume': catalog_item.get('volume', 0),
+                    'balance': balance_data['balance'],
+                    'TARA': True  # Обозначаем как тару
+                }
+                enriched_tara.append(tara_item)
+                logger.debug(f"[TARA_API] Добавлена тара: {tara_item['name']} (баланс: {tara_item['balance']})")
+            else:
+                logger.warning(f"[TARA_API] Тара с UID {tara_uid} не найдена в каталоге")
+        
+        logger.info(f"[TARA_API] Возвращаем {len(enriched_tara)} позиций тары для клиента {org_id}")
+        
+        return jsonify({
+            "success": True,
+            "tara_items": enriched_tara
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении баланса тары: {str(e)}")
+        return jsonify({
+            "success": False,
             "error": str(e)
         }), 500
 

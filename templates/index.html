@@ -178,7 +178,8 @@
             }
         }
         
-        const initialProducts = {{ products|tojson|safe }};
+        // Загружаем данные о продуктах
+        let initialProducts = {{ products|tojson|safe }} || [];
         // Сортировка всего массива товаров по алфавиту при загрузке
         initialProducts.sort((a, b) => a.name.localeCompare(b.name));
         console.log("Loaded products:", initialProducts);
@@ -231,30 +232,64 @@
                 document.getElementById('filter-' + filterType).classList.add('active-filter');
             }
             
-            // Применяем фильтр к текущему поисковому запросу
-            const searchText = searchInput.value.toLowerCase();
-            const filteredProducts = initialProducts.filter(product => 
-                (product.name.toLowerCase().includes(searchText) ||
-                product.fullName.toLowerCase().includes(searchText))
-            );
-            
-            updateDropdownList(filteredProducts);
+            // Если выбрана возвратная тара, загружаем данные из API
+            if (currentFilter === 'tara') {
+                loadClientTaraBalance();
+            } else {
+                // Применяем фильтр к текущему поисковому запросу
+                const searchText = searchInput.value.toLowerCase();
+                const filteredProducts = initialProducts.filter(product => 
+                    (product.name.toLowerCase().includes(searchText) ||
+                    product.fullName.toLowerCase().includes(searchText))
+                );
+                
+                updateDropdownList(filteredProducts);
+            }
         }
 
-        function updateDropdownList(filteredProducts) {
+        function loadClientTaraBalance() {
+            console.log('Загружаем баланс возвратной тары для пользователя:', userId);
+            
+            fetch(`/api/get-client-tara-balance?user_id=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Получен ответ от API баланса тары:', data);
+                    
+                    if (data.success) {
+                        console.log(`Найдено ${data.tara_items.length} позиций возвратной тары`);
+                        updateDropdownList(data.tara_items, true); // true означает что это тара
+                    } else {
+                        console.error('Ошибка при получении баланса тары:', data.error);
+                        dropdownList.innerHTML = '<div class="dropdown-item">Ошибка загрузки данных о таре</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при запросе баланса тары:', error);
+                    dropdownList.innerHTML = '<div class="dropdown-item">Ошибка загрузки данных о таре</div>';
+                });
+        }
+
+        function updateDropdownList(filteredProducts, isTaraBalance = false) {
             dropdownList.innerHTML = '';
             
             if (filteredProducts.length > 0) {
-                // Фильтруем по TARA в зависимости от выбранного фильтра
-                const taraFilteredProducts = filteredProducts.filter(product => {
-                    if (currentFilter === 'beer') {
-                        return product.TARA !== true;
-                    } else if (currentFilter === 'tara') {
-                        // Возвратная тара временно очищена для будущих изменений
-                        return false;
-                    }
-                    return true; // На случай, если добавятся другие фильтры
-                });
+                let taraFilteredProducts;
+                
+                if (isTaraBalance) {
+                    // Это данные о возвратной таре - используем их как есть
+                    taraFilteredProducts = filteredProducts;
+                } else {
+                    // Фильтруем по TARA в зависимости от выбранного фильтра
+                    taraFilteredProducts = filteredProducts.filter(product => {
+                        if (currentFilter === 'beer') {
+                            return product.TARA !== true;
+                        } else if (currentFilter === 'tara') {
+                            // Эта ветка больше не используется, так как тара загружается отдельно
+                            return false;
+                        }
+                        return true; // На случай, если добавятся другие фильтры
+                    });
+                }
                 
                 console.log(`Отфильтровано ${filteredProducts.length - taraFilteredProducts.length} товаров по фильтру ${currentFilter}`);
                 
@@ -265,12 +300,23 @@
                     const item = document.createElement('div');
                     item.className = 'dropdown-item';
                     
-                    // Выводим объем только если он больше нуля
+                    // Формируем текст для отображения
                     let displayText = '';
-                    if (product.volume > 0) {
-                        displayText = `${product.name} (${product.volume}л)`;
+                    
+                    if (isTaraBalance && product.balance) {
+                        // Для возвратной тары показываем баланс
+                        if (product.volume > 0) {
+                            displayText = `${product.name} (${product.volume}л) (Вы должны: ${product.balance} шт.)`;
+                        } else {
+                            displayText = `${product.name} (Вы должны: ${product.balance} шт.)`;
+                        }
                     } else {
-                        displayText = `${product.name}`;
+                        // Для обычных товаров показываем объем
+                        if (product.volume > 0) {
+                            displayText = `${product.name} (${product.volume}л)`;
+                        } else {
+                            displayText = `${product.name}`;
+                        }
                     }
                     
                     item.textContent = displayText;
