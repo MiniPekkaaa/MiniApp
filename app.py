@@ -247,13 +247,21 @@ def get_client_tara_balance(client_id):
         logger.info(f"[TARA_BALANCE] Получение баланса тары для клиента {client_id}")
         
         # Получаем все записи тары для клиента из Supabase
+        logger.info(f"[TARA_BALANCE] Выполняем запрос к Supabase для клиента {client_id}")
         result = supabase.table(config.SUPABASE_TABLE_PRIDE_BEER_TARA).select("*").eq("client", client_id).execute()
+        
+        logger.info(f"[TARA_BALANCE] Результат запроса к Supabase: {result}")
+        logger.info(f"[TARA_BALANCE] Данные result.data: {result.data}")
         
         if not result.data:
             logger.info(f"[TARA_BALANCE] Для клиента {client_id} не найдено записей о таре")
             return {}
         
         logger.info(f"[TARA_BALANCE] Найдено {len(result.data)} записей о таре для клиента {client_id}")
+        
+        # Логируем каждую запись для отладки
+        for i, record in enumerate(result.data):
+            logger.info(f"[TARA_BALANCE] Запись {i+1}: {record}")
         
         # Группируем по tara_id и считаем баланс
         tara_balance = {}
@@ -3170,7 +3178,9 @@ def get_client_tara_balance_api():
             return jsonify({"success": False, "error": "Organization ID not found"}), 400
         
         # Получаем баланс тары
+        logger.info(f"[TARA_API] Запрос баланса тары для клиента {org_id}")
         tara_balance = get_client_tara_balance(org_id)
+        logger.info(f"[TARA_API] Получен баланс тары: {tara_balance}")
         
         # Обогащаем данные из каталога товаров
         enriched_tara = []
@@ -3195,6 +3205,7 @@ def get_client_tara_balance_api():
                 logger.warning(f"[TARA_API] Тара с UID {tara_uid} не найдена в каталоге")
         
         logger.info(f"[TARA_API] Возвращаем {len(enriched_tara)} позиций тары для клиента {org_id}")
+        logger.info(f"[TARA_API] Enriched tara items: {enriched_tara}")
         
         return jsonify({
             "success": True,
@@ -3202,7 +3213,7 @@ def get_client_tara_balance_api():
         })
         
     except Exception as e:
-        logger.error(f"Ошибка при получении баланса тары: {str(e)}")
+        logger.error(f"[TARA_API] Ошибка при получении баланса тары: {str(e)}", exc_info=True)
         return jsonify({
             "success": False,
             "error": str(e)
