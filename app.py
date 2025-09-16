@@ -2207,8 +2207,9 @@ def save_combined_order():
                 'UID': uid
             }
         
-        # Формируем словарь ordersUID из успешно созданных заказов в 1С
+        # Формируем словари ordersUID и ordersKomment из успешно созданных заказов в 1С
         orders_uid = {}
+        orders_komment = {}
         order_index = 1
         
         for order_data in data.get('orders', []):
@@ -2217,6 +2218,10 @@ def save_combined_order():
                 order_uid = order_data.get('order', {}).get('UID', '')
                 if order_uid:
                     orders_uid[str(order_index)] = str(order_uid)
+                    # Для каждого созданного заказа сохраняем комментарий (если есть)
+                    komb = (request.json or {}).get('comment') or ''
+                    if komb:
+                        orders_komment[str(order_index)] = komb
                     order_index += 1
         
         # Общая информация о заказе
@@ -2236,6 +2241,9 @@ def save_combined_order():
             'ordersUID': orders_uid,
             'createdAt': current_time
         }
+        # Добавляем карту комментариев по заказам, если есть
+        if orders_komment:
+            combined_order['ordersKomment'] = orders_komment
         
         # Если были успешно созданные заказы в 1С
         if orders_uid:
