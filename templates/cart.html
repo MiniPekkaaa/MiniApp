@@ -1178,7 +1178,7 @@
                                 userId: userId,
                                 orders: ordersData.orders,
                                 items: cart, // Передаем все товары из корзины
-                                comment: sessionStorage.getItem('order_comment') || ''
+                                // комментарий не сохраняем в Mongo
                             })
                         })
                         .then(response => response.json());

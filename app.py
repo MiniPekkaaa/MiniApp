@@ -1402,6 +1402,7 @@ def create_1c_order():
         logger.debug("Получен запрос на создание заказа в 1С")
         data = request.json
         user_id = data.get('userId')
+        order_comment = data.get('comment') or ''
         
         if not user_id or not check_user_registration(user_id):
             return jsonify({"error": "Unauthorized"}), 401
@@ -1709,6 +1710,9 @@ def create_1c_order():
                 "INN_legal_entity": str(legal_entity),  # Используем legalEntity из группы товаров
                 "positions": positions
             }
+            # Добавляем комментарий заказа, если он присутствует
+            if order_comment:
+                request_body["Komment"] = order_comment
             
             # Проверяем форматы важных полей
             # Проверка ID_customer на формат UUID
@@ -2230,8 +2234,7 @@ def save_combined_order():
             'org_ID': user_data.get('org_ID'),
             'Positions': all_positions,
             'ordersUID': orders_uid,
-            'createdAt': current_time,
-            'comment': data.get('comment', '')
+            'createdAt': current_time
         }
         
         # Если были успешно созданные заказы в 1С
