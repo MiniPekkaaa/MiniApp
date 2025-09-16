@@ -785,7 +785,7 @@
                                 <div class="quantity-editor">
                                     <div class="quantity-controls">
                                         <button onclick="decrementEditorQuantity(this)" class="button">−</button>
-                                        <input type="number" value="${item.quantity}" min="1" class="quantity-input editor-quantity">
+                                        <input type="number" value="${item.quantity}" min="1" ${item.TARA ? `max="${item.taraBalance ?? item.balance ?? item.max ?? ''}"` : 'max="999"'} class="quantity-input editor-quantity">
                                         <button onclick="incrementEditorQuantity(this)" class="button">+</button>
                                     </div>
                                     <div style="display: flex; justify-content: center; gap: 8px;">
@@ -835,12 +835,32 @@
             } else {
                 editor.style.display = 'block';
                 input.value = cart[index].quantity;
+                // Установка ограничений при открытии редактора
+                if (cart[index].TARA === true) {
+                    const maxAllowed = parseInt(cart[index].taraBalance || cart[index].balance || cart[index].max || 0) || 0;
+                    if (maxAllowed > 0) {
+                        input.setAttribute('max', String(maxAllowed));
+                    } else {
+                        input.removeAttribute('max');
+                    }
+                } else {
+                    input.setAttribute('max', '999');
+                }
             }
         }
 
         function incrementEditorQuantity(button) {
             const input = button.parentElement.querySelector('.editor-quantity');
-            input.value = parseInt(input.value) + 1;
+            const editor = button.closest('.quantity-editor');
+            // Определяем индекс товара по ближайшему cart-item
+            const itemIndex = Array.from(document.querySelectorAll('#cart_items .cart-item .quantity-editor')).indexOf(editor);
+            let maxAllowed = 999;
+            if (itemIndex >= 0 && cart[itemIndex] && cart[itemIndex].TARA === true) {
+                maxAllowed = parseInt(cart[itemIndex].taraBalance || cart[itemIndex].balance || cart[itemIndex].max || 0) || 0;
+            }
+            const current = parseInt(input.value) || 1;
+            const next = maxAllowed > 0 ? Math.min(current + 1, maxAllowed) : Math.min(current + 1, 999);
+            input.value = next;
         }
 
         function decrementEditorQuantity(button) {
@@ -853,7 +873,19 @@
         function saveQuantity(button, index) {
             const editor = button.closest('.quantity-editor');
             const display = editor.previousElementSibling;
-            const newQuantity = parseInt(editor.querySelector('.editor-quantity').value);
+            let newQuantity = parseInt(editor.querySelector('.editor-quantity').value);
+            const item = cart[index];
+            if (!item) return;
+            if (item.TARA === true) {
+                const maxAllowed = parseInt(item.taraBalance || item.balance || item.max || 0) || 0;
+                if (maxAllowed > 0 && newQuantity > maxAllowed) {
+                    newQuantity = maxAllowed;
+                    tg.showAlert(`Максимум для возвратной тары: ${maxAllowed}`);
+                }
+            } else if (newQuantity > 999) {
+                newQuantity = 999;
+                tg.showAlert('Максимум 999 шт. на позицию');
+            }
             
             if (!isNaN(newQuantity) && newQuantity > 0) {
                 cart[index].quantity = newQuantity;

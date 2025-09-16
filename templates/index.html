@@ -130,7 +130,7 @@
             </div>
             <div class="quantity-controls">
                 <button onclick="decrementQuantity()" class="button">-</button>
-                <input type="number" id="quantity" value="1" min="1" class="quantity-input">
+                <input type="number" id="quantity" value="1" min="1" max="999" class="quantity-input">
                 <button onclick="incrementQuantity()" class="button">+</button>
             </div>
             <button onclick="addToCart()" class="button">Добавить в корзину</button>
@@ -209,11 +209,32 @@
         });
 
         document.addEventListener('click', function(e) {
-            if (!searchInput.contains(e.target) && !dropdownList.contains(e.target)) {
+            const filterButtons = document.querySelector('.filter-buttons');
+            const clickInsideFilters = filterButtons && filterButtons.contains(e.target);
+            const clickInsideSearch = searchInput.contains(e.target) || dropdownList.contains(e.target);
+            if (!clickInsideSearch && !clickInsideFilters) {
                 dropdownList.classList.remove('active');
             }
         });
         
+        // Вспомогательная функция установки лимитов количества
+        function setQuantityLimits() {
+            const quantityInput = document.getElementById('quantity');
+            // Если выбрана тара и у выбранной позиции есть баланс - ограничиваем им
+            if ((currentFilter === 'tara' || (selectedProduct && selectedProduct.balance !== undefined))) {
+                const maxAllowed = parseInt(selectedProduct && selectedProduct.balance) || 0;
+                quantityInput.max = Math.max(0, maxAllowed);
+                if (parseInt(quantityInput.value) > maxAllowed) {
+                    quantityInput.value = String(maxAllowed > 0 ? maxAllowed : 1);
+                }
+            } else {
+                quantityInput.max = 999;
+                if (parseInt(quantityInput.value) > 999) {
+                    quantityInput.value = '999';
+                }
+            }
+        }
+
         // Функция для фильтрации продуктов (пиво/тара)
         function filterProducts(filterType) {
             // Проверяем, не нажата ли уже активная кнопка фильтра
@@ -235,6 +256,7 @@
             // Если выбрана возвратная тара, загружаем данные из API
             if (currentFilter === 'tara') {
                 loadClientTaraBalance();
+                setQuantityLimits();
             } else {
                 // Применяем фильтр к текущему поисковому запросу
                 const searchText = searchInput.value.toLowerCase();
@@ -244,6 +266,7 @@
                 );
                 
                 updateDropdownList(filteredProducts);
+                setQuantityLimits();
             }
         }
 
@@ -325,6 +348,8 @@
                         selectedProduct = product;
                         searchInput.value = product.name;
                         dropdownList.classList.remove('active');
+                        // Для тары при выборе сразу применяем ограничение по долгу
+                        setQuantityLimits();
                     });
                     
                     dropdownList.appendChild(item);
@@ -352,7 +377,9 @@
         
         function incrementQuantity() {
             let quantityInput = document.getElementById('quantity');
-            quantityInput.value = parseInt(quantityInput.value) + 1;
+            const maxAllowed = parseInt(quantityInput.max) || 999;
+            const current = parseInt(quantityInput.value) || 1;
+            quantityInput.value = String(Math.min(maxAllowed, current + 1));
         }
         
         function decrementQuantity() {
@@ -370,23 +397,71 @@
             
             const quantity = parseInt(document.getElementById('quantity').value);
             
+            const isTara = (currentFilter === 'tara') || (selectedProduct && selectedProduct.balance !== undefined) || selectedProduct.TARA === true;
+            const maxAllowed = isTara ? (parseInt(selectedProduct.balance) || 0) : 999;
+
+            // Подготовим объект товара
             const product = {
                 id: selectedProduct.id,
                 name: selectedProduct.name,
                 fullName: selectedProduct.fullName,
                 volume: parseFloat(selectedProduct.volume),
                 legalEntity: parseInt(selectedProduct.legalEntity),
-                quantity: quantity
+                quantity: 0
             };
+            if (isTara) {
+                product.TARA = true;
+                product.taraBalance = maxAllowed; // сохраним лимит в корзине
+            }
             
             const existingItemIndex = cart.findIndex(item => 
                 item.id === product.id
             );
             
             if (existingItemIndex !== -1) {
-                cart[existingItemIndex].quantity += quantity;
+                const currentQty = parseInt(cart[existingItemIndex].quantity) || 0;
+                const limit = maxAllowed || 999;
+                const allowedToAdd = Math.max(0, (limit || 0) - currentQty);
+                if (isTara) {
+                    if (allowedToAdd <= 0) {
+                        tg.showAlert('Нельзя добавить больше возвратной тары, чем вы должны');
+                        return;
+                    }
+                    const addQty = Math.min(quantity, allowedToAdd);
+                    cart[existingItemIndex].quantity = currentQty + addQty;
+                    // Синхронизируем лимит, если его не было
+                    if (product.taraBalance && !cart[existingItemIndex].taraBalance) {
+                        cart[existingItemIndex].taraBalance = product.taraBalance;
+                    }
+                    if (addQty < quantity) {
+                        tg.showAlert(`Добавлено максимально допустимое количество: ${addQty} (лимит ${limit})`);
+                    }
+                } else {
+                    const newQty = Math.min(999, currentQty + quantity);
+                    cart[existingItemIndex].quantity = newQty;
+                    if (newQty < currentQty + quantity) {
+                        tg.showAlert('Максимум 999 шт. на позицию');
+                    }
+                }
             } else {
-                cart.push(product);
+                if (isTara) {
+                    const addQty = Math.min(quantity, maxAllowed);
+                    if (addQty <= 0) {
+                        tg.showAlert('Количество должно быть не меньше 1 и не больше вашего долга');
+                        return;
+                    }
+                    product.quantity = addQty;
+                    cart.push(product);
+                    if (addQty < quantity) {
+                        tg.showAlert(`Добавлено максимально допустимое количество: ${addQty} (лимит ${maxAllowed})`);
+                    }
+                } else {
+                    product.quantity = Math.min(quantity, 999);
+                    cart.push(product);
+                    if (quantity > 999) {
+                        tg.showAlert('Максимум 999 шт. на позицию');
+                    }
+                }
             }
             
             sessionStorage.setItem('cart', JSON.stringify(cart));
@@ -397,6 +472,7 @@
             searchInput.value = "";
             document.getElementById('quantity').value = "1";
             selectedProduct = null;
+            setQuantityLimits();
         }
         
         function updateCartCount() {
