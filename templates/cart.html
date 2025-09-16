@@ -210,6 +210,21 @@
             <div id="cart_total" style="margin: 15px 0; padding: 15px; background-color: var(--tg-theme-secondary-bg-color); border-radius: 12px; text-align: center;">
                 <h3>Итого: <span id="total_amount">0</span>₽</h3>
             </div>
+            <div id="order_comment_block" style="margin: 10px 0 0; padding: 12px; background-color: var(--tg-theme-secondary-bg-color); border-radius: 12px;">
+                <button id="toggle_comment_btn" class="button" style="margin-bottom: 8px;">Комментарий к заказу</button>
+                <div id="comment_editor" class="hidden">
+                    <textarea id="order_comment_input" rows="3" style="width: 100%; box-sizing: border-box; border-radius: 8px; padding: 10px; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); border: 1px solid rgba(255,255,255,0.2);"></textarea>
+                    <div style="display:flex; gap: 8px; margin-top: 8px;">
+                        <button id="save_comment_btn" class="button button-confirm" style="flex:1;">Сохранить</button>
+                        <button id="cancel_comment_btn" class="button button-cancel" style="flex:1;">Отмена</button>
+                    </div>
+                </div>
+                <div id="comment_view" class="hidden" style="padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; white-space: pre-wrap;"></div>
+                <div id="comment_actions" class="hidden" style="display:flex; gap:8px; margin-top: 8px;">
+                    <button id="edit_comment_btn" class="button" style="flex:1;">Редактировать</button>
+                    <button id="delete_comment_btn" class="button button-delete" style="flex:1;">Удалить</button>
+                </div>
+            </div>
             <button onclick="addMore()" class="button button-add-more">Добавить ещё</button>
             <button onclick="placeOrder()" class="button button-order">Оформить заказ</button>
             <button onclick="goBack()" class="button">Назад</button>
@@ -298,12 +313,14 @@
         }
         
         let showAll = false;
+        let orderComment = sessionStorage.getItem('order_comment') || '';
         
         function displayCart() {
             const cartItems = document.getElementById('cart_items');
             const showMoreContainer = document.getElementById('show_more_container');
             const showMoreButton = document.getElementById('show_more_button');
             const cartTotal = document.getElementById('cart_total');
+            setupCommentUI();
             
             cartItems.innerHTML = '';
             
@@ -1113,7 +1130,8 @@
                             },
                             body: JSON.stringify({
                                 userId: userId,
-                                items: items
+                                items: items,
+                                comment: sessionStorage.getItem('order_comment') || ''
                             })
                         })
                         .then(response => {
@@ -1159,7 +1177,8 @@
                             body: JSON.stringify({
                                 userId: userId,
                                 orders: ordersData.orders,
-                                items: cart // Передаем все товары из корзины
+                                items: cart, // Передаем все товары из корзины
+                                comment: sessionStorage.getItem('order_comment') || ''
                             })
                         })
                         .then(response => response.json());
@@ -1201,6 +1220,70 @@
         
         function goBack() {
             window.location.href = `/order_menu?user_id=${userId}`;
+        }
+
+        // Комментарий к заказу
+        function setupCommentUI() {
+            const toggleBtn = document.getElementById('toggle_comment_btn');
+            const editor = document.getElementById('comment_editor');
+            const input = document.getElementById('order_comment_input');
+            const view = document.getElementById('comment_view');
+            const actions = document.getElementById('comment_actions');
+            const saveBtn = document.getElementById('save_comment_btn');
+            const cancelBtn = document.getElementById('cancel_comment_btn');
+            const editBtn = document.getElementById('edit_comment_btn');
+            const deleteBtn = document.getElementById('delete_comment_btn');
+
+            // Инициализация отображения
+            if (orderComment && orderComment.trim() !== '') {
+                view.textContent = orderComment;
+                view.classList.remove('hidden');
+                actions.classList.remove('hidden');
+                editor.classList.add('hidden');
+            } else {
+                view.classList.add('hidden');
+                actions.classList.add('hidden');
+                editor.classList.add('hidden');
+            }
+
+            toggleBtn.onclick = () => {
+                // Открыть редактор; заполнить текущим текстом
+                editor.classList.remove('hidden');
+                input.value = orderComment || '';
+                input.focus();
+            };
+
+            saveBtn.onclick = () => {
+                orderComment = input.value || '';
+                sessionStorage.setItem('order_comment', orderComment);
+                if (orderComment.trim() !== '') {
+                    view.textContent = orderComment;
+                    view.classList.remove('hidden');
+                    actions.classList.remove('hidden');
+                } else {
+                    view.classList.add('hidden');
+                    actions.classList.add('hidden');
+                }
+                editor.classList.add('hidden');
+            };
+
+            cancelBtn.onclick = () => {
+                editor.classList.add('hidden');
+            };
+
+            editBtn.onclick = () => {
+                editor.classList.remove('hidden');
+                input.value = orderComment || '';
+                input.focus();
+            };
+
+            deleteBtn.onclick = () => {
+                orderComment = '';
+                sessionStorage.removeItem('order_comment');
+                view.classList.add('hidden');
+                actions.classList.add('hidden');
+                input.value = '';
+            };
         }
         
         // Функция для получения данных организации пользователя

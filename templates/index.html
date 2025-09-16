@@ -192,6 +192,7 @@
         // Инициализация поиска
         const searchInput = document.getElementById('product_search');
         const dropdownList = document.getElementById('product_dropdown');
+        const quantityInputEl = document.getElementById('quantity');
 
         searchInput.addEventListener('input', function() {
             const searchText = this.value.toLowerCase();
@@ -234,6 +235,20 @@
                 }
             }
         }
+
+        function clampQuantityInput() {
+            const input = quantityInputEl;
+            const max = parseInt(input.max || '999') || 999;
+            let val = parseInt(input.value || '1');
+            if (isNaN(val)) val = 1;
+            if (val < 1) val = 1;
+            if (val > max) val = max;
+            input.value = String(val);
+        }
+
+        // Ограничение вводимого значения до 3 знаков/лимита долга
+        quantityInputEl.addEventListener('input', clampQuantityInput);
+        quantityInputEl.addEventListener('blur', clampQuantityInput);
 
         // Функция для фильтрации продуктов (пиво/тара)
         function filterProducts(filterType) {
@@ -395,6 +410,7 @@
                 return;
             }
             
+            clampQuantityInput();
             const quantity = parseInt(document.getElementById('quantity').value);
             
             const isTara = (currentFilter === 'tara') || (selectedProduct && selectedProduct.balance !== undefined) || selectedProduct.TARA === true;

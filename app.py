@@ -2230,7 +2230,8 @@ def save_combined_order():
             'org_ID': user_data.get('org_ID'),
             'Positions': all_positions,
             'ordersUID': orders_uid,
-            'createdAt': current_time
+            'createdAt': current_time,
+            'comment': data.get('comment', '')
         }
         
         # Если были успешно созданные заказы в 1С
