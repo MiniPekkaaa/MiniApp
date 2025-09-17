@@ -2204,7 +2204,8 @@ def save_combined_order():
                 'Legal_Entity': item.get('legalEntity'),
                 'Beer_Count': int(item.get('quantity', 0)),
                 'Price': float(item.get('price', 0)),
-                'UID': uid
+                'UID': uid,
+                'TARA': bool(item.get('TARA', False))
             }
         
         # Формируем словари ordersUID и ordersKomment из успешно созданных заказов в 1С
