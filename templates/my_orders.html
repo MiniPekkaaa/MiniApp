@@ -794,21 +794,67 @@
                 return;
             }
             
-            // Создаем временную корзину с товарами из заказа, но без цен
-            const cartItems = order.positions.map(position => ({
-                id: position.id,
-                name: position.name,
-                quantity: position.quantity,
-                legalEntity: position.legal_entity,
-                // Удаляем цену, чтобы она пересчиталась при загрузке корзины
-                price: 0
-            }));
-            
-            // Сохраняем корзину в sessionStorage
-            sessionStorage.setItem('cart', JSON.stringify(cartItems));
-            
-            // Перенаправляем на страницу корзины
-            window.location.href = `/cart?user_id=${userId}`;
+            // Загружаем каталог товаров для проверки TARA
+            fetch(`/api/get-products?user_id=${userId}`)
+                .then(response => response.json())
+                .then(products => {
+                    if (!Array.isArray(products)) {
+                        throw new Error('Не удалось загрузить каталог товаров');
+                    }
+                    
+                    // Создаем карту товаров для быстрого поиска по ID
+                    const productsMap = {};
+                    products.forEach(product => {
+                        productsMap[product.id] = product;
+                    });
+                    
+                    // Фильтруем позиции: исключаем товары с TARA=true
+                    const cartItems = order.positions
+                        .filter(position => {
+                            const product = productsMap[position.id];
+                            if (product && product.TARA === true) {
+                                console.log(`[REPEAT_ORDER] Пропущена позиция с TARA=true: ${position.name} (id=${position.id})`);
+                                return false;
+                            }
+                            return true;
+                        })
+                        .map(position => ({
+                            id: position.id,
+                            name: position.name,
+                            quantity: position.quantity,
+                            legalEntity: position.legal_entity,
+                            // Удаляем цену, чтобы она пересчиталась при загрузке корзины
+                            price: 0
+                        }));
+                    
+                    if (cartItems.length === 0) {
+                        tg.showAlert('В заказе нет товаров для повтора (только тара)');
+                        hideLoading();
+                        return;
+                    }
+                    
+                    // Сохраняем корзину в sessionStorage
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    
+                    // Перенаправляем на страницу корзины
+                    window.location.href = `/cart?user_id=${userId}`;
+                })
+                .catch(error => {
+                    console.error('Ошибка при загрузке каталога для повтора заказа:', error);
+                    // В случае ошибки загрузки каталога, повторяем заказ без фильтрации
+                    tg.showAlert('Не удалось проверить товары, повторяем заказ как есть');
+                    
+                    const cartItems = order.positions.map(position => ({
+                        id: position.id,
+                        name: position.name,
+                        quantity: position.quantity,
+                        legalEntity: position.legal_entity,
+                        price: 0
+                    }));
+                    
+                    sessionStorage.setItem('cart', JSON.stringify(cartItems));
+                    window.location.href = `/cart?user_id=${userId}`;
+                });
         }
 
         function goBack() {
