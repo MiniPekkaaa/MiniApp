@@ -607,7 +607,11 @@ def add_product():
         if not user_id or not check_user_registration(user_id):
             return redirect('/')
 
+        # Логируем вход на экран ввода остатков
+        logger.info(f"[REMAINDERS_UI] Открыт экран ввода остатков пользователем {user_id}")
+
         products = list(mongo.cx.Pivo.catalog.find())
+        logger.debug(f"[REMAINDERS_UI] Загружено товаров из каталога: {len(products)}")
         
         # Форматируем данные для шаблона
         formatted_products = []
@@ -623,6 +627,7 @@ def add_product():
             }
             formatted_products.append(formatted_product)
 
+        logger.debug(f"[REMAINDERS_UI] Подготовлено к отправке в шаблон: {len(formatted_products)} товаров")
         return render_template('add_product.html', products=formatted_products, user_id=user_id)
     
     except Exception as e:
@@ -2762,7 +2767,7 @@ def get_shipped_orders_positions():
         if not user_id:
             return jsonify({"success": False, "error": "User ID is required"}), 400
             
-        logger.debug(f"Получение позиций из отгруженных заказов для пользователя {user_id}")
+        logger.info(f"[REMAINDERS_API] Получение позиций из отгруженных заказов. user_id={user_id}")
         
         # Получаем данные пользователя из Redis для получения org_ID
         user_data = redis_client.hgetall(f'beer:user:{user_id}')
@@ -2771,7 +2776,7 @@ def get_shipped_orders_positions():
         if not org_id:
             return jsonify({"success": False, "error": "Organization ID not found"}), 400
             
-        logger.debug(f"Получение заказов для организации {org_id}")
+        logger.info(f"[REMAINDERS_API] Организация пользователя: org_ID={org_id}")
         
         # Получаем последние 10 заказов организации, отсортированные по дате создания
         orders = list(mongo.cx.Pivo.Orders.find(
@@ -2779,7 +2784,9 @@ def get_shipped_orders_positions():
             {"Positions": 1, "_id": 1, "date": 1, "createdAt": 1, "ordersUID": 1, "status": 1}
         ).sort([("createdAt", -1), ("date", -1)]).limit(10))
         
-        logger.debug(f"Найдено {len(orders)} последних заказов")
+        logger.info(f"[REMAINDERS_API] Найдено {len(orders)} последних заказов. Проверяем наличие ordersUID…")
+        orders_with_uids = sum(1 for o in orders if isinstance(o.get('ordersUID'), dict) and len(o.get('ordersUID')) > 0)
+        logger.info(f"[REMAINDERS_API] Из них с ordersUID: {orders_with_uids}")
         
         # Запрашиваем статусы заказов через ordersUID напрямую из 1С
         shipped_orders = []
@@ -2792,7 +2799,7 @@ def get_shipped_orders_positions():
                         try:
                             # Запрашиваем статус заказа в 1С
                             api_url = f"{config.API_BASE_URL}{config.API_ENDPOINTS['order_status']}{order_uid}"
-                            logger.debug(f"Запрос статуса для заказа с UID {order_uid}")
+                            logger.debug(f"[REMAINDERS_API] Запрос статуса в 1С: UID={order_uid}")
                             
                             response = requests.get(
                                 api_url,
@@ -2803,7 +2810,7 @@ def get_shipped_orders_positions():
                             
                             if response.status_code == 200:
                                 status_text = response.text.strip()
-                                logger.debug(f"Статус для заказа UID {order_uid} из 1C: {status_text}")
+                                logger.debug(f"[REMAINDERS_API] Ответ 1С по UID {order_uid}: '{status_text}'")
                                 
                                 # Проверяем, является ли статус "Отгружен" или подобным
                                 status_lower = status_text.lower()
@@ -2811,19 +2818,19 @@ def get_shipped_orders_positions():
                                     # Добавляем заказ в список отгруженных
                                     order['status_from_1c'] = status_text
                                     shipped_orders.append(order)
-                                    logger.debug(f"Добавлен отгруженный заказ: {order.get('_id')}")
+                                    logger.info(f"[REMAINDERS_API] Заказ {_id_to_str := str(order.get('_id'))} отмечен как отгруженный по 1С")
                                     break  # Если нашли хотя бы один UID со статусом "Отгружен", выходим из цикла
                         except Exception as e:
-                            logger.error(f"Ошибка при получении статуса для UID {order_uid}: {str(e)}")
+                            logger.error(f"[REMAINDERS_API] Ошибка при запросе статуса для UID {order_uid}: {str(e)}")
         
-        logger.debug(f"Найдено {len(shipped_orders)} отгруженных заказов")
+        logger.info(f"[REMAINDERS_API] Отгруженных заказов (по данным 1С): {len(shipped_orders)}")
         
         # Собираем все уникальные позиции из отгруженных заказов
         unique_positions = {}
         
         for order in shipped_orders:
             positions = order.get('Positions', {})
-            logger.debug(f"В заказе {order.get('_id')} найдено {len(positions)} позиций")
+            logger.debug(f"[REMAINDERS_API] Заказ {order.get('_id')}: позиций {len(positions)}")
             
             for pos_key, position in positions.items():
                 beer_id = position.get('Beer_ID')
@@ -2831,6 +2838,15 @@ def get_shipped_orders_positions():
                 legal_entity = position.get('Legal_Entity', 1)
                 
                 if beer_id is not None and beer_name:
+                    # Серверная фильтрация: исключаем товары, у которых TARA=true в каталоге
+                    try:
+                        catalog_item = mongo.cx.Pivo.catalog.find_one({'id': str(beer_id)})
+                        if catalog_item and bool(catalog_item.get('TARA', False)):
+                            logger.debug(f"[REMAINDERS_API] Пропущена позиция (TARA=true): {beer_name} (id={beer_id})")
+                            continue
+                    except Exception as tara_check_error:
+                        logger.warning(f"[REMAINDERS_API] Ошибка проверки TARA для id={beer_id}: {str(tara_check_error)}")
+                    
                     # Создаем уникальный ключ
                     key = f"{beer_id}_{legal_entity}"
                     
@@ -2845,7 +2861,7 @@ def get_shipped_orders_positions():
                         logger.debug(f"Добавлена уникальная позиция: {beer_name}")
         
         positions_list = list(unique_positions.values())
-        logger.debug(f"Всего собрано {len(positions_list)} уникальных позиций из отгруженных заказов")
+        logger.info(f"[REMAINDERS_API] Всего уникальных позиций для страницы остатков: {len(positions_list)}")
         
         return jsonify({
             "success": True,
