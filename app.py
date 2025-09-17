@@ -994,7 +994,8 @@ def get_orders():
                     'quantity': quantity,
                     'id': beer_id,
                     'legal_entity': pos_data.get('Legal_Entity', 1) or 1,
-                    'price': price
+                    'price': price,
+                    'tara': bool(pos_data.get('TARA', False))
                 })
 
             # Проверяем наличие поля ordersUID и добавляем его, если оно есть
@@ -1066,7 +1067,8 @@ def get_order():
                 'quantity': quantity,
                 'id': beer_id,
                 'legal_entity': pos_data.get('Legal_Entity', 1) or 1,
-                'price': price
+                'price': price,
+                'tara': bool(pos_data.get('TARA', False))
             })
             
         # Форматируем дату

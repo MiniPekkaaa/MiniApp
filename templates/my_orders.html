@@ -795,14 +795,24 @@
             }
             
             // Создаем временную корзину с товарами из заказа, но без цен
-            const cartItems = order.positions.map(position => ({
-                id: position.id,
-                name: position.name,
-                quantity: position.quantity,
-                legalEntity: position.legal_entity,
-                // Удаляем цену, чтобы она пересчиталась при загрузке корзины
-                price: 0
-            }));
+            // Фильтруем только товары с tara=false
+            const cartItems = order.positions
+                .filter(position => position.tara !== true)
+                .map(position => ({
+                    id: position.id,
+                    name: position.name,
+                    quantity: position.quantity,
+                    legalEntity: position.legal_entity,
+                    // Удаляем цену, чтобы она пересчиталась при загрузке корзины
+                    price: 0
+                }));
+            
+            // Проверяем, что после фильтрации остались товары
+            if (cartItems.length === 0) {
+                tg.showAlert('В заказе нет товаров для повторения (только тара)');
+                hideLoading();
+                return;
+            }
             
             // Сохраняем корзину в sessionStorage
             sessionStorage.setItem('cart', JSON.stringify(cartItems));
