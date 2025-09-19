@@ -98,6 +98,7 @@ def save_tara_to_supabase(client_id, tara_name, tara_uid, count, legal_entity):
         # Подготавливаем данные для вставки
         tara_data = {
             "client": client_id,
+            "tara": tara_name,
             "tara_id": tara_uid,
             "count": f"+{count}",  # Добавляем префикс +
             "legalentity": legal_entity
@@ -307,6 +308,7 @@ def get_client_tara_balance(client_id):
         for record in result.data:
             tara_id = record.get('tara_id')
             tara_name = record.get('tara')
+            legal_entity = record.get('legalentity', '')
             count_str = record.get('count', '0')
             
             # Обрабатываем значение count (может быть числом или строкой)
@@ -327,21 +329,26 @@ def get_client_tara_balance(client_id):
                 logger.warning(f"[TARA_BALANCE] Некорректное значение count: {count_str} (тип: {type(count_str)})")
                 continue
             
-            if tara_id not in tara_balance:
-                tara_balance[tara_id] = {
+            # Создаем уникальный ключ на основе tara_id и legal_entity
+            balance_key = f"{tara_id}_{legal_entity}" if legal_entity else tara_id
+            
+            if balance_key not in tara_balance:
+                tara_balance[balance_key] = {
+                    'tara_id': tara_id,
                     'name': tara_name,
+                    'legal_entity': legal_entity,
                     'balance': 0
                 }
             
-            tara_balance[tara_id]['balance'] += count
-            logger.debug(f"[TARA_BALANCE] {tara_name} (UID: {tara_id}): добавлено {count}, баланс: {tara_balance[tara_id]['balance']}")
+            tara_balance[balance_key]['balance'] += count
+            logger.debug(f"[TARA_BALANCE] {tara_name} (UID: {tara_id}, ИНН: {legal_entity}): добавлено {count}, баланс: {tara_balance[balance_key]['balance']}")
         
         # Фильтруем только позиции с положительным балансом
         positive_balance = {tara_id: data for tara_id, data in tara_balance.items() if data['balance'] > 0}
         
         logger.info(f"[TARA_BALANCE] Итоговый баланс для клиента {client_id}: {len(positive_balance)} позиций с положительным балансом")
-        for tara_id, data in positive_balance.items():
-            logger.info(f"[TARA_BALANCE] - {data['name']} (UID: {tara_id}): {data['balance']} шт.")
+        for balance_key, data in positive_balance.items():
+            logger.info(f"[TARA_BALANCE] - {data['name']} (UID: {data['tara_id']}, ИНН: {data['legal_entity']}): {data['balance']} шт.")
         
         return positive_balance
         
@@ -364,6 +371,7 @@ def save_tara_return_to_supabase(client_id, tara_name, tara_uid, count, legal_en
         # Подготавливаем данные для вставки с отрицательным значением
         tara_data = {
             "client": client_id,
+            "tara": tara_name,
             "tara_id": tara_uid,
             "count": f"-{count}",  # Добавляем префикс -
             "legalentity": legal_entity
@@ -3235,7 +3243,8 @@ def get_client_tara_balance_api():
         # Обогащаем данные из каталога товаров
         enriched_tara = []
         
-        for tara_uid, balance_data in tara_balance.items():
+        for balance_key, balance_data in tara_balance.items():
+            tara_uid = balance_data['tara_id']
             # Ищем товар в каталоге по UID
             catalog_item = mongo.cx.Pivo.catalog.find_one({"UID": tara_uid})
             
@@ -3247,10 +3256,11 @@ def get_client_tara_balance_api():
                     'fullName': catalog_item.get('fullName', balance_data['name']),
                     'volume': catalog_item.get('volume', 0),
                     'balance': balance_data['balance'],
+                    'legalEntity': balance_data['legal_entity'],  # Добавляем legalEntity
                     'TARA': True  # Обозначаем как тару
                 }
                 enriched_tara.append(tara_item)
-                logger.debug(f"[TARA_API] Добавлена тара: {tara_item['name']} (баланс: {tara_item['balance']})")
+                logger.debug(f"[TARA_API] Добавлена тара: {tara_item['name']} (баланс: {tara_item['balance']}, ИНН: {tara_item['legalEntity']})")
             else:
                 logger.warning(f"[TARA_API] Тара с UID {tara_uid} не найдена в каталоге")
         
