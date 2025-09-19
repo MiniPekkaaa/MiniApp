@@ -83,7 +83,7 @@ supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_API_KEY)
 processed_tara_orders = set()
 tara_cache_last_cleanup = time.time()
 
-def save_tara_to_supabase(client_id, tara_name, tara_uid, count):
+def save_tara_to_supabase(client_id, tara_name, tara_uid, count, legal_entity):
     """
     Сохраняет данные о таре в Supabase
     
@@ -92,14 +92,15 @@ def save_tara_to_supabase(client_id, tara_name, tara_uid, count):
         tara_name: название тары (TARA_NAME)
         tara_uid: UID тары (TARA_UID)
         count: количество тары
+        legal_entity: юридическое лицо от позиции, к которой относится тара
     """
     try:
         # Подготавливаем данные для вставки
         tara_data = {
             "client": client_id,
-            "tara": tara_name,
             "tara_id": tara_uid,
-            "count": f"+{count}"  # Добавляем префикс +
+            "count": f"+{count}",  # Добавляем префикс +
+            "legalentity": legal_entity
         }
         
         logger.info(f"[SUPABASE] Сохраняем данные о таре: {tara_data}")
@@ -163,6 +164,7 @@ def process_tara_for_order(order_items, client_id):
             item_id = item.get('id')
             item_name = item.get('name', 'Неизвестный товар')
             quantity = int(item.get('quantity', 1))
+            item_legal_entity = item.get('legalEntity', '')
             
             if not item_uid:
                 logger.debug(f"Товар {item_name} не имеет UID, пропускаем")
@@ -193,7 +195,8 @@ def process_tara_for_order(order_items, client_id):
                         logger.info(f"[TARA_PROCESSING] Создаем новую группу для тары {tara_name} (UID: {tara_uid})")
                         tara_groups[tara_uid] = {
                             'name': tara_name,
-                            'count': 0
+                            'count': 0,
+                            'legal_entity': item_legal_entity
                         }
                     else:
                         logger.info(f"[TARA_PROCESSING] Добавляем к существующей группе тары {tara_name} (UID: {tara_uid})")
@@ -214,16 +217,17 @@ def process_tara_for_order(order_items, client_id):
             logger.info(f"[TARA_PROCESSING] - {tara_info['name']} (UID: {tara_uid}): {tara_info['count']} единиц")
         
         for tara_uid, tara_info in tara_groups.items():
-            logger.info(f"[TARA_PROCESSING] Сохраняем в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+            logger.info(f"[TARA_PROCESSING] Сохраняем в Supabase: {tara_info['name']} (количество: {tara_info['count']}, legalEntity: {tara_info['legal_entity']})")
             success = save_tara_to_supabase(
                 client_id=client_id,
                 tara_name=tara_info['name'],
                 tara_uid=tara_uid,
-                count=tara_info['count']
+                count=tara_info['count'],
+                legal_entity=tara_info['legal_entity']
             )
             
             if success:
-                logger.info(f"[TARA_PROCESSING] ✓ Успешно сохранена тара в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+                logger.info(f"[TARA_PROCESSING] ✓ Успешно сохранена тара в Supabase: {tara_info['name']} (количество: {tara_info['count']}, legalEntity: {tara_info['legal_entity']})")
             else:
                 logger.error(f"[TARA_PROCESSING] ✗ Ошибка при сохранении тары: {tara_info['name']}")
         
@@ -345,7 +349,7 @@ def get_client_tara_balance(client_id):
         logger.error(f"[TARA_BALANCE] Ошибка при получении баланса тары: {str(e)}")
         return {}
 
-def save_tara_return_to_supabase(client_id, tara_name, tara_uid, count):
+def save_tara_return_to_supabase(client_id, tara_name, tara_uid, count, legal_entity):
     """
     Сохраняет возврат тары в Supabase (отрицательное значение)
     
@@ -354,14 +358,15 @@ def save_tara_return_to_supabase(client_id, tara_name, tara_uid, count):
         tara_name: название тары
         tara_uid: UID тары
         count: количество возвращаемой тары
+        legal_entity: юридическое лицо от позиции, к которой относится тара
     """
     try:
         # Подготавливаем данные для вставки с отрицательным значением
         tara_data = {
             "client": client_id,
-            "tara": tara_name,
             "tara_id": tara_uid,
-            "count": f"-{count}"  # Добавляем префикс -
+            "count": f"-{count}",  # Добавляем префикс -
+            "legalentity": legal_entity
         }
         
         logger.info(f"[SUPABASE] Сохраняем возврат тары: {tara_data}")
@@ -397,6 +402,7 @@ def process_tara_return_for_order(order_items, client_id):
             item_id = item.get('id')
             item_name = item.get('name', 'Неизвестный товар')
             quantity = int(item.get('quantity', 1))
+            item_legal_entity = item.get('legalEntity', '')
             
             if not item_uid:
                 logger.debug(f"[TARA_RETURN] Товар {item_name} не имеет UID, пропускаем")
@@ -423,7 +429,8 @@ def process_tara_return_for_order(order_items, client_id):
                     logger.info(f"[TARA_RETURN] Создаем новую группу для возврата тары {tara_name} (UID: {item_uid})")
                     tara_return_groups[item_uid] = {
                         'name': tara_name,
-                        'count': 0
+                        'count': 0,
+                        'legal_entity': item_legal_entity
                     }
                 else:
                     logger.info(f"[TARA_RETURN] Добавляем к существующей группе возврата тары {tara_name} (UID: {item_uid})")
@@ -442,16 +449,17 @@ def process_tara_return_for_order(order_items, client_id):
             logger.info(f"[TARA_RETURN] - {tara_info['name']} (UID: {tara_uid}): {tara_info['count']} единиц к возврату")
         
         for tara_uid, tara_info in tara_return_groups.items():
-            logger.info(f"[TARA_RETURN] Сохраняем возврат в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+            logger.info(f"[TARA_RETURN] Сохраняем возврат в Supabase: {tara_info['name']} (количество: {tara_info['count']}, legalEntity: {tara_info['legal_entity']})")
             success = save_tara_return_to_supabase(
                 client_id=client_id,
                 tara_name=tara_info['name'],
                 tara_uid=tara_uid,
-                count=tara_info['count']
+                count=tara_info['count'],
+                legal_entity=tara_info['legal_entity']
             )
             
             if success:
-                logger.info(f"[TARA_RETURN] ✓ Успешно сохранен возврат тары в Supabase: {tara_info['name']} (количество: {tara_info['count']})")
+                logger.info(f"[TARA_RETURN] ✓ Успешно сохранен возврат тары в Supabase: {tara_info['name']} (количество: {tara_info['count']}, legalEntity: {tara_info['legal_entity']})")
             else:
                 logger.error(f"[TARA_RETURN] ✗ Ошибка при сохранении возврата тары: {tara_info['name']}")
         
@@ -1483,39 +1491,11 @@ def create_1c_order():
         # Группируем товары по legalEntity
         items_by_legal_entity = {}
         
-        # Специальные legalEntity для тары
-        tara_legal_entities = ['2724163243', '2724132975']
-        
-        # Сначала собираем все legalEntity из позиций, которые не являются тарой
+        # Собираем все legalEntity из позиций
         non_tara_legal_entities = []
         for item in data.get('items', []):
             is_tara = item.get('TARA', False)
             legal_entity = item.get('legalEntity')
-            
-            # Если это тара, присваиваем ей один из специальных legalEntity
-            if is_tara:
-                logger.info(f"Обрабатываем товар тары: {item.get('name')} с текущим legalEntity={legal_entity}")
-                
-                # Проверяем, есть ли уже товары с одним из специальных legalEntity для тары
-                existing_tara_le = None
-                for other_item in data.get('items', []):
-                    other_le = str(other_item.get('legalEntity', ''))
-                    if other_le in tara_legal_entities:
-                        existing_tara_le = other_le
-                        break
-                
-                # Если нашли существующий специальный legalEntity, используем его
-                if existing_tara_le:
-                    item['legalEntity'] = existing_tara_le
-                    legal_entity = existing_tara_le
-                    logger.info(f"Использован существующий legalEntity для тары: {existing_tara_le}")
-                else:
-                    # Если не нашли, выбираем случайный из специальных
-                    import random
-                    selected_le = random.choice(tara_legal_entities)
-                    item['legalEntity'] = selected_le
-                    legal_entity = selected_le
-                    logger.info(f"Присвоен случайный legalEntity для тары: {selected_le}")
             
             # Если у товара есть legalEntity, используем его
             if legal_entity is not None and legal_entity != 1 and str(legal_entity).strip() and str(legal_entity) != 'None':
